@@ -552,6 +552,11 @@ async function flush() {
   flushTimer = null;
   if (!pending || !user || saving) return;
   const batch = pending; pending = null; saving = true;
+  // Saves don't fail outright when the database is unreachable (e.g. blocked by an ad blocker) — they just hang.
+  const slow = setTimeout(() => {
+    syncStatus('Not saved — can\'t reach your account', true);
+    toast('Your changes aren\'t reaching your account. If you use an ad blocker or privacy extension, allow this site and reload.');
+  }, 10000);
   try {
     await cloud.save({ ...batch, profile: { name: user.name, email: user.email }, updated: now() });
     syncStatus();
@@ -561,17 +566,17 @@ async function flush() {
     syncStatus('Not saved — retrying', true);
     flushTimer = setTimeout(flush, 5000);
   } finally {
-    saving = false;
+    clearTimeout(slow); saving = false;
     if (pending && !flushTimer) flushTimer = setTimeout(flush, 1000);
   }
 }
 
-let firstSnapshot = true;
+let firstSnapshot = true, serverSynced = false;   // serverSynced: the account's data has been confirmed by the server
 function onUser(u) {
   const prevUid = user?.uid;
   if (!u && prevUid) { try { localStorage.removeItem(`${K.state}.${prevUid}`); } catch { } }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
-  user = u; authReady = true; firstSnapshot = true; pending = null;
+  user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null;
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus();
   const r = route().name;
@@ -582,14 +587,13 @@ function onUser(u) {
   else if (!(r === 'login' && !u)) render(true);   // don't wipe a sign-in form someone is typing in
   refreshMissing();
 }
-function onData(data) {
+function onData(data, fromServer) {
   if (!user) return;
-  if (!data) {                                   // brand-new account: starts empty
-    if (firstSnapshot) {
-      cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
-    }
-    firstSnapshot = false; render(); return;
+  if (fromServer) serverSynced = true;
+  if (!data && fromServer) {                     // brand-new account: create its document
+    cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
   }
+  const first = firstSnapshot;
   const remote = norm(data);
   // Anything this device changed that the server hasn't seen yet (e.g. edits made offline) gets uploaded.
   for (const kind of ['shows', 'watched'])
@@ -598,7 +602,7 @@ function onData(data) {
   const changed = canon(merged) !== canon(state);
   state = merged; persist();
   firstSnapshot = false;
-  if (changed) { render(); refreshMissing(); }
+  if (changed || first) { render(); refreshMissing(); }
 }
 function onCloudError(e) { console.warn(e); syncStatus(cloud.friendlyError(e), true); }
 function refreshMissing() { if (followed().some(f => !cache[f.id])) refreshAll(false); }
@@ -691,9 +695,9 @@ const actions = {
   async signout() {
     // Signing out clears this device's copy, so make sure every change has reached the account first.
     const deadline = now() + 8000;
-    while (saving && now() < deadline) await sleep(100);
+    while ((saving || !serverSynced) && now() < deadline) await sleep(100);
     if (pending && !saving) await Promise.race([flush(), sleep(Math.max(0, deadline - now()))]);
-    if (pending || saving) { toast('Some changes haven\'t saved to your account yet — check your connection and try again'); return; }
+    if ((pending || saving || !serverSynced) && !confirm('Your shows haven\'t been saved to your account — the site can\'t reach it right now (an ad blocker or privacy extension can cause this).\n\nIf you sign out, the shows on this computer will be deleted.\n\nSign out anyway?')) return;
     await cloud.signOut(); location.hash = '#/'; toast('Signed out');
   },
   export() {

@@ -176,6 +176,7 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .nudge { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
 .nudge a { font-weight: 700; }
 @media (max-width: 720px) { .acct .nm { display: none; } .acct.on { padding: 3px; } .sync { display: none; } }
+@media (max-width: 720px) { .sync.err { display: inline; white-space: normal; flex: 1; text-align: right; } }  /* always show save problems */
 
 /* Google button */
 .gsvg { width: 18px; height: 18px; flex: 0 0 auto; }
