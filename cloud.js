@@ -15,7 +15,11 @@ export async function start({ onUser, onData, onError }) {
   A = authMod; F = fsMod;
   const app = appMod.initializeApp(firebaseConfig);
   auth = A.getAuth(app);
-  db = F.getFirestore(app);
+  // Keep a copy of the database on the device (IndexedDB). Saves land there instantly and
+  // are queued to upload in the background — they survive closing the tab or going offline.
+  try {
+    db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
+  } catch (e) { console.warn('Offline cache unavailable, using memory', e); db = F.getFirestore(app); }
   A.getRedirectResult(auth).catch(onError);
   A.onAuthStateChanged(auth, user => {
     if (unsubDoc) { unsubDoc(); unsubDoc = null; }
@@ -23,7 +27,7 @@ export async function start({ onUser, onData, onError }) {
     if (user) {
       // includeMetadataChanges: also hear when data cached offline is confirmed by the server
       unsubDoc = F.onSnapshot(F.doc(db, 'users', user.uid), { includeMetadataChanges: true },
-        snap => onData(snap.exists() ? snap.data() : null, !snap.metadata.fromCache),
+        snap => onData(snap.exists() ? snap.data() : null, !snap.metadata.fromCache, snap.metadata.hasPendingWrites),
         onError);
     }
   });
@@ -50,10 +54,13 @@ export const resetPassword = email => A.sendPasswordResetEmail(auth, email);
 export const signOut = () => A.signOut(auth);
 
 // Deep-merges into users/{uid}: only the episodes/shows that changed are sent.
-export async function save(partial) {
-  const u = auth?.currentUser; if (!u) return;
-  await F.setDoc(F.doc(db, 'users', u.uid), partial, { merge: true });
+// The write is stored on the device immediately; the returned promise resolves once the server confirms it.
+export function save(partial) {
+  const u = auth?.currentUser; if (!u) return Promise.resolve();
+  return F.setDoc(F.doc(db, 'users', u.uid), partial, { merge: true });
 }
+// Resolves when every queued write has reached the server.
+export const waitForPendingWrites = () => db ? F.waitForPendingWrites(db) : Promise.resolve();
 
 export function friendlyError(e) {
   const c = e?.code || '';
