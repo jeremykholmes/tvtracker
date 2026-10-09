@@ -21,8 +21,9 @@ export async function start({ onUser, onData, onError }) {
     if (unsubDoc) { unsubDoc(); unsubDoc = null; }
     onUser(user ? toUser(user) : null);
     if (user) {
-      unsubDoc = F.onSnapshot(F.doc(db, 'users', user.uid),
-        snap => onData(snap.exists() ? snap.data() : null),
+      // includeMetadataChanges: also hear when data cached offline is confirmed by the server
+      unsubDoc = F.onSnapshot(F.doc(db, 'users', user.uid), { includeMetadataChanges: true },
+        snap => onData(snap.exists() ? snap.data() : null, !snap.metadata.fromCache),
         onError);
     }
   });
