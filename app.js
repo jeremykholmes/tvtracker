@@ -688,7 +688,14 @@ const actions = {
     if (!email) { el.textContent = 'Type your email above first, then tap "Forgot password?"'; el.hidden = false; return; }
     try { await cloud.resetPassword(email); toast('Password reset email sent'); } catch (e) { el.textContent = cloud.friendlyError(e); el.hidden = false; }
   },
-  async signout() { await flush(); await cloud.signOut(); location.hash = '#/'; toast('Signed out'); },
+  async signout() {
+    // Signing out clears this device's copy, so make sure every change has reached the account first.
+    const deadline = now() + 8000;
+    while (saving && now() < deadline) await sleep(100);
+    if (pending && !saving) await Promise.race([flush(), sleep(Math.max(0, deadline - now()))]);
+    if (pending || saving) { toast('Some changes haven\'t saved to your account yet — check your connection and try again'); return; }
+    await cloud.signOut(); location.hash = '#/'; toast('Signed out');
+  },
   export() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));

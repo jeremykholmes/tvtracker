@@ -38,6 +38,7 @@ export async function signUp(name, email, password) {
 export const signIn = (email, password) => A.signInWithEmailAndPassword(auth, email, password);
 export async function google() {
   const provider = new A.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });   // always ask which Google account, so nobody lands in the wrong one
   try { await A.signInWithPopup(auth, provider); }
   catch (e) {
     if (/popup-blocked|operation-not-supported/.test(e.code || '')) return A.signInWithRedirect(auth, provider);
