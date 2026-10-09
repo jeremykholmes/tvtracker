@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TV Tracker</title>
+  <meta name="theme-color" content="#0e1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%BA%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <a href="#/" class="brand"><span aria-hidden="true">📺</span> TV Tracker</a>
+    <nav class="tabs" id="tabs">
+      <a href="#/" data-tab="shows"><span class="ico">▤</span>My Shows</a>
+      <a href="#/upcoming" data-tab="upcoming"><span class="ico">◷</span>Upcoming</a>
+      <a href="#/discover" data-tab="discover"><span class="ico">✦</span>Discover</a>
+      <a href="#/search" data-tab="search"><span class="ico">＋</span>Add</a>
+      <a href="#/settings" data-tab="settings"><span class="ico">⚙</span>Settings</a>
+    </nav>
+    <a href="#/settings" class="sync" id="sync" title="Sync status"></a>
+  </header>
+  <div class="busy" id="busy" hidden></div>
+  <main id="app"></main>
+  <div id="toast" class="toast" hidden></div>
+  <footer class="foot">Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA)</footer>
+  <script src="app.js"></script>
+</body>
+</html>
