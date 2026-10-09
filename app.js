@@ -421,12 +421,15 @@ views.search = () => {
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
   q.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => doSearch(q.value), 350); });
-  $('#searchForm').addEventListener('submit', async e => {      // pressing Search runs it, then empties the box
-    e.preventDefault(); clearTimeout(searchTimer);
-    const text = q.value; q.value = ''; q.blur();
-    await doSearch(text);
+  // Pressing Search/Enter, or clicking anywhere off the box, runs the search and then empties the box.
+  const finish = async () => {
+    clearTimeout(searchTimer);
+    const text = q.value.trim(); q.value = '';
+    if (text && text !== lastQuery) await doSearch(text);
     try { sessionStorage.removeItem('tvt.q'); } catch { }
-  });
+  };
+  q.addEventListener('blur', () => { if (document.hasFocus()) finish(); });   // not when switching apps/tabs
+  $('#searchForm').addEventListener('submit', e => { e.preventDefault(); finish(); q.blur(); });
   if (q.value) doSearch(q.value); else drawResults();
 };
 async function doSearch(q) {
