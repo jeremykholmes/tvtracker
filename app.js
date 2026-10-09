@@ -167,18 +167,73 @@ function requireAccount() {
   location.hash = '#/login/create';
   return false;
 }
+const GOOGLE_G = `<svg class="gsvg" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>`;
+
 function signInWall(title) {
   if (!authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
   app.innerHTML = `<div class="empty"><h1>${title}</h1>
     <p>Create a free account or sign in with Google to add shows and check off episodes. Your list stays private and follows you to every device.</p>
     <div class="actions" style="justify-content:center">
-      <button class="btn primary" data-act="google"><span class="g" style="color:inherit">G</span> Continue with Google</button>
-      <a class="btn" href="#/login/create">Create account</a></div>
+      <button class="btn gbtn" data-act="google">${GOOGLE_G} Continue with Google</button>
+      <a class="btn primary" href="#/login/create">Create account</a></div>
     <p class="sub" style="margin-top:18px">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></div>`;
 }
 
+// Signed-out home page: a marketing-style landing page with sign-in / sign-up.
+views.landing = () => {
+  if (!authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
+  document.body.classList.add('landing');
+  const cta = `<div class="lp-cta">
+      <button class="btn gbtn lg" data-act="google">${GOOGLE_G} Continue with Google</button>
+      <a class="btn primary lg" href="#/login/create">Create free account</a></div>`;
+  const nets = ['Netflix', 'HBO Max', 'Hulu', 'Disney+', 'Apple TV+', 'Prime Video', 'Peacock', 'Paramount+', 'NBC', 'CBS', 'ABC', 'FX'];
+  const feats = [
+    ['▤', 'One list for everything', 'Every show you watch, from every network and streaming service, together in one place.'],
+    ['✓', 'One-tap progress', 'Mark the next episode watched, check off a whole season, or catch up to any point instantly.'],
+    ['◷', 'Never miss an air date', 'See exactly when new episodes drop, with fresh episodes pulled in automatically.'],
+    ['✦', 'Discover what\'s new', 'Browse this week\'s premieres and returning seasons across broadcast and streaming.'],
+    ['⇄', 'Synced everywhere', 'Start on your phone, pick up on your laptop. Your list follows you to every device.'],
+    ['◉', 'Private by design', 'Your watch history belongs to you. Only you can see your shows and checkmarks.']
+  ];
+  const mock = (cls, name, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
+    <div class="mk-body"><b>${name}</b><span><span class="code">${ep}</span> Next episode</span>
+    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn">✓ Watched ${ep}</span></div></div>`;
+  app.innerHTML = `<div class="lp">
+  <section class="lp-hero">
+    <div class="lp-copy">
+      <span class="eyebrow">Your personal TV guide</span>
+      <h1>Never lose your place in a show again.</h1>
+      <p class="lead">TV Tracker keeps every series you watch organized — what's next, what's new, and when it airs — across every network and streaming service.</p>
+      ${cta}
+      <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a></p>
+    </div>
+    <div class="lp-visual" aria-hidden="true">
+      <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
+        <div class="mk-head">Up next · 3</div>
+        ${mock('p1', 'The Night Shift', 'S02E05', 62, '2 new')}
+        ${mock('p2', 'Coastline', 'S01E08', 88, '')}
+        ${mock('p3', 'Northern Lights', 'S04E01', 24, '1 new')}
+      </div>
+    </div>
+  </section>
+  <section class="lp-nets"><p>Track shows from every network and streamer</p>
+    <div class="lp-netlist">${nets.map(n => `<span>${n}</span>`).join('')}</div></section>
+  <section class="lp-sec"><span class="eyebrow">Features</span><h2 class="lp-h2">Everything you need to keep up</h2>
+    <div class="lp-feats">${feats.map(([i, t, d]) => `<div class="lp-feat"><span class="lp-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join('')}</div></section>
+  <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
+    <ol class="lp-steps">
+      <li><b>Create your account</b><p>Sign up with Google in one click, or use your email.</p></li>
+      <li><b>Add your shows</b><p>Search any series and add it to your list.</p></li>
+      <li><b>Check off as you watch</b><p>We'll keep track of what's next and what's new.</p></li>
+    </ol></section>
+  <section class="lp-band"><h2 class="lp-h2">Start tracking your shows today</h2>
+    <p>Free to use. No credit card required.</p>${cta}
+    <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></section>
+</div>`;
+};
+
 views.shows = () => {
-  if (needsAccount()) return signInWall('Track every show you watch');
+  if (needsAccount()) return views.landing();
   const list = followed();
   if (!list.length) {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
@@ -403,7 +458,7 @@ views.login = mode => {
     <h1>${create ? 'Create your account' : 'Welcome back'}</h1>
     <p class="sub">${create ? 'Your shows and checkmarks stay private to you and follow you to every device.' : 'Sign in to see your shows on this device.'}</p>
     <div class="seg"><a href="#/login" class="${create ? '' : 'on'}">Sign in</a><a href="#/login/create" class="${create ? 'on' : ''}">Create account</a></div>
-    <button type="button" class="btn wide" data-act="google"><span class="g">G</span> Continue with Google</button>
+    <button type="button" class="btn wide gbtn" data-act="google">${GOOGLE_G} Continue with Google</button>
     <div class="or"><span>or use email</span></div>
     <form id="authForm" class="stack">
       ${create ? '<div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>' : ''}
@@ -651,6 +706,7 @@ function render(fromRoute) {
   const r = route();
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
+  document.body.classList.remove('landing');
   // Don't wipe forms the user is typing in on background updates.
   if (!fromRoute && r.name === 'search') return drawResults();
   if (!fromRoute && (r.name === 'login' || r.name === 'account') && document.activeElement?.tagName === 'INPUT') return;
@@ -668,5 +724,5 @@ window.addEventListener('pagehide', () => { flush(); });
 accountChip(); syncStatus();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
-  .catch(e => { authReady = true; accountChip(); onCloudError(e); });
+  .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
 if (followed().length && now() - (meta.lastRefresh || 0) > STALE) refreshAll(false);
