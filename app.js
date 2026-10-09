@@ -464,6 +464,7 @@ views.login = mode => {
       ${create ? '<div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>' : ''}
       <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
       <div class="field"><label>Password${create ? ' (6+ characters)' : ''}</label><input name="password" type="password" minlength="6" autocomplete="${create ? 'new-password' : 'current-password'}" required></div>
+      ${create ? '<div class="field"><label>Repeat password</label><input name="password2" type="password" minlength="6" autocomplete="new-password" required></div>' : ''}
       <p class="formerr" id="authErr" hidden></p>
       <button class="btn primary wide">${create ? 'Create account' : 'Sign in'}</button>
       ${create ? '' : '<button type="button" class="linkbtn" data-act="forgot">Forgot password?</button>'}
@@ -471,6 +472,10 @@ views.login = mode => {
   $('#authForm').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target), btn = e.target.querySelector('.primary'), err = $('#authErr');
+    if (create && fd.get('password') !== fd.get('password2')) {
+      err.textContent = 'Passwords don\'t match — please type the same password in both boxes.'; err.hidden = false;
+      e.target.password2.focus(); return;
+    }
     btn.disabled = true; err.hidden = true;
     try {
       if (create) {
