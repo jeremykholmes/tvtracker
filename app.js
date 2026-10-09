@@ -157,13 +157,34 @@ function poster(s, href) {
 /* ---------- views ---------- */
 const views = {};
 
+// Adding shows and checking episodes requires an account.
+const needsAccount = () => cloud.configured && !user;
+function requireAccount() {
+  if (!needsAccount()) return true;
+  if (!authReady) { toast('One moment — checking your sign-in…'); return false; }
+  try { sessionStorage.setItem('tvt.return', location.hash || '#/'); } catch { }
+  toast('Sign in or create a free account to add shows');
+  location.hash = '#/login/create';
+  return false;
+}
+function signInWall(title) {
+  if (!authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
+  app.innerHTML = `<div class="empty"><h1>${title}</h1>
+    <p>Create a free account or sign in with Google to add shows and check off episodes. Your list stays private and follows you to every device.</p>
+    <div class="actions" style="justify-content:center">
+      <button class="btn primary" data-act="google"><span class="g" style="color:inherit">G</span> Continue with Google</button>
+      <a class="btn" href="#/login/create">Create account</a></div>
+    <p class="sub" style="margin-top:18px">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></div>`;
+}
+
 views.shows = () => {
+  if (needsAccount()) return signInWall('Track every show you watch');
   const list = followed();
   if (!list.length) {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
-      ${cloud.configured && authReady && !user ? '<p class="sub" style="margin-top:18px">Already have an account? <a href="#/login">Sign in</a></p>' : ''}</div>`;
+</div>`;
     return;
   }
   const rows = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
@@ -174,9 +195,7 @@ views.shows = () => {
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
   const loading = rows.filter(r => !r.p);
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
-  const nudge = cloud.configured && authReady && !user
-    ? `<div class="nudge">You're browsing as a guest — shows added here are cleared when you sign in. <a href="#/login/create">Create a free account</a> to keep your shows everywhere.</div>` : '';
-  app.innerHTML = `${nudge}<div class="toolbar"><h1>My Shows</h1>
+  app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
       <button class="btn sm" data-act="refresh-all">↻ Check for new episodes</button></div>
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
@@ -258,6 +277,7 @@ function epRow(sid, e) {
 }
 
 views.upcoming = () => {
+  if (needsAccount()) return signInWall('See when your shows air');
   const list = followed();
   const recent = [], soon = [];
   for (const f of list) {
@@ -481,7 +501,10 @@ function onUser(u) {
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus();
   const r = route().name;
-  if (u && r === 'login') location.hash = '#/';
+  if (u && r === 'login') {
+    let back = '#/'; try { back = sessionStorage.getItem('tvt.return') || '#/'; sessionStorage.removeItem('tvt.return'); } catch { }
+    location.hash = /login/.test(back) ? '#/' : back;
+  }
   else if (!(r === 'login' && !u)) render(true);   // don't wipe a sign-in form someone is typing in
   refreshMissing();
 }
@@ -543,10 +566,12 @@ function markWithUndo(ids, w, label) {
 }
 const actions = {
   watch(b) {
+    if (!requireAccount()) return;
     const id = +b.dataset.ep, f = findEp(id);
     markWithUndo([id], true, f ? `${f.c.show.name} ${code(f.e)} watched` : 'Marked watched');
   },
   season(b, e) {
+    if (!requireAccount()) { e.preventDefault(); e.stopPropagation(); return; }
     e.preventDefault(); e.stopPropagation();
     const sid = +b.dataset.show, n = +b.dataset.season, val = b.dataset.val === '1';
     const eps = cache[sid].episodes.filter(x => x.s === n && (!val || aired(x)));
@@ -554,6 +579,7 @@ const actions = {
     markWithUndo(eps.map(x => x.id), val, `Season ${n} ${val ? 'marked watched' : 'unmarked'}`);
   },
   upto(b) {
+    if (!requireAccount()) return;
     const sid = +b.dataset.show, id = +b.dataset.ep, eps = cache[sid].episodes;
     const idx = eps.findIndex(x => x.id === id);
     const ids = eps.slice(0, idx + 1).filter(x => aired(x) && !isWatched(x.id)).map(x => x.id);
@@ -561,6 +587,7 @@ const actions = {
     markWithUndo(ids, true, `Marked ${ids.length} episode${ids.length === 1 ? '' : 's'} watched`);
   },
   async follow(b) {
+    if (!requireAccount()) return;
     const id = +b.dataset.show;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
@@ -605,6 +632,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (!t.matches('input[data-act="toggle"]')) return;
+  if (!requireAccount()) { t.checked = !t.checked; return; }
   const sid = +t.dataset.show, id = +t.dataset.ep;
   if (t.checked && !isFollowed(sid) && cache[sid]) follow(cache[sid].show);
   setWatched([id], t.checked);
