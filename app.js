@@ -443,12 +443,6 @@ async function doSearch(q) {
     drawResults();
   } catch (e) { toast(e.message); }
 }
-// Once a show is added, empty the search box and results, ready for the next search.
-function clearSearch() {
-  clearTimeout(searchTimer); searchSeq++; lastResults = []; lastQuery = '';
-  try { sessionStorage.removeItem('tvt.q'); } catch { }
-  const q = $('#q'); if (q) q.value = '';
-}
 function drawResults() {
   const box = $('#results'); if (!box) return;
   if (!lastResults.length) { box.innerHTML = `<p class="muted">${lastQuery ? `No matches for “${esc(lastQuery)}”.` : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
@@ -669,7 +663,7 @@ const actions = {
     const id = +b.dataset.show;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
-    follow(s); clearSearch(); render(); toast(`Added ${s.name}`);
+    follow(s); render(); toast(`Added ${s.name}`);   // search results stay put so you can add more
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
