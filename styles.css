@@ -20,8 +20,10 @@ img { display: block; }
 
 /* header */
 .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px;
-  padding: 10px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  padding: 10px 20px; border-bottom: 1px solid var(--line); }
+/* Blur lives on a separate layer: backdrop-filter on .top itself would pin the phone tab bar to the header. */
+.top::before { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); }
 .brand { font-weight: 750; text-decoration: none; letter-spacing: -.01em; white-space: nowrap; }
 .tabs { display: flex; gap: 4px; flex: 1; }
 .tabs a { text-decoration: none; padding: 7px 12px; border-radius: 999px; color: var(--muted); font-weight: 550; }
