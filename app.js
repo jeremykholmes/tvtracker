@@ -412,7 +412,7 @@ function followBtn(s) {
     : `<button class="btn primary sm" data-act="follow" data-show="${s.id}">＋ Add</button>`;
 }
 
-let lastResults = [], searchTimer = null, searchSeq = 0;
+let lastResults = [], lastQuery = '', searchTimer = null, searchSeq = 0;
 const showLookup = {};   // id -> trimmed show from search/discover, used when following
 views.search = () => {
   app.innerHTML = `<h1>Add a show</h1>
@@ -421,30 +421,35 @@ views.search = () => {
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
   q.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => doSearch(q.value), 350); });
-  $('#searchForm').addEventListener('submit', e => { e.preventDefault(); doSearch(q.value); });
+  $('#searchForm').addEventListener('submit', async e => {      // pressing Search runs it, then empties the box
+    e.preventDefault(); clearTimeout(searchTimer);
+    const text = q.value; q.value = ''; q.blur();
+    await doSearch(text);
+    try { sessionStorage.removeItem('tvt.q'); } catch { }
+  });
   if (q.value) doSearch(q.value); else drawResults();
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
-  if (!q) { lastResults = []; return drawResults(); }
+  if (!q) { lastResults = []; lastQuery = ''; return drawResults(); }
   const seq = ++searchSeq;
   try {
     const r = await api(`/search/shows?q=${encodeURIComponent(q)}`) || [];
     if (seq !== searchSeq) return;
-    lastResults = r.map(x => trimShow(x.show));
+    lastResults = r.map(x => trimShow(x.show)); lastQuery = q;
     drawResults();
   } catch (e) { toast(e.message); }
 }
 // Once a show is added, empty the search box and results, ready for the next search.
 function clearSearch() {
-  clearTimeout(searchTimer); searchSeq++; lastResults = [];
+  clearTimeout(searchTimer); searchSeq++; lastResults = []; lastQuery = '';
   try { sessionStorage.removeItem('tvt.q'); } catch { }
   const q = $('#q'); if (q) q.value = '';
 }
 function drawResults() {
   const box = $('#results'); if (!box) return;
-  if (!lastResults.length) { box.innerHTML = `<p class="muted">${$('#q')?.value ? 'No matches.' : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
-  box.innerHTML = lastResults.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
+  if (!lastResults.length) { box.innerHTML = `<p class="muted">${lastQuery ? `No matches for “${esc(lastQuery)}”.` : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
+  box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”</p>` + lastResults.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4), s.status].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
