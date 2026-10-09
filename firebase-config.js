@@ -1,12 +1,10 @@
-// Paste your Firebase web app config here:
-// Firebase console → Project settings (gear) → Your apps → Web app → "SDK setup and configuration" → Config.
+// Firebase web app config (Firebase console → Project settings → Your apps → Web app).
 // These values are meant to be public; your data is protected by firestore.rules.
-// Leave apiKey empty to run without accounts (everything saves on the device only).
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: 'AIzaSyCtO6bU0TCjV_zcTTw41CzdcBz63SSXrys',
+  authDomain: 'tv-tracker-6135d.firebaseapp.com',
+  projectId: 'tv-tracker-6135d',
+  storageBucket: 'tv-tracker-6135d.firebasestorage.app',
+  messagingSenderId: '507132660816',
+  appId: '1:507132660816:web:da6b530f6da246c4a59555'
 };
