@@ -1,9 +1,9 @@
-'use strict';
 /* TV Tracker — static site. Show data: TVmaze API (all broadcast networks + streaming services).
-   Watch progress: localStorage, optionally synced to a JSON file in a GitHub repo. */
+   Accounts + per-user watch progress: Firebase (see cloud.js). Guests save on the device only. */
+import * as cloud from './cloud.js';
 
 const API = 'https://api.tvmaze.com';
-const K = { state: 'tvt.state.v1', cache: 'tvt.cache.v1', sync: 'tvt.sync.v1', meta: 'tvt.meta.v1' };
+const K = { state: 'tvt.state.v1', cache: 'tvt.cache.v1', meta: 'tvt.meta.v1' };
 const DAY = 864e5, HOUR = 36e5, STALE = 6 * HOUR;
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -22,32 +22,32 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 // state.shows[id]   = { id, name, image, network, removed, t }
 // state.watched[ep] = { w: bool, t }      (last-write-wins per key, so devices merge cleanly)
 function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {} }; }
+let user = null;                        // { uid, email, name } when signed in
+let authReady = !cloud.configured;       // false until Firebase reports who's signed in
+const stateKey = () => user ? `${K.state}.${user.uid}` : K.state;
 let state = norm(load(K.state, null));
-let cache = load(K.cache, {});           // showId -> { t, show, episodes }
+let cache = load(K.cache, {});           // showId -> { t, show, episodes }  (shared TVmaze data, not per user)
 let meta = load(K.meta, { lastRefresh: 0 });
-let sync = Object.assign(defaultSync(), load(K.sync, {}));
 const openSeasons = {};                  // showId -> Set of open season numbers
-
-function defaultSync() {
-  const d = { owner: '', repo: '', branch: 'tracker-data', path: 'data/tracker.json', token: '' };
-  if (location.hostname.endsWith('.github.io')) {
-    d.owner = location.hostname.split('.')[0];
-    d.repo = location.pathname.split('/').filter(Boolean)[0] || location.hostname;
-  }
-  return d;
-}
 
 const followed = () => Object.values(state.shows).filter(s => !s.removed);
 const isFollowed = id => !!(state.shows[id] && !state.shows[id].removed);
 const isWatched = id => !!(state.watched[id] && state.watched[id].w);
 
-function persist() { save(K.state, state); scheduleSync(); }
-function setWatched(ids, w) { const t = now(); ids.forEach(id => { state.watched[id] = { w, t }; }); persist(); }
-function follow(s) {
-  state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: now() };
+function persist() { save(stateKey(), state); }
+function setWatched(ids, w) {
+  const t = now();
+  ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
   persist();
 }
-function unfollow(id) { const s = state.shows[id]; if (s) { s.removed = true; s.t = now(); persist(); } }
+function follow(s) {
+  state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: now() };
+  queue('shows', s.id, state.shows[s.id]); persist();
+}
+function unfollow(id) {
+  const s = state.shows[id];
+  if (s) { s.removed = true; s.t = now(); queue('shows', id, s); persist(); }
+}
 function showInfo(id) { return cache[id]?.show || state.shows[id] || null; }
 
 /* ---------- TVmaze ---------- */
@@ -162,7 +162,8 @@ views.shows = () => {
   if (!list.length) {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
-      <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a></div>`;
+      <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
+      ${cloud.configured && authReady && !user ? '<p class="sub" style="margin-top:18px">Already have an account? <a href="#/login">Sign in</a></p>' : ''}</div>`;
     return;
   }
   const rows = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
@@ -173,7 +174,9 @@ views.shows = () => {
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
   const loading = rows.filter(r => !r.p);
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
-  app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
+  const nudge = cloud.configured && authReady && !user
+    ? `<div class="nudge">You're browsing as a guest — these shows only live on this device. <a href="#/login/create">Create a free account</a> to keep them everywhere.</div>` : '';
+  app.innerHTML = `${nudge}<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
       <button class="btn sm" data-act="refresh-all">↻ Check for new episodes</button></div>
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
@@ -367,123 +370,161 @@ function drawResults() {
     ${followBtn(s)}</div>`).join('');
 }
 
-views.settings = () => {
+views.login = mode => {
+  if (user) { location.hash = '#/account'; return; }
+  const create = mode === 'create';
+  if (!cloud.configured) {
+    app.innerHTML = `<div class="empty"><h1>Accounts aren't switched on yet</h1>
+      <p>The site owner still needs to connect a Firebase project (see the README). Until then everything saves on this device.</p>
+      <a class="btn primary" href="#/">Back to my shows</a></div>`;
+    return;
+  }
+  app.innerHTML = `<div class="auth">
+    <h1>${create ? 'Create your account' : 'Welcome back'}</h1>
+    <p class="sub">${create ? 'Your shows and checkmarks stay private to you and follow you to every device.' : 'Sign in to see your shows on this device.'}</p>
+    <div class="seg"><a href="#/login" class="${create ? '' : 'on'}">Sign in</a><a href="#/login/create" class="${create ? 'on' : ''}">Create account</a></div>
+    <button type="button" class="btn wide" data-act="google"><span class="g">G</span> Continue with Google</button>
+    <div class="or"><span>or use email</span></div>
+    <form id="authForm" class="stack">
+      ${create ? '<div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>' : ''}
+      <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label>Password${create ? ' (6+ characters)' : ''}</label><input name="password" type="password" minlength="6" autocomplete="${create ? 'new-password' : 'current-password'}" required></div>
+      <p class="formerr" id="authErr" hidden></p>
+      <button class="btn primary wide">${create ? 'Create account' : 'Sign in'}</button>
+      ${create ? '' : '<button type="button" class="linkbtn" data-act="forgot">Forgot password?</button>'}
+    </form></div>`;
+  $('#authForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target), btn = e.target.querySelector('.primary'), err = $('#authErr');
+    btn.disabled = true; err.hidden = true;
+    try {
+      if (create) {
+        const u = await cloud.signUp(String(fd.get('name')).trim(), String(fd.get('email')).trim(), String(fd.get('password')));
+        if (user && user.uid === u.uid) { user.name = u.name; accountChip(); }
+      } else await cloud.signIn(String(fd.get('email')).trim(), String(fd.get('password')));
+    } catch (ex) { err.textContent = cloud.friendlyError(ex); err.hidden = false; btn.disabled = false; }
+  });
+};
+
+views.account = () => {
+  if (!user) {
+    if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
+    location.hash = '#/login'; return;
+  }
   const watchedCount = Object.values(state.watched).filter(w => w.w).length;
-  app.innerHTML = `<h1>Settings</h1>
-  <div class="panel"><h3>Sync across devices (GitHub)</h3>
-    <p>Your shows and checkmarks save in this browser automatically. To share them across phones, laptops and everyone in the house,
-    connect a GitHub token — progress is saved to <code>${esc(sync.path)}</code> on the <code>${esc(sync.branch)}</code> branch of your repo
-    (a separate branch, so it won't rebuild your site on every checkmark).</p>
-    <form id="syncForm"><div class="form">
-      ${['owner', 'repo', 'branch', 'path'].map(k => `<div class="field"><label>${k === 'owner' ? 'GitHub owner' : k[0].toUpperCase() + k.slice(1)}</label><input name="${k}" value="${esc(sync[k])}" required></div>`).join('')}
-      <div class="field" style="grid-column:1/-1"><label>Personal access token (fine-grained, this repo only, Contents: Read &amp; write)</label>
-        <input name="token" type="password" value="${esc(sync.token)}" placeholder="github_pat_…" autocomplete="off"></div></div>
-      <div class="actions"><button class="btn primary">Save &amp; connect</button>
-        ${gh.ok() ? `<button type="button" class="btn" data-act="sync-now">↻ Sync now</button>
-        <button type="button" class="btn danger" data-act="disconnect">Disconnect this device</button>` : ''}</div></form>
-    <p class="sub" style="margin-top:12px">Create a token at github.com → Settings → Developer settings → Fine-grained tokens. It's stored only in this browser.
-    If the repo is public, your watch list file is public too.</p></div>
+  const guest = norm(load(K.state, null)), guestShows = Object.values(guest.shows).filter(s => !s.removed).length;
+  app.innerHTML = `<h1>Account</h1>
+  <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
+    <p>Your shows and checkmarks are private to this account and sync automatically to every device you sign in on.</p>
+    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
+  ${guestShows ? `<div class="panel"><h3>Shows saved on this device</h3>
+    <p>This device has ${guestShows} show${guestShows > 1 ? 's' : ''} from before you signed in. Add them and their checkmarks to your account?</p>
+    <div class="actions"><button class="btn primary" data-act="import-guest">Add to my account</button>
+    <button class="btn ghost" data-act="discard-guest">No thanks</button></div></div>` : ''}
   <div class="panel"><h3>Your data</h3>
     <p>${followed().length} shows · ${watchedCount} episodes watched · episode data refreshed ${ago(meta.lastRefresh)}</p>
     <div class="actions"><button class="btn" data-act="export">⬇ Export backup</button>
       <label class="btn">⬆ Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
       <button class="btn" data-act="clear-cache">Re-download all episode data</button></div></div>`;
-  $('#syncForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    for (const k of ['owner', 'repo', 'branch', 'path', 'token']) sync[k] = String(fd.get(k) || '').trim();
-    save(K.sync, sync);
-    if (!gh.ok()) { toast('Saved — add a token to turn on sync'); return; }
-    try { syncStatus('Connecting…'); await gh.ensureBranch(); await syncNow(true); toast('Connected — syncing to GitHub'); render(true); }
-    catch (err) { syncStatus('Sync error', true); toast('GitHub: ' + err.message); }
-  });
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return;
-    try { state = merge(state, norm(JSON.parse(await file.text()))); persist(); toast('Backup imported'); refreshAll(false); }
+    try { absorb(norm(JSON.parse(await file.text()))); toast('Backup imported'); refreshAll(false); render(true); }
     catch { toast('That file is not a TV Tracker backup'); }
   });
 };
 
-/* ---------- GitHub sync ---------- */
-const enc = encodeURIComponent;
-const b64enc = str => { const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
-const b64dec = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, '')), c => c.charCodeAt(0)));
+/* ---------- merging + cloud sync ---------- */
 function canon(v) {
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
   if (v && typeof v === 'object') return '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
   return JSON.stringify(v);
 }
+// last-write-wins per show / per episode, so edits from several devices combine cleanly
 function mergeMap(a, b) { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) { const c = o[k]; if (!c || (v.t || 0) > (c.t || 0)) o[k] = v; } return o; }
 function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched: mergeMap(a.watched, b.watched) }); }
-async function ghErr(r) { let m = ''; try { m = (await r.json()).message; } catch { } return new Error(`${r.status} ${m || r.statusText}`); }
 
-const gh = {
-  ok: () => !!(sync.owner && sync.repo && sync.token && sync.branch && sync.path),
-  base: () => `https://api.github.com/repos/${enc(sync.owner)}/${enc(sync.repo)}`,
-  headers: () => ({ Authorization: 'Bearer ' + sync.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }),
-  fileUrl() { return `${this.base()}/contents/${sync.path.split('/').map(enc).join('/')}`; },
-  async ensureBranch() {
-    const h = this.headers();
-    const r = await fetch(`${this.base()}/branches/${enc(sync.branch)}`, { headers: h, cache: 'no-store' });
-    if (r.ok) return; if (r.status !== 404) throw await ghErr(r);
-    const repo = await fetch(this.base(), { headers: h }); if (!repo.ok) throw await ghErr(repo);
-    const def = (await repo.json()).default_branch;
-    const ref = await fetch(`${this.base()}/git/ref/heads/${enc(def)}`, { headers: h }); if (!ref.ok) throw await ghErr(ref);
-    const sha = (await ref.json()).object.sha;
-    const c = await fetch(`${this.base()}/git/refs`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'refs/heads/' + sync.branch, sha }) });
-    if (!c.ok) throw await ghErr(c);
-  },
-  async pull() {
-    const r = await fetch(`${this.fileUrl()}?ref=${enc(sync.branch)}`, { headers: this.headers(), cache: 'no-store' });
-    if (r.status === 404) return { data: null, sha: null };
-    if (!r.ok) throw await ghErr(r);
-    const j = await r.json();
-    return { data: norm(JSON.parse(b64dec(j.content))), sha: j.sha };
-  },
-  async push(data, sha) {
-    const body = { message: 'Update TV watch progress', content: b64enc(JSON.stringify(data, null, 1)), branch: sync.branch };
-    if (sha) body.sha = sha;
-    const r = await fetch(this.fileUrl(), { method: 'PUT', headers: { ...this.headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (r.status === 409 || r.status === 422) return false;   // someone else saved first; re-merge
-    if (!r.ok) throw await ghErr(r);
-    return true;
-  }
-};
+// Merge another state (backup, guest list) into the current one and upload what's new.
+function absorb(other) {
+  const merged = merge(state, other);
+  for (const kind of ['shows', 'watched'])
+    for (const [k, v] of Object.entries(merged[kind])) if (canon(v) !== canon(state[kind][k])) queue(kind, k, v);
+  state = merged; persist();
+}
 
-let syncing = false, syncTimer = null, dirty = false, lastSync = 0;
-function scheduleSync() { if (!gh.ok()) return; dirty = true; syncStatus('Saving…'); clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(), 2500); }
-async function syncNow(throwErr) {
-  if (!gh.ok()) { syncStatus(); return; }
-  if (syncing) { dirty = true; return; }
-  syncing = true; dirty = false; syncStatus('Syncing…');
+let pending = null, flushTimer = null, saving = false;
+function queue(kind, id, val) {
+  if (!user) return;
+  pending = pending || { shows: {}, watched: {} };
+  pending[kind][id] = val;
+  syncStatus('Saving…');
+  clearTimeout(flushTimer); flushTimer = setTimeout(flush, 1000);
+}
+async function flush() {
+  flushTimer = null;
+  if (!pending || !user || saving) return;
+  const batch = pending; pending = null; saving = true;
   try {
-    for (let i = 0; i < 4; i++) {
-      const { data, sha } = await gh.pull();
-      const merged = data ? merge(state, data) : state;
-      const localChanged = canon(merged) !== canon(state);
-      state = merged; save(K.state, state);
-      if (localChanged) { render(); refreshMissing(); }
-      if (data && canon(data) === canon(merged)) break;
-      if (await gh.push(merged, sha)) break;
-      await sleep(400);
-    }
-    lastSync = now(); syncStatus();
+    await cloud.save({ ...batch, profile: { name: user.name, email: user.email }, updated: now() });
+    syncStatus();
   } catch (e) {
-    syncStatus('Sync error', true); console.warn(e);
-    if (throwErr) throw e;
+    console.warn(e);
+    pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) } };
+    syncStatus('Not saved — retrying', true);
+    flushTimer = setTimeout(flush, 5000);
   } finally {
-    syncing = false;
-    if (dirty) scheduleSync();
+    saving = false;
+    if (pending && !flushTimer) flushTimer = setTimeout(flush, 1000);
   }
 }
+
+let firstSnapshot = true;
+function onUser(u) {
+  const prevUid = user?.uid;
+  if (!u && prevUid) { try { localStorage.removeItem(`${K.state}.${prevUid}`); } catch { } }
+  user = u; authReady = true; firstSnapshot = true; pending = null;
+  state = norm(load(stateKey(), null));
+  accountChip(); syncStatus();
+  const r = route().name;
+  if (u && r === 'login') location.hash = '#/';
+  else if (!(r === 'login' && !u)) render(true);   // don't wipe a sign-in form someone is typing in
+  refreshMissing();
+}
+function onData(data) {
+  if (!user) return;
+  if (!data) {                                   // brand-new account: start it with this device's guest list
+    if (firstSnapshot) {
+      const guest = norm(load(K.state, null));
+      if (Object.keys(guest.shows).length) { absorb(guest); save(K.state, norm(null)); toast('Your shows from this device were added to your account'); }
+      else cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
+    }
+    firstSnapshot = false; render(); return;
+  }
+  const remote = norm(data);
+  // Anything this device changed that the server hasn't seen yet (e.g. edits made offline) gets uploaded.
+  for (const kind of ['shows', 'watched'])
+    for (const [k, v] of Object.entries(state[kind])) { const r = remote[kind][k]; if (!r || (v.t || 0) > (r.t || 0)) queue(kind, k, v); }
+  const merged = merge(state, remote);
+  const changed = canon(merged) !== canon(state);
+  state = merged; persist();
+  firstSnapshot = false;
+  if (changed) { render(); refreshMissing(); }
+}
+function onCloudError(e) { console.warn(e); syncStatus(cloud.friendlyError(e), true); }
 function refreshMissing() { if (followed().some(f => !cache[f.id])) refreshAll(false); }
 
 /* ---------- UI helpers ---------- */
 function syncStatus(text, err) {
   const el = $('#sync');
-  el.className = 'sync' + (err ? ' err' : !text && gh.ok() ? ' ok' : '');
-  el.textContent = text || (gh.ok() ? (lastSync ? 'Synced' : 'Sync on') : 'Saved on this device');
+  el.className = 'sync' + (err ? ' err' : !text && user ? ' ok' : '');
+  el.textContent = text || (user ? 'Saved to account' : cloud.configured ? '' : 'Saved on this device');
+  el.title = text || '';
+}
+function accountChip() {
+  const el = $('#acct');
+  if (!cloud.configured) { el.hidden = true; return; }
+  el.hidden = false;
+  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(user.name)}</span>`; }
+  else { el.href = '#/login'; el.className = 'acct'; el.textContent = authReady ? 'Sign in' : ''; }
 }
 function busy(text) { const b = $('#busy'); if (text) { b.textContent = text; b.hidden = false; } else b.hidden = true; }
 let toastTimer = null;
@@ -544,8 +585,17 @@ const actions = {
     busy(false); render();
   },
   'discover-refresh'() { delete meta.discover; render(); },
-  'sync-now'() { syncNow().then(() => toast(gh.ok() ? 'Synced' : 'Not connected')); },
-  disconnect() { sync.token = ''; save(K.sync, sync); syncStatus(); render(true); toast('Sync turned off on this device'); },
+  async google() {
+    try { await cloud.google(); } catch (e) { const el = $('#authErr'); if (el) { el.textContent = cloud.friendlyError(e); el.hidden = false; } else toast(cloud.friendlyError(e)); }
+  },
+  async forgot() {
+    const email = $('#authForm input[name=email]')?.value.trim(), el = $('#authErr');
+    if (!email) { el.textContent = 'Type your email above first, then tap "Forgot password?"'; el.hidden = false; return; }
+    try { await cloud.resetPassword(email); toast('Password reset email sent'); } catch (e) { el.textContent = cloud.friendlyError(e); el.hidden = false; }
+  },
+  async signout() { await flush(); await cloud.signOut(); location.hash = '#/'; toast('Signed out'); },
+  'import-guest'() { absorb(norm(load(K.state, null))); save(K.state, norm(null)); toast('Added to your account'); refreshMissing(); render(true); },
+  'discard-guest'() { save(K.state, norm(null)); render(true); },
   export() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));
@@ -579,10 +629,11 @@ document.addEventListener('toggle', e => {
 function route() { const [name, arg] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'shows', arg }; }
 function render(fromRoute) {
   const r = route();
-  document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === (r.name === 'show' ? 'shows' : r.name)));
+  const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
+  document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   // Don't wipe forms the user is typing in on background updates.
   if (!fromRoute && r.name === 'search') return drawResults();
-  if (!fromRoute && r.name === 'settings') return;
+  if (!fromRoute && (r.name === 'login' || r.name === 'account') && document.activeElement?.tagName === 'INPUT') return;
   const y = scrollY;
   (views[r.name] || views.shows)(r.arg);
   if (!fromRoute) scrollTo(0, y);
@@ -590,12 +641,12 @@ function render(fromRoute) {
 window.addEventListener('hashchange', () => { render(true); scrollTo(0, 0); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  if (gh.ok() && !syncing) syncNow();
   if (now() - (meta.lastRefresh || 0) > STALE) refreshAll(false);
 });
-setInterval(() => { if (document.visibilityState === 'visible' && gh.ok() && !dirty) syncNow(); }, 120e3);
+window.addEventListener('pagehide', () => { flush(); });
 
-syncStatus();
+accountChip(); syncStatus();
 render(true);
-if (gh.ok()) syncNow();
+cloud.start({ onUser, onData, onError: onCloudError })
+  .catch(e => { authReady = true; accountChip(); onCloudError(e); });
 if (followed().length && now() - (meta.lastRefresh || 0) > STALE) refreshAll(false);

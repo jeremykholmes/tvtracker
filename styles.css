@@ -153,3 +153,24 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
   .season > summary .mini { display: none; }
   .ep .btn.xs { white-space: nowrap; }
 }
+
+/* accounts */
+.acct { text-decoration: none; font-weight: 650; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.acct:empty { display: none; }
+.acct.on { padding: 3px 12px 3px 3px; }
+.acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+.auth { max-width: 400px; margin: 10px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+.auth h1 { margin-bottom: 4px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--panel2); border-radius: 11px; padding: 4px; margin: 18px 0; }
+.seg a { text-align: center; padding: 8px; border-radius: 8px; text-decoration: none; font-weight: 600; color: var(--muted); }
+.seg a.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.btn.wide { width: 100%; justify-content: center; padding: 11px; }
+.btn .g { font-weight: 800; color: #4285f4; }
+.or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 16px 0; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.formerr { color: var(--danger); font-size: 14px; margin: 0; }
+.linkbtn { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 13px; }
+.nudge { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
+.nudge a { font-weight: 700; }
+@media (max-width: 720px) { .acct .nm { display: none; } .acct.on { padding: 3px; } .sync { display: none; } }

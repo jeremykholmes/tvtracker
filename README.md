@@ -1,29 +1,32 @@
 # TV Tracker
 
-A static website for tracking the TV shows we're watching — no server, no build step. Hosted on GitHub Pages.
+A website for tracking the TV shows you're watching, with accounts so anyone can sign up and keep their own private list. Hosted on GitHub Pages; accounts and data run on a free Firebase project.
+
+Live site: https://jeremykholmes.github.io/tvtracker/
 
 ## Features
+- **Accounts** — sign up with email/password or Google. Each person's shows and checkmarks are private and sync to every device they sign in on. Guests can try it without an account; their list moves into their account when they sign up.
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
-- **My Shows** — what's up next for each show, how many episodes are left, and a one-tap **✓ Watched** button for the next episode.
-- **Episode checklist** per season: check off single episodes, **Mark all** for a season, or **↑ Up to here** to catch up to where you are.
-- **New episodes pulled automatically** — the app checks TVmaze for updated shows every few hours (or tap *Check for new episodes*), and flags shows with episodes that aired this week.
-- **Upcoming** — air dates for the next 45 days across all your shows.
-- **Discover** — series and season premieres in the next 7 days across US networks and streaming.
-- **Sync across devices** via a JSON file committed to this repo (optional), plus export/import backups.
+- **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
+- **Episode checklist** per season: check single episodes, **Mark all**, or **↑ Up to here** to catch up.
+- **New episodes pulled automatically** every few hours (or tap *Check for new episodes*).
+- **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 
-## Turn on the website
-Repo → **Settings → Pages** → Source: *Deploy from a branch* → `main`, folder `/ (root)` → Save.
-The site appears at `https://<owner>.github.io/<repo>/` within a minute or two.
+## Switching on accounts (one-time, ~10 minutes)
+1. Go to https://console.firebase.google.com → **Create a project** (e.g. `tvtracker`). Google Analytics is optional — you can turn it off.
+2. **Build → Authentication → Get started.** Under *Sign-in method*, enable **Email/Password** and **Google**.
+3. Authentication → **Settings → Authorized domains → Add domain** → `jeremykholmes.github.io`.
+4. **Build → Firestore Database → Create database** → pick a location near you → start in **production mode**.
+5. Firestore → **Rules** tab → replace everything with the contents of `firestore.rules` from this repo → **Publish**.
+6. **Project settings** (gear icon) → *Your apps* → click the **`</>`** (Web) icon → register an app (any nickname, no Hosting needed) → copy the `firebaseConfig` values.
+7. Paste those values into `firebase-config.js` in this repo and commit. The site picks it up within a minute or two.
 
-## Turn on syncing (so checkmarks follow you between phone, laptop, etc.)
-1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. Repository access: *Only select repositories* → this repo. Permissions: **Contents: Read and write**.
-3. Open the site → **Settings** → paste the token → **Save & connect**. Repeat on each device.
-
-Progress is stored in `data/tracker.json` on a separate `tracker-data` branch, so checkmarks don't trigger a site rebuild.
-The token stays in that browser only. If this repo is public, the watch list file is public too.
+The Firebase config values are designed to be public; `firestore.rules` is what keeps each user's data private (users can only read and write their own document). The free Spark plan covers a household and well beyond.
 
 ## Files
 - `index.html` — page shell
+- `app.js` — the app (shows, episodes, views)
+- `cloud.js` — accounts and per-user storage (Firebase)
+- `firebase-config.js` — your Firebase project's web config
+- `firestore.rules` — database security rules to paste into Firebase
 - `styles.css` — styles (dark/light automatic, mobile bottom tab bar)
-- `app.js` — everything else
