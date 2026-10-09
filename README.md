@@ -5,7 +5,7 @@ A website for tracking the TV shows you're watching, with accounts so anyone can
 Live site: https://jeremykholmes.github.io/tvtracker/
 
 ## Features
-- **Accounts** — sign up with email/password or Google. Each person's shows and checkmarks are private and sync to every device they sign in on. Guests can try it without an account; their list moves into their account when they sign up.
+- **Accounts** — sign up with email/password or Google. Each person's shows and checkmarks are private and sync to every device they sign in on. Guests can try it without an account; anything added before signing in is cleared when they sign in.
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **↑ Up to here** to catch up.

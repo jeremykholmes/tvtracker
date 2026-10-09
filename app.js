@@ -175,7 +175,7 @@ views.shows = () => {
   const loading = rows.filter(r => !r.p);
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   const nudge = cloud.configured && authReady && !user
-    ? `<div class="nudge">You're browsing as a guest — these shows only live on this device. <a href="#/login/create">Create a free account</a> to keep them everywhere.</div>` : '';
+    ? `<div class="nudge">You're browsing as a guest — shows added here are cleared when you sign in. <a href="#/login/create">Create a free account</a> to keep your shows everywhere.</div>` : '';
   app.innerHTML = `${nudge}<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
       <button class="btn sm" data-act="refresh-all">↻ Check for new episodes</button></div>
@@ -412,15 +412,10 @@ views.account = () => {
     location.hash = '#/login'; return;
   }
   const watchedCount = Object.values(state.watched).filter(w => w.w).length;
-  const guest = norm(load(K.state, null)), guestShows = Object.values(guest.shows).filter(s => !s.removed).length;
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
     <p>Your shows and checkmarks are private to this account and sync automatically to every device you sign in on.</p>
     <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
-  ${guestShows ? `<div class="panel"><h3>Shows saved on this device</h3>
-    <p>This device has ${guestShows} show${guestShows > 1 ? 's' : ''} from before you signed in. Add them and their checkmarks to your account?</p>
-    <div class="actions"><button class="btn primary" data-act="import-guest">Add to my account</button>
-    <button class="btn ghost" data-act="discard-guest">No thanks</button></div></div>` : ''}
   <div class="panel"><h3>Your data</h3>
     <p>${followed().length} shows · ${watchedCount} episodes watched · episode data refreshed ${ago(meta.lastRefresh)}</p>
     <div class="actions"><button class="btn" data-act="export">⬇ Export backup</button>
@@ -481,6 +476,7 @@ let firstSnapshot = true;
 function onUser(u) {
   const prevUid = user?.uid;
   if (!u && prevUid) { try { localStorage.removeItem(`${K.state}.${prevUid}`); } catch { } }
+  if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
   user = u; authReady = true; firstSnapshot = true; pending = null;
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus();
@@ -491,11 +487,9 @@ function onUser(u) {
 }
 function onData(data) {
   if (!user) return;
-  if (!data) {                                   // brand-new account: start it with this device's guest list
+  if (!data) {                                   // brand-new account: starts empty
     if (firstSnapshot) {
-      const guest = norm(load(K.state, null));
-      if (Object.keys(guest.shows).length) { absorb(guest); save(K.state, norm(null)); toast('Your shows from this device were added to your account'); }
-      else cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
+      cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
     }
     firstSnapshot = false; render(); return;
   }
@@ -594,8 +588,6 @@ const actions = {
     try { await cloud.resetPassword(email); toast('Password reset email sent'); } catch (e) { el.textContent = cloud.friendlyError(e); el.hidden = false; }
   },
   async signout() { await flush(); await cloud.signOut(); location.hash = '#/'; toast('Signed out'); },
-  'import-guest'() { absorb(norm(load(K.state, null))); save(K.state, norm(null)); toast('Added to your account'); refreshMissing(); render(true); },
-  'discard-guest'() { save(K.state, norm(null)); render(true); },
   export() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));
