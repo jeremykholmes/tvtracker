@@ -540,35 +540,35 @@ function absorb(other) {
   state = merged; persist();
 }
 
-let pending = null, flushTimer = null, saving = false;
+let pending = null, flushTimer = null, inFlight = 0;
+const saving = () => inFlight > 0;
 function queue(kind, id, val) {
   if (!user) return;
   pending = pending || { shows: {}, watched: {} };
   pending[kind][id] = val;
-  syncStatus('Saving…');
-  clearTimeout(flushTimer); flushTimer = setTimeout(flush, 1000);
+  syncStatus('Syncing…');
+  clearTimeout(flushTimer); flushTimer = setTimeout(flush, 250);   // short pause so "Mark all" goes up as one write
 }
-async function flush() {
-  flushTimer = null;
-  if (!pending || !user || saving) return;
-  const batch = pending; pending = null; saving = true;
-  // Saves don't fail outright when the database is unreachable (e.g. blocked by an ad blocker) — they just hang.
+// Hands the batch to Firestore's on-device database (instant) without waiting for the server,
+// so the next change never queues behind a slow network round trip.
+function flush() {
+  clearTimeout(flushTimer); flushTimer = null;
+  if (!pending || !user) return;
+  const batch = pending; pending = null; inFlight++;
+  // Writes don't fail outright when the database is unreachable (e.g. blocked by an ad blocker) — they just wait.
   const slow = setTimeout(() => {
-    syncStatus('Not saved — can\'t reach your account', true);
-    toast('Your changes aren\'t reaching your account. If you use an ad blocker or privacy extension, allow this site and reload.');
+    syncStatus('Saved on this device — can\'t reach your account', true);
+    toast('Your changes are saved on this device but aren\'t reaching your account. If you use an ad blocker or privacy extension, allow this site and reload.');
   }, 10000);
-  try {
-    await cloud.save({ ...batch, profile: { name: user.name, email: user.email }, updated: now() });
-    syncStatus();
-  } catch (e) {
-    console.warn(e);
-    pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) } };
-    syncStatus('Not saved — retrying', true);
-    flushTimer = setTimeout(flush, 5000);
-  } finally {
-    clearTimeout(slow); saving = false;
-    if (pending && !flushTimer) flushTimer = setTimeout(flush, 1000);
-  }
+  return cloud.save({ ...batch, profile: { name: user.name, email: user.email }, updated: now() })
+    .then(() => { if (!--inFlight && !pending) syncStatus(); })
+    .catch(e => {
+      inFlight--; console.warn(e);
+      pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) } };
+      syncStatus(cloud.friendlyError(e), true);
+      flushTimer = setTimeout(flush, 5000);
+    })
+    .finally(() => clearTimeout(slow));
 }
 
 let firstSnapshot = true, serverSynced = false;   // serverSynced: the account's data has been confirmed by the server
@@ -695,9 +695,11 @@ const actions = {
   async signout() {
     // Signing out clears this device's copy, so make sure every change has reached the account first.
     const deadline = now() + 8000;
-    while ((saving || !serverSynced) && now() < deadline) await sleep(100);
-    if (pending && !saving) await Promise.race([flush(), sleep(Math.max(0, deadline - now()))]);
-    if ((pending || saving || !serverSynced) && !confirm('Your shows haven\'t been saved to your account — the site can\'t reach it right now (an ad blocker or privacy extension can cause this).\n\nIf you sign out, the shows on this computer will be deleted.\n\nSign out anyway?')) return;
+    flush();
+    while (!serverSynced && now() < deadline) await sleep(100);
+    await Promise.race([cloud.waitForPendingWrites(), sleep(Math.max(0, deadline - now()))]);
+    await sleep(50);                              // let the save callbacks settle
+    if ((pending || saving() || !serverSynced) && !confirm('Your shows haven\'t been saved to your account — the site can\'t reach it right now (an ad blocker or privacy extension can cause this).\n\nIf you sign out, the shows on this computer will be deleted.\n\nSign out anyway?')) return;
     await cloud.signOut(); location.hash = '#/'; toast('Signed out');
   },
   export() {
