@@ -113,6 +113,10 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .chk input:checked + span { background: var(--ok); border-color: var(--ok); }
 .chk input:checked + span::after { content: ""; position: absolute; left: 8px; top: 3px; width: 6px; height: 12px; border: solid #fff; border-width: 0 3px 3px 0; transform: rotate(45deg); }
 .chk input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wbox { position: relative; display: inline-block; flex: 0 0 auto; width: 15px; height: 15px; border: 2px solid currentColor; border-radius: 5px; box-sizing: border-box; opacity: .75; transition: all .12s; }
+.watchbtn.on .wbox { background: var(--accent-ink); border-color: var(--accent-ink); opacity: 1; }
+.watchbtn.on .wbox::after { content: ""; position: absolute; left: 3.5px; top: 0; width: 4px; height: 8px; border: solid var(--accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.mk-btn { display: inline-flex; align-items: center; gap: 6px; }
 
 /* lists (upcoming / discover / search) */
 .rows { display: flex; flex-direction: column; gap: 8px; }
