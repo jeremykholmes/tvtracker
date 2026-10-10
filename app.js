@@ -14,6 +14,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const strip = h => h ? (new DOMParser().parseFromString(h, 'text/html').body.textContent || '').trim() : '';
 const pad = n => String(n ?? 0).padStart(2, '0');
 const code = e => `Season ${e.s}, Episode ${e.n}`;
+const twoLines = e => `<span class="code">Season ${e.s}</span><br><span class="code">Episode ${e.n}</span>`;   // season, then episode below
 const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Hulu', FOX: 'Hulu', Fox: 'Hulu' };   // network -> streaming service that also carries its shows
 const channel = n => n && STREAMS_ON[n] ? `${n} / ${STREAMS_ON[n]}` : (n || '');
 
@@ -286,9 +287,9 @@ views.shows = () => {
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
-  if (p?.next) foot = `<div class="next">Next: <span class="code">${code(p.next)}</span></div>
+  if (p?.next) foot = `<div class="next">Next: ${twoLines(p.next)}</div>
     <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched</button>`;
-  else if (p?.upcoming) foot = `<div class="next muted">Next: <span class="code">${code(p.upcoming)}</span> · ${fmtDate(p.upcoming)}</div>`;
+  else if (p?.upcoming) foot = `<div class="next muted">Next: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
     <div style="position:relative">${poster(s, '#/show/' + id)}${p?.fresh ? `<span class="badge">${p.fresh} new</span>` : ''}</div>
