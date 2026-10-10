@@ -624,6 +624,7 @@ function syncStatus(text, err) {
 }
 function accountChip() {
   const el = $('#acct');
+  $('#topout').hidden = !user;
   if (!cloud.configured) { el.hidden = true; return; }
   el.hidden = false;
   if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(user.name)}</span>`; }
