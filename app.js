@@ -14,7 +14,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const strip = h => h ? (new DOMParser().parseFromString(h, 'text/html').body.textContent || '').trim() : '';
 const pad = n => String(n ?? 0).padStart(2, '0');
 const code = e => `S${pad(e.s)}E${pad(e.n)}`;
-const STREAMS_ON = { CBS: 'Paramount+' };   // network -> streaming service that also carries its shows
+const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock' };   // network -> streaming service that also carries its shows
 const channel = n => n && STREAMS_ON[n] ? `${n} / ${STREAMS_ON[n]}` : (n || '');
 
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
