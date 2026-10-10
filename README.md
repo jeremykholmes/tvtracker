@@ -10,7 +10,7 @@ Live site: https://jeremykholmes.github.io/tvtracker/
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
-- **New episodes pulled automatically** every few hours (or tap *Check for new episodes*).
+- **New episodes pulled automatically** once a day.
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 
 ## Switching on accounts (one-time, ~10 minutes)
