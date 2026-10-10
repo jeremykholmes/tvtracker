@@ -207,7 +207,7 @@ views.landing = () => {
   ];
   const mock = (cls, name, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
     <div class="mk-body"><b>${name}</b><span><span class="code">${ep}</span> Next episode</span>
-    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn">✓ Watched ${ep}</span></div></div>`;
+    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched ${ep}</span></div></div>`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
     <div class="lp-copy">
@@ -271,7 +271,7 @@ function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
   if (p?.next) foot = `<div class="next"><span class="code">${code(p.next)}</span> ${esc(p.next.name)}</div>
-    <button class="btn primary sm" data-act="watch" data-ep="${p.next.id}">✓ Watched ${code(p.next)}</button>`;
+    <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${code(p.next)}</button>`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: <span class="code">${code(p.upcoming)}</span> · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
@@ -652,9 +652,10 @@ function markWithUndo(ids, w, label) {
 const actions = {
   getapp() { getApp(); },
   watch(b) {
-    if (!requireAccount()) return;
+    if (!requireAccount() || b.classList.contains('on')) return;
     const id = +b.dataset.ep, f = findEp(id);
-    markWithUndo([id], true, f ? `${f.c.show.name} ${code(f.e)} watched` : 'Marked watched');
+    b.classList.add('on');   // tick the box first, then move the card on to the next episode
+    setTimeout(() => markWithUndo([id], true, f ? `${f.c.show.name} ${code(f.e)} watched` : 'Marked watched'), 550);
   },
   season(b, e) {
     if (!requireAccount()) { e.preventDefault(); e.stopPropagation(); return; }
