@@ -353,7 +353,7 @@ views.upcoming = () => {
     const c = cache[f.id]; if (!c) continue;
     for (const e of c.episodes) {
       const t = airTime(e); if (!isFinite(t)) continue;
-      if (t <= now() && now() - t < 7 * DAY) recent.push({ s: c.show, e, t });
+      if (t <= now() && now() - t < 7 * DAY) { if (!isWatched(e.id)) recent.push({ s: c.show, e, t }); }   // already-watched episodes are left out
       else if (t > now() && t - now() < 45 * DAY) soon.push({ s: c.show, e, t });
     }
   }
