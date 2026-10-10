@@ -11,8 +11,12 @@ const BUCKETS = 32;
 const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
 
 let A, F, auth, db, unsubs = [];
+let active = null, handlers = null;   // active: uid of the account whose list is open (yours, or one shared with you)
+export const activeUid = () => active;
 
-export async function start({ onUser, onData, onError }) {
+// pick(user) returns the uid of the list to open after sign-in (the user's own, or one shared with them).
+export async function start({ onUser, onData, onError, pick }) {
+  handlers = { onData, onError };
   if (!configured) { onUser(null); return; }
   const [appMod, authMod, fsMod] = await Promise.all([
     import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-auth.js`), import(`${SDK}/firebase-firestore.js`)
@@ -28,8 +32,9 @@ export async function start({ onUser, onData, onError }) {
   A.getRedirectResult(auth).catch(onError);
   A.onAuthStateChanged(auth, user => {
     unsubs.forEach(u => u()); unsubs = [];
+    active = user ? (pick && pick(toUser(user))) || user.uid : null;
     onUser(user ? toUser(user) : null);
-    if (user) listen(user.uid, onData, onError);
+    if (user) listen(active, onData, onError);
     // Google sign-ups are spotted here; email sign-ups are reported from signUp() once the name is set.
     if (user && !user.providerData.some(p => p.providerId === 'password')) notifyIfNew(user);
   });
@@ -70,7 +75,48 @@ async function migrate(uid, legacy, current) {
   await b.commit();
 }
 
-const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] });
+const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0], verified: !!u.emailVerified });
+
+/* ---------- shared access ----------
+   The owner lists people by email in users/{uid}.members; the rules let those people read and
+   edit that list's shows and checkmarks (not who has access). shares/{owner}_{email} lets the
+   person find lists shared with them. */
+const lc = e => String(e || '').trim().toLowerCase();
+export function openAccount(uid) {
+  unsubs.forEach(u => u()); unsubs = [];
+  active = uid;
+  listen(uid, handlers.onData, handlers.onError);
+}
+export async function members() {
+  const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
+  return Object.keys((snap.exists() && snap.data().members) || {}).sort();
+}
+export async function addMember(email) {
+  const u = auth.currentUser, e = lc(email);
+  const b = F.writeBatch(db);
+  b.set(F.doc(db, 'users', u.uid), { members: { [e]: { t: Date.now() } } }, { merge: true });
+  b.set(F.doc(db, 'shares', `${u.uid}_${e}`), { owner: u.uid, ownerName: u.displayName || (u.email || '').split('@')[0], ownerEmail: u.email || '', email: e, t: Date.now() });
+  await b.commit();
+}
+export async function removeMember(email) {
+  const u = auth.currentUser, e = lc(email);
+  const b = F.writeBatch(db);
+  b.update(F.doc(db, 'users', u.uid), new F.FieldPath('members', e), F.deleteField());
+  b.delete(F.doc(db, 'shares', `${u.uid}_${e}`));
+  await b.commit();
+}
+// Lists other people have shared with the signed-in user (needs a verified email).
+export async function sharedWithMe() {
+  const u = auth.currentUser; if (!u?.emailVerified) return [];
+  const snap = await F.getDocs(F.query(F.collection(db, 'shares'), F.where('email', '==', lc(u.email))));
+  return snap.docs.map(d => d.data());
+}
+export const sendVerification = () => A.sendEmailVerification(auth.currentUser);
+// After clicking the link in the email: refresh so the new "verified" status reaches the database rules.
+export async function refreshVerified() {
+  const u = auth.currentUser; await u.reload(); await u.getIdToken(true);
+  return u.emailVerified;
+}
 
 export async function signUp(name, email, password) {
   const cred = await A.createUserWithEmailAndPassword(auth, email, password);
@@ -117,6 +163,7 @@ export async function deleteAccount(password) {
   else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
   unsubs.forEach(x => x()); unsubs = [];        // stop listening, or the empty document would be recreated
   const b = F.writeBatch(db);
+  try { (await F.getDocs(F.query(F.collection(db, 'shares'), F.where('owner', '==', u.uid)))).forEach(d => b.delete(d.ref)); } catch { }
   for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
   b.delete(F.doc(db, 'users', u.uid));
   await Promise.race([b.commit(), new Promise((_, no) => setTimeout(() => no({ code: 'auth/network-request-failed' }), 15000))]);
@@ -128,14 +175,15 @@ export const signOut = () => A.signOut(auth);
 // checkmarks go to their bucket documents. Stored on the device immediately;
 // the returned promise resolves once the server confirms it.
 export function save(partial) {
-  const u = auth?.currentUser; if (!u) return Promise.resolve();
+  const u = auth?.currentUser; if (!u || !active) return Promise.resolve();
+  const uid = active;
   const { watched, ...rest } = partial;
   const b = F.writeBatch(db);
   if (Object.keys(rest).length && !(Object.keys(rest).length === 1 && rest.shows && !Object.keys(rest.shows).length))
-    b.set(F.doc(db, 'users', u.uid), rest, { merge: true });
+    b.set(F.doc(db, 'users', uid), rest, { merge: true });
   const groups = {};
   for (const [k, v] of Object.entries(watched || {})) (groups[bucketOf(k)] ||= {})[k] = v;
-  for (const [bk, e] of Object.entries(groups)) b.set(F.doc(db, 'users', u.uid, 'watched', bk), { e }, { merge: true });
+  for (const [bk, e] of Object.entries(groups)) b.set(F.doc(db, 'users', uid, 'watched', bk), { e }, { merge: true });
   return b.commit();
 }
 // Resolves when every queued write has reached the server.

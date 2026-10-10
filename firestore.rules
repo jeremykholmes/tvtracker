@@ -1,12 +1,32 @@
 rules_version = '2';
-// Each signed-in user can read and write only their own document. Nothing else is accessible.
+// Each signed-in user can read and write their own document. An owner can also give other people
+// (by verified email, listed in users/{uid}.members) the same access to their shows and checkmarks.
+// Only the owner can change who has access, their profile, or delete the account's data.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function isMember(uid) {
+      return verified() && myEmail() in get(/databases/$(database)/documents/users/$(uid)).data.get('members', {});
+    }
+
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isOwner(uid) || isMember(uid);
+      allow create, delete: if isOwner(uid);
+      allow update: if isOwner(uid)
+        || (isMember(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'profile']));
       match /watched/{bucket} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if isOwner(uid) || isMember(uid);
       }
+    }
+
+    // shares/{ownerUid}_{email}: lets someone find the lists shared with them.
+    match /shares/{id} {
+      allow read, delete: if signedIn() && (resource.data.owner == request.auth.uid || (verified() && resource.data.email == myEmail()));
+      allow create, update: if signedIn() && request.resource.data.owner == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.email;
     }
   }
 }
