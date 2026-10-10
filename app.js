@@ -222,9 +222,10 @@ views.landing = () => {
     ['⇄', 'Synced everywhere', 'Start on your phone, pick up on your laptop. Your list follows you to every device.'],
     ['◉', 'Private by design', 'Your watch history belongs to you. Only you can see your shows and checkmarks.']
   ];
-  const mock = (i, name, net, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster p${i + 1}" data-lp="${esc(name)}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
-    <div class="mk-body"><b>${esc(name)}</b><span>${net} · ${ep}</span>
-    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched</span></div></div>`;
+  const mock = (m, i) => { const [pct, badge] = LP_DECOR[i]; return `<div class="mk-card"><div class="mk-poster p${i + 1}"${m.img ? '' : ` data-lp="${esc(m.name)}"`}>${m.img ? `<img src="${esc(m.img)}" alt="">` : ''}${badge ? `<span class="badge">${badge}</span>` : ''}</div>
+    <div class="mk-body"><b>${esc(m.name)}</b><span>${esc(m.net)}${m.ep ? ' · ' + esc(m.ep) : ''}</span>
+    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched</span></div></div>`; };
+  const upnext = top => `<div class="mk-head">Up next · 3</div>${weekPicks(top).map(mock).join('')}`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
     <div class="lp-copy">
@@ -236,8 +237,7 @@ views.landing = () => {
     </div>
     <div class="lp-visual" aria-hidden="true">
       <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
-        <div class="mk-head">Up next · 3</div>
-        ${LP_UPNEXT.map((m, i) => mock(i, ...m)).join('')}
+        <div id="lpUpnext">${upnext(lpTopCached() || LP_TOP_FALLBACK)}</div>
       </div>
     </div>
   </section>
@@ -258,10 +258,38 @@ views.landing = () => {
     <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></section>
 </div>`;
   lpPosters();
+  if (!lpTopCached()) lpTop().then(top => {
+    const box = document.querySelector('#lpUpnext');
+    if (top && box && document.body.classList.contains('landing')) { box.innerHTML = upnext(top); lpPosters(); }
+  });
 };
 
 // Real shows for the landing page. Posters come from TVmaze and are cached on the device for a week.
-const LP_UPNEXT = [['Severance', 'Apple TV+', 'S2 · E8', 62, '2 new'], ['The Last of Us', 'HBO', 'S2 · E5', 88, ''], ['Abbott Elementary', 'ABC', 'S4 · E12', 24, '1 new']];
+// "Up next" shows 3 of this week's top 10 (the most popular shows TVmaze has airing lately), a different 3 each week.
+const LP_DECOR = [[62, '2 new'], [88, ''], [24, '1 new']];
+const LP_TOP_FALLBACK = [['Severance', 'Apple TV+'], ['The Last of Us', 'HBO'], ['Abbott Elementary', 'ABC'], ['The Bear', 'FX'], ['Stranger Things', 'Netflix'],
+  ['The White Lotus', 'HBO'], ['Only Murders in the Building', 'Hulu'], ['Slow Horses', 'Apple TV+'], ['Squid Game', 'Netflix'], ['Andor', 'Disney+']].map(([name, net]) => ({ name, net }));
+const K_TOP = 'tvt.lptop.v1';
+const weekNo = () => Math.floor((now() + 3 * DAY) / (7 * DAY));   // weeks start on Monday
+const weekPicks = top => { const o = (weekNo() * 3) % top.length; return [0, 1, 2].map(i => top[(o + i) % top.length]); };
+function lpTopCached() { const c = load(K_TOP, null); return c && c.week === weekNo() && c.shows.length >= 3 ? c.shows : null; }
+async function lpTop() {
+  const days = [0, 1, 2].map(d => new Date(now() - d * DAY).toLocaleDateString('en-CA'));   // YYYY-MM-DD
+  const lists = await Promise.all(days.flatMap(d => [`/schedule?country=US&date=${d}`, `/schedule/web?date=${d}`])
+    .map(path => api(path).catch(() => null)));
+  const best = {};
+  for (const e of lists.flat()) {
+    const s = e?.show || e?._embedded?.show;
+    if (!s?.image || e.number == null || !['Scripted', 'Animation', 'Reality', 'Documentary'].includes(s.type)) continue;
+    if (!best[s.id] || e.airstamp > best[s.id].e.airstamp) best[s.id] = { s, e };
+  }
+  const top = Object.values(best).sort((a, b) => (b.s.weight || 0) - (a.s.weight || 0)).slice(0, 10).map(({ s, e }) => ({
+    id: s.id, name: s.name, net: s.network?.name || s.webChannel?.name || '', ep: `S${e.season} · E${e.number}`, img: s.image.medium || s.image.original
+  }));
+  if (top.length < 3) return null;
+  save(K_TOP, { week: weekNo(), shows: top });
+  return top;
+}
 const LP_SHOWS = ['Stranger Things', 'The White Lotus', 'Ted Lasso', 'Wednesday', 'Only Murders in the Building', 'Squid Game', 'Slow Horses', 'Andor', 'Yellowjackets', 'The Boys', 'Reacher', 'Shrinking'];
 const K_LP = 'tvt.lp.v2';
 const lpImgs = load(K_LP, {});
@@ -279,7 +307,7 @@ function lpPosters() {
   });
   paint();
   if (lpLoading) return lpLoading.then(paint);
-  const todo = [...LP_UPNEXT.map(m => m[0]), ...LP_SHOWS].filter(n => !imgs[n]?.img || now() - imgs[n].t > 7 * DAY);
+  const todo = [...new Set([...document.querySelectorAll('[data-lp]')].map(el => el.dataset.lp))].filter(n => !imgs[n]?.img || now() - imgs[n].t > 7 * DAY);
   // A few at a time keeps well under TVmaze's rate limit; failures aren't saved, so they're retried next visit.
   lpLoading = (async () => {
     for (let i = 0; i < todo.length; i += 4) {
