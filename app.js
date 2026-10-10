@@ -316,7 +316,7 @@ views.show = arg => {
   }).join('');
   app.innerHTML = `<section class="hero">${poster(s)}
     <div class="meta"><h1>${esc(s.name)}</h1>
-      <div class="sub">${[s.network, s.status, s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
@@ -460,7 +460,7 @@ function drawResults() {
   if (!lastResults.length) { box.innerHTML = `<p class="muted">${lastQuery ? `No matches for “${esc(lastQuery)}”.` : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
   box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”</p>` + lastResults.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
-      <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4), s.status].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
     ${followBtn(s)}</div>`).join('');
 }
