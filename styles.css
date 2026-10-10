@@ -30,7 +30,6 @@ img { display: block; }
 .tabs a:hover { color: var(--text); background: var(--panel2); }
 .tabs a.on { color: var(--accent-ink); background: var(--accent); }
 .tabs .ico { display: none; }
-@media (min-width: 721px) { .tabs a[data-tab="account"] { display: none; } }   /* the name chip at the top right opens Account */
 .sync { display: none; font-size: 12px; color: var(--muted); text-decoration: none; white-space: nowrap; }   /* hidden unless saving fails */
 .sync.err { display: inline; color: var(--danger); }
 .sync.ok::before { content: "● "; color: var(--ok); }
