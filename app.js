@@ -263,25 +263,38 @@ views.landing = () => {
 // Real shows for the landing page. Posters come from TVmaze and are cached on the device for a week.
 const LP_UPNEXT = [['Severance', 'Apple TV+', 'S2 · E8', 62, '2 new'], ['The Last of Us', 'HBO', 'S2 · E5', 88, ''], ['Abbott Elementary', 'ABC', 'S4 · E12', 24, '1 new']];
 const LP_SHOWS = ['Stranger Things', 'The White Lotus', 'Ted Lasso', 'Wednesday', 'Only Murders in the Building', 'Squid Game', 'Slow Horses', 'Andor', 'Yellowjackets', 'The Boys', 'Reacher', 'Shrinking'];
-const K_LP = 'tvt.lp.v1';
-async function lpPosters() {
-  const imgs = load(K_LP, {});
+const K_LP = 'tvt.lp.v2';
+const lpImgs = load(K_LP, {});
+let lpLoading = null;
+function lpPosters() {
+  const imgs = lpImgs;
   const paint = () => document.querySelectorAll('[data-lp]').forEach(el => {
     const { img: src, id } = imgs[el.dataset.lp] || {};
     if (id && el.parentElement.matches('a.lp-pc')) el.parentElement.href = '#/show/' + id;
-    if (src && !el.querySelector('img')) { el.querySelector('.noimg')?.remove(); el.insertAdjacentHTML('afterbegin', `<img src="${esc(src)}" alt="" loading="lazy">`); }
+    if (!src || el.dataset.src === src) return;
+    el.dataset.src = src;
+    const im = new Image();
+    im.alt = ''; im.src = src;
+    im.onload = () => { el.querySelector('.noimg')?.remove(); el.prepend(im); };
   });
   paint();
-  const names = [...LP_UPNEXT.map(m => m[0]), ...LP_SHOWS].filter(n => !imgs[n] || now() - imgs[n].t > 7 * DAY);
-  for (const n of names) {
-    try {
-      const j = await api('/singlesearch/shows?q=' + encodeURIComponent(n));
-      imgs[n] = { id: j?.id || 0, img: j?.image?.medium || j?.image?.original || '', t: now() };
-    } catch { break; }
-    save(K_LP, imgs);
-    if (!document.body.classList.contains('landing')) return;
-    paint();
-  }
+  if (lpLoading) return lpLoading.then(paint);
+  const todo = [...LP_UPNEXT.map(m => m[0]), ...LP_SHOWS].filter(n => !imgs[n]?.img || now() - imgs[n].t > 7 * DAY);
+  // A few at a time keeps well under TVmaze's rate limit; failures aren't saved, so they're retried next visit.
+  lpLoading = (async () => {
+    for (let i = 0; i < todo.length; i += 4) {
+      await Promise.all(todo.slice(i, i + 4).map(async n => {
+        try {
+          const r = await api('/search/shows?q=' + encodeURIComponent(n));
+          const hit = (r || []).map(x => x.show).find(x => x.image) || null;
+          if (hit) imgs[n] = { id: hit.id, img: hit.image.medium || hit.image.original, t: now() };
+        } catch (e) { console.warn('poster', n, e); }
+      }));
+      save(K_LP, imgs);
+      paint();
+    }
+  })().finally(() => { lpLoading = null; });
+  return lpLoading;
 }
 
 views.shows = () => {
