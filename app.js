@@ -29,6 +29,7 @@ let state = norm(load(K.state, null));
 let cache = load(K.cache, {});           // showId -> { t, show, episodes }  (shared TVmaze data, not per user)
 let meta = load(K.meta, { lastRefresh: 0 });
 const openSeasons = {};                  // showId -> Set of open season numbers
+const showOldSeasons = new Set();        // showIds whose earlier fully-watched seasons are expanded
 
 const followed = () => Object.values(state.shows).filter(s => !s.removed);
 const isFollowed = id => !!(state.shows[id] && !state.shows[id].removed);
@@ -291,7 +292,11 @@ views.show = arg => {
     openSeasons[id] = new Set([p?.next?.s ?? p?.upcoming?.s ?? last]);
   }
   const sched = s.schedule?.days?.length ? `${s.schedule.days.join(', ')}${s.schedule.time ? ' ' + s.schedule.time : ''}` : '';
-  const seasonHtml = [...seasons].map(([n, eps]) => {
+  // Only the most recent fully-watched season stays in the list; earlier ones collapse behind a button.
+  const done = [...seasons].filter(([, eps]) => { const av = eps.filter(aired); return av.length && av.every(e => isWatched(e.id)); }).map(([n]) => n);
+  const hidden = showOldSeasons.has(id) ? new Set() : new Set(done.slice(0, -1));
+  const seasonHtml = (hidden.size ? `<button class="btn ghost sm older" data-act="older-seasons" data-show="${id}">Show ${hidden.size} earlier watched season${hidden.size > 1 ? 's' : ''}</button>` : '') +
+    [...seasons].filter(([n]) => !hidden.has(n)).map(([n, eps]) => {
     const av = eps.filter(aired), w = av.filter(e => isWatched(e.id)).length, all = av.length && w === av.length;
     return `<details class="season" data-show="${id}" data-season="${n}" ${openSeasons[id].has(n) ? 'open' : ''}>
       <summary><span class="grow">Season ${n}</span>
@@ -671,6 +676,7 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
+  'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
   'refresh-all'() { meta.lastRefresh = Math.min(meta.lastRefresh || 0, now() - 21 * HOUR); refreshAll(true); },
   async 'refresh-show'(b) {
     const id = +b.dataset.show; busy('Refreshing…');
