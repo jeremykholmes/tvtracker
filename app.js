@@ -40,6 +40,15 @@ function setWatched(ids, w) {
   const t = now();
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
   persist();
+  if (w) collapseFinished(ids);
+}
+// A season whose aired episodes are now all watched folds shut on the show page.
+function collapseFinished(ids) {
+  for (const id of ids) {
+    const f = findEp(id), open = f && openSeasons[f.sid];
+    if (!open || !open.has(f.e.s)) continue;
+    if (f.c.episodes.filter(e => e.s === f.e.s && aired(e)).every(e => isWatched(e.id))) open.delete(f.e.s);
+  }
 }
 function follow(s) {
   state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: now() };
