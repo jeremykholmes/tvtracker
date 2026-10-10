@@ -94,11 +94,13 @@ async function fetchShow(id) {
   return cache[id];
 }
 
-let refreshing = null;
+let refreshing = null, refreshFailedAt = 0, redrawTimer = null;
+const redrawSoon = () => { clearTimeout(redrawTimer); redrawTimer = setTimeout(() => render(), 150); };
 function refreshAll(manual) {
   if (refreshing) return refreshing;
+  if (!manual && now() - refreshFailedAt < 30e3) return Promise.resolve();   // don't hammer TVmaze after a failure
   refreshing = (async () => {
-    let n = 0;
+    let n = 0, total = 0, failed = 0;
     try {
       busy('Checking for new episodes…');
       const ids = followed().map(s => s.id);
@@ -112,12 +114,24 @@ function refreshAll(manual) {
           for (const id of ids) if (upd[id] && (!cache[id] || upd[id] > (cache[id].show.updated || 0))) todo.push(id);
         }
       }
-      todo = [...new Set(todo)];
-      for (const id of todo) { busy(`Updating shows ${++n}/${todo.length}…`); await fetchShow(id); await sleep(120); }
-      meta.lastRefresh = now(); save(K.meta, meta);
-      if (manual) toast(n ? `Updated ${n} show${n > 1 ? 's' : ''}` : 'Everything is up to date');
-    } catch (e) { toast('Refresh failed: ' + e.message); }
-    finally { busy(false); refreshing = null; render(); }
+      // Shows without episodes first, so My Shows fills in quickly; 4 downloads at a time, each shown as soon as it lands.
+      const tried = new Set(), queue = [...new Set(todo)].sort((a, b) => !!cache[a] - !!cache[b]);
+      while (queue.length) {
+        total += queue.length;
+        await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => {
+          for (let id; (id = queue.shift()) !== undefined;) {
+            tried.add(id);
+            try { await fetchShow(id); } catch { failed++; }
+            busy(`Updating shows ${++n}/${total}…`); redrawSoon();
+          }
+        }));
+        queue.push(...followed().map(s => s.id).filter(id => !cache[id] && !tried.has(id)));   // shows that arrived meanwhile
+      }
+      if (failed) { refreshFailedAt = now(); toast(`Couldn't update ${failed} show${failed > 1 ? 's' : ''} — will try again shortly`); }
+      else { meta.lastRefresh = now(); save(K.meta, meta); }
+      if (manual && !failed) toast(n ? `Updated ${n} show${n > 1 ? 's' : ''}` : 'Everything is up to date');
+    } catch (e) { refreshFailedAt = now(); toast('Refresh failed: ' + e.message); }
+    finally { busy(false); refreshing = null; clearTimeout(redrawTimer); render(); }
   })();
   return refreshing;
 }
