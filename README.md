@@ -11,6 +11,7 @@ Live site: https://jeremykholmes.github.io/tvtracker/
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
 - **New episodes pulled automatically** once a day.
+- **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 
 ## Switching on accounts (one-time, ~10 minutes)
@@ -36,4 +37,5 @@ You'll then get an email with the new person's name, email and sign-up method ea
 - `cloud.js` — accounts and per-user storage (Firebase)
 - `firebase-config.js` — your Firebase project's web config
 - `firestore.rules` — database security rules to paste into Firebase
+- `manifest.webmanifest`, `icons/`, `sw.js` — what lets the site be installed as an app
 - `styles.css` — styles (dark/light automatic, mobile bottom tab bar)

@@ -6,6 +6,9 @@
   <title>TV Tracker</title>
   <meta name="theme-color" content="#0e1014">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="TV Tracker">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%BA%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -19,12 +22,14 @@
       <a href="#/search" data-tab="search"><span class="ico">＋</span>Add</a>
     </nav>
     <span class="sync" id="sync"></span>
+    <button type="button" class="btn sm getapp" id="getapp" data-act="getapp" hidden><span aria-hidden="true">⤓</span><span class="lbl">Get the app</span><span class="lbl-s">App</span></button>
     <a href="#/login" class="acct" id="acct" hidden></a>
     <button type="button" class="btn sm topout" id="topout" data-act="signout" hidden>Sign out</button>
   </header>
   <div class="busy" id="busy" hidden></div>
   <main id="app"></main>
   <div id="toast" class="toast" hidden></div>
+  <dialog id="appDialog" class="appdlg"></dialog>
   <footer class="foot">Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA)</footer>
   <script type="module" src="app.js"></script>
 </body>
