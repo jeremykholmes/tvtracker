@@ -27,6 +27,9 @@ service cloud.firestore {
       allow read, delete: if signedIn() && (resource.data.owner == request.auth.uid || (verified() && resource.data.email == myEmail()));
       allow create, update: if signedIn() && request.resource.data.owner == request.auth.uid
         && id == request.auth.uid + '_' + request.resource.data.email;
+      // The invited person can only mark the share as joined (which triggers the owner's email).
+      allow update: if verified() && resource.data.email == myEmail()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joined']);
     }
   }
 }

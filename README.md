@@ -32,6 +32,15 @@ The Firebase config values are designed to be public; `firestore.rules` is what 
 
 You'll then get an email with the new person's name, email and sign-up method each time an account is created. The key is meant to be public; it can only send email to you.
 
+## Email account owners when someone joins their list (optional)
+When someone you've shared a list with signs in for the first time with that email, the list's owner can get an email. This uses EmailJS (free tier: 200 emails/month):
+1. Sign up at https://www.emailjs.com → **Email Services → Add New Service** → connect an email account (e.g. Gmail) → note the **Service ID**.
+2. **Email Templates → Create New Template**. Set **To Email** to `{{to_email}}`, a subject like `{{member_name}} joined your TV Tracker list`, and a body such as:
+   `Hi {{to_name}}, {{member_name}} ({{member_email}}) just signed in and can now use your TV Tracker list. Manage access from your Account page at {{site}}.` → save and note the **Template ID**.
+3. **Account → General** → copy your **Public Key**. Under **Account → Security**, add `tvtracker.us` to the allowed domains.
+4. Fill in `shareEmail` in `firebase-config.js` with the three values and commit.
+5. Publish the latest `firestore.rules` in Firebase (the invited person needs permission to mark the share as joined).
+
 ## Custom domain
 The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file holds the domain). DNS is on Cloudflare: four `A` records on `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `CNAME` on `www` → `jeremykholmes.github.io`, all set to **DNS only** (grey cloud) so GitHub can issue the HTTPS certificate.
 
