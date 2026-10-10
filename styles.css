@@ -68,7 +68,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .card .body { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
 .card .title { font-weight: 700; font-size: 16px; text-decoration: none; line-height: 1.25; }
 .card .title:hover { text-decoration: underline; }
-.card .next { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .next { font-size: 14px; overflow-wrap: anywhere; }
 .card .btn { align-self: flex-start; margin-top: auto; }
 .bar { height: 5px; background: var(--panel2); border-radius: 99px; overflow: hidden; margin-top: 3px; }
 .bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
