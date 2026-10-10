@@ -12,3 +12,9 @@ export const firebaseConfig = {
 // Web3Forms access key (free, from https://web3forms.com) — when set, you get an email each time
 // someone creates an account. Leave empty to turn the emails off.
 export const signupEmailKey = '';
+
+// EmailJS (free, from https://www.emailjs.com) — when set, an account owner gets an email the first
+// time someone they shared their list with signs in. Leave empty to turn these emails off.
+// The template's "To Email" should be {{to_email}}; it can use {{to_name}}, {{member_name}},
+// {{member_email}} and {{site}}.
+export const shareEmail = { serviceId: '', templateId: '', publicKey: '' };
