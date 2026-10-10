@@ -513,8 +513,35 @@ views.account = () => {
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
     <p>Your shows and checkmarks are private to this account and sync automatically to every device you sign in on.</p>
-    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>`;
+    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
+  <div class="panel"><h3>Delete account</h3>
+    <p>Permanently delete your account and all of your data.</p>
+    <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>`;
 };
+function deleteAccountDialog() {
+  const pw = cloud.usesPassword(), d = $('#appDialog');
+  d.innerHTML = `<form class="stack" id="delForm"><h2>Delete your account?</h2>
+    <p>This permanently deletes your account and <b>all of your data</b> — your shows and every episode you've checked off. This can't be undone.</p>
+    ${pw ? '<div class="field"><label>Enter your password to confirm</label><input name="password" type="password" autocomplete="current-password" required></div>'
+         : '<p class="sub">You\'ll be asked to confirm with Google.</p>'}
+    <p class="formerr" id="delErr" hidden></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn danger solid">Delete account</button></div></form>`;
+  d.querySelector('[data-close]').onclick = () => d.close();
+  $('#delForm').onsubmit = async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('.danger'), err = $('#delErr');
+    btn.disabled = true; btn.textContent = 'Deleting…'; err.hidden = true;
+    try {
+      clearTimeout(flushTimer); pending = null;     // nothing left to save
+      await cloud.deleteAccount(pw ? e.target.password.value : null);
+      d.close(); location.hash = '#/'; toast('Your account and data have been deleted');
+    } catch (x) {
+      err.textContent = cloud.friendlyError(x); err.hidden = false;
+      btn.disabled = false; btn.textContent = 'Delete account';
+    }
+  };
+  d.showModal();
+}
 
 /* ---------- merging + cloud sync ---------- */
 function canon(v) {
@@ -631,6 +658,7 @@ function markWithUndo(ids, w, label) {
 }
 const actions = {
   getapp() { getApp(); },
+  'delete-account'() { deleteAccountDialog(); },
   watch(b) {
     if (!requireAccount() || b.classList.contains('on')) return;
     const id = +b.dataset.ep, f = findEp(id);

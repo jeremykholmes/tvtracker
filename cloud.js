@@ -106,6 +106,22 @@ export async function google() {
   }
 }
 export const resetPassword = email => A.sendPasswordResetEmail(auth, email);
+export const usesPassword = () => !!auth?.currentUser?.providerData.some(p => p.providerId === 'password');
+
+// Permanently deletes the signed-in account and everything stored for it. Firebase only lets
+// someone delete an account they've just proved is theirs, so this re-checks the password
+// (or Google) first, then removes their data, then the account itself.
+export async function deleteAccount(password) {
+  const u = auth.currentUser; if (!u) throw new Error('Not signed in.');
+  if (usesPassword()) await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, password));
+  else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
+  unsubs.forEach(x => x()); unsubs = [];        // stop listening, or the empty document would be recreated
+  const b = F.writeBatch(db);
+  for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
+  b.delete(F.doc(db, 'users', u.uid));
+  await Promise.race([b.commit(), new Promise((_, no) => setTimeout(() => no({ code: 'auth/network-request-failed' }), 15000))]);
+  await A.deleteUser(u);
+}
 export const signOut = () => A.signOut(auth);
 
 // Saves only what changed, in one batch: shows/profile go to the main document,
@@ -137,6 +153,8 @@ export function friendlyError(e) {
     'auth/missing-password': 'Enter a password.',
     'auth/too-many-requests': 'Too many attempts — wait a minute and try again.',
     'auth/popup-closed-by-user': 'Google sign-in was closed before finishing.',
+    'auth/user-mismatch': 'That\'s a different Google account — choose the one you\'re signed in with.',
+    'auth/requires-recent-login': 'Please sign out, sign back in, then try again.',
     'auth/unauthorized-domain': 'This website isn\'t on Firebase\'s authorized domains list yet.',
     'auth/operation-not-allowed': 'That sign-in method isn\'t turned on in Firebase yet.',
     'auth/network-request-failed': 'Network problem — check your connection.',
