@@ -15,7 +15,7 @@ const strip = h => h ? (new DOMParser().parseFromString(h, 'text/html').body.tex
 const pad = n => String(n ?? 0).padStart(2, '0');
 const code = e => `Season ${e.s}, Episode ${e.n}`;
 const twoLines = e => `<span class="code">Season ${e.s}</span><br><span class="code">Episode ${e.n}</span>`;   // season, then episode below
-const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Hulu', FOX: 'Hulu', Fox: 'Hulu' };   // network -> streaming service that also carries its shows
+const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Netflix', FOX: 'Netflix', Fox: 'Netflix' };   // network -> streaming service that also carries its shows
 const channel = n => n && STREAMS_ON[n] ? `${n} / ${STREAMS_ON[n]}` : (n || '');
 
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
