@@ -277,7 +277,7 @@ function card(s, p) {
   return `<article class="card">
     <div style="position:relative">${poster(s, '#/show/' + id)}${p?.fresh ? `<span class="badge">${p.fresh} new</span>` : ''}</div>
     <div class="body"><a class="title" href="#/show/${id}">${esc(s.name)}</a>
-      <div class="sub">${esc(s.network || '')}${s.status ? ' · ' + esc(s.status) : ''}</div>
+      <div class="sub">${esc(s.network || '')}</div>
       ${p ? `<div class="bar"><i style="width:${pct}%"></i></div>
       <div class="sub">${p.watched}/${p.total} watched${p.unwatched ? ` · <b>${p.unwatched} left</b>` : ''}</div>` : '<div class="sub">Loading episodes…</div>'}
       ${foot}</div></article>`;
