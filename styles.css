@@ -303,3 +303,22 @@ body.landing .foot { padding-bottom: 28px; }
 /* account sharing */
 .memrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .memrow > span { min-width: 0; overflow-wrap: anywhere; }
+.rolesel { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
+.memrow .actions { flex-wrap: nowrap; align-items: center; }
+
+/* landing: sharing promo */
+#shareForm { flex-wrap: wrap; }
+#shareForm input { min-width: 200px; }
+.lp-share { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; text-align: left; }
+.lp-share .lead { margin-top: 14px; }
+.lp-checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.lp-checks li { position: relative; padding-left: 30px; font-weight: 600; }
+.lp-checks li::before { content: '✓'; position: absolute; left: 0; top: -1px; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; font-size: 12px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.lp-share-mk { transform: perspective(1400px) rotateY(6deg) rotateX(2deg); }
+.mk-mem { display: flex; align-items: center; gap: 12px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.mk-mem small { color: var(--muted); font-size: 12px; }
+.mk-mem .av { flex: 0 0 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--accent); color: var(--accent-ink); }
+.mk-role { margin-left: auto; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.mk-role.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+@media (max-width: 900px) { .lp-share { grid-template-columns: 1fr; gap: 32px; } .lp-share-mk { transform: none; max-width: 460px; } }
