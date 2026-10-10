@@ -322,3 +322,6 @@ body.landing .foot { padding-bottom: 28px; }
 .mk-role { margin-left: auto; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .mk-role.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 @media (max-width: 900px) { .lp-share { grid-template-columns: 1fr; gap: 32px; } .lp-share-mk { transform: none; max-width: 460px; } }
+.mstat { display: inline-block; margin-top: 3px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.mstat.on { color: var(--ok, #1f9d55); }
+.mstat.on::before { content: '● '; }

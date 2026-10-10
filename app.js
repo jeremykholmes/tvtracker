@@ -661,7 +661,9 @@ async function drawMembers() {
   const box = $('#memberList'); if (!box) return;
   try {
     const list = await cloud.members();
-    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${esc(m.email)}</span>
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${m.joined?.name ? `<b>${esc(m.joined.name)}</b> ` : ''}${esc(m.email)}<br>${m.joined
+        ? `<span class="mstat on">Joined ${esc(new Date(m.joined.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</span>`
+        : '<span class="mstat">Invited · hasn\'t signed in yet</span>'}</span>
       <span class="actions"><select class="rolesel" data-email="${esc(m.email)}" aria-label="Access for ${esc(m.email)}"><option value="view"${m.role === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${m.role === 'edit' ? ' selected' : ''}>Can edit</option></select>
       <button class="btn sm" data-act="unshare" data-email="${esc(m.email)}">Remove</button></span></div>`).join('') : '';
     box.querySelectorAll('select.rolesel').forEach(sel => sel.onchange = async () => {
