@@ -28,7 +28,10 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {} }; }
 let user = null;                        // { uid, email, name } when signed in
 let authReady = !cloud.configured;       // false until Firebase reports who's signed in
-const stateKey = () => user ? `${K.state}.${user.uid}` : K.state;
+const stateKey = () => user ? `${K.state}.${cloud.activeUid() || user.uid}` : K.state;
+// Which list is open: your own, or one someone shared with you ({ uid, name }), remembered per device.
+const K_USE = uid => 'tvt.use.' + uid;
+const sharedOpen = () => user && cloud.activeUid() && cloud.activeUid() !== user.uid ? load(K_USE(user.uid), null) : null;
 let state = norm(load(K.state, null));
 let cache = load(K.cache, {});           // showId -> { t, show, episodes }  (shared TVmaze data, not per user)
 let meta = load(K.meta, { lastRefresh: 0 });
@@ -596,12 +599,53 @@ views.account = () => {
   }
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
-    <p>Your shows and checkmarks are private to this account and sync automatically to every device you sign in on.</p>
+    <p>Your shows and checkmarks are private to you (and anyone you share your list with) and sync automatically to every device you sign in on.</p>
     <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
+  <div class="panel" id="sharedWithMe"><h3>Lists shared with you</h3><p>Loading…</p></div>
+  <div class="panel" id="shareMine"><h3>Share your list</h3>
+    <p>Give someone access to your list with their email. Once they sign in with that email, they can add and remove shows and check off episodes, just like you. Only you can change who has access or delete your account.</p>
+    <form class="search" id="shareForm"><input name="email" type="email" placeholder="Their email address" autocomplete="off" required><button class="btn primary">Give access</button></form>
+    <p class="formerr" id="shareErr" hidden></p>
+    <div id="memberList"></div></div>
   <div class="panel"><h3>Delete account</h3>
     <p>Permanently delete your account and all of your data.</p>
     <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>`;
+  drawShared(); drawMembers();
+  $('#shareForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target, email = f.email.value.trim().toLowerCase(), err = $('#shareErr');
+    err.hidden = true;
+    if (email === (user.email || '').toLowerCase()) { err.textContent = 'That\'s your own email.'; err.hidden = false; return; }
+    f.querySelector('button').disabled = true;
+    try { await cloud.addMember(email); f.reset(); toast(`${email} can now use your list`); drawMembers(); }
+    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
+    f.querySelector('button').disabled = false;
+  });
 };
+async function drawShared() {
+  const box = $('#sharedWithMe'); if (!box) return;
+  const head = '<h3>Lists shared with you</h3>', sh = sharedOpen();
+  const mine = sh ? `<p>You're using <b>${esc(sh.name)}'s</b> list.</p><div class="actions"><button class="btn" data-act="open-list">Switch to my own list</button></div>` : '';
+  if (!user.verified) {
+    box.innerHTML = head + mine + `<p>To use a list someone shared with you, first confirm your email address (${esc(user.email)}).</p>
+      <div class="actions"><button class="btn" data-act="verify-send">Send confirmation email</button><button class="btn" data-act="verify-check">I've confirmed it</button></div>`;
+    return;
+  }
+  let list = [];
+  try { list = await cloud.sharedWithMe(); } catch (x) { box.innerHTML = head + mine + `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
+  if (!$('#sharedWithMe')) return;
+  box.innerHTML = head + mine + (list.length ? list.map(x => `<div class="memrow"><span><b>${esc(x.ownerName)}</b> <span class="sub">${esc(x.ownerEmail)}</span></span>
+      ${sh?.uid === x.owner ? '<span class="sub">In use</span>' : `<button class="btn sm" data-act="open-list" data-uid="${esc(x.owner)}" data-name="${esc(x.ownerName)}">Use this list</button>`}</div>`).join('')
+    : (sh ? '' : '<p>Nobody has shared a list with you yet.</p>'));
+}
+async function drawMembers() {
+  const box = $('#memberList'); if (!box) return;
+  try {
+    const list = await cloud.members();
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${esc(m)}</span>
+      <button class="btn sm" data-act="unshare" data-email="${esc(m)}">Remove</button></div>`).join('') : '';
+  } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
+}
 function deleteAccountDialog() {
   const pw = cloud.usesPassword(), d = $('#appDialog');
   d.innerHTML = `<form class="stack" id="delForm"><h2>Delete your account?</h2>
@@ -670,8 +714,10 @@ function flush() {
 
 let firstSnapshot = true, serverSynced = false;   // serverSynced: the account's data has been confirmed by the server
 function onUser(u) {
-  const prevUid = user?.uid;
-  if (!u && prevUid) { try { localStorage.removeItem(`${K.state}.${prevUid}`); } catch { } }
+  if (!u && user) {
+    const sh = load(K_USE(user.uid), null);
+    try { localStorage.removeItem(`${K.state}.${user.uid}`); if (sh) localStorage.removeItem(`${K.state}.${sh.uid}`); } catch { }
+  }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null;
   state = norm(load(stateKey(), null));
@@ -687,7 +733,7 @@ function onUser(u) {
 function onData(data, fromServer) {
   if (!user) return;
   if (fromServer) serverSynced = true;
-  if (!data && fromServer) {                     // brand-new account: create its document
+  if (!data && fromServer && cloud.activeUid() === user.uid) {   // brand-new account: create its document
     cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
   }
   const first = firstSnapshot;
@@ -701,7 +747,23 @@ function onData(data, fromServer) {
   firstSnapshot = false;
   if (changed || first) { render(); refreshMissing(); }
 }
-function onCloudError(e) { console.warn(e); syncStatus(cloud.friendlyError(e), true); }
+function onCloudError(e) {
+  console.warn(e);
+  if (e?.code === 'permission-denied' && sharedOpen()) {   // the owner stopped sharing with you
+    const name = sharedOpen().name;
+    openList(null); toast(`You no longer have access to ${name}'s list`); return;
+  }
+  syncStatus(cloud.friendlyError(e), true);
+}
+// Switch to someone's shared list ({ uid, name }), or back to your own (null).
+function openList(share) {
+  flush();
+  try { share ? save(K_USE(user.uid), share) : localStorage.removeItem(K_USE(user.uid)); } catch { }
+  cloud.openAccount(share ? share.uid : user.uid);
+  firstSnapshot = true; serverSynced = false; pending = null;
+  state = norm(load(stateKey(), null));
+  accountChip(); syncStatus(); render(true); refreshMissing();
+}
 function refreshMissing() { if (followed().some(f => !cache[f.id])) refreshAll(false); }
 
 /* ---------- UI helpers ---------- */
@@ -716,7 +778,8 @@ function accountChip() {
   $('#topout').hidden = !user;
   if (!cloud.configured) { el.hidden = true; return; }
   el.hidden = false;
-  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(user.name)}</span>`; }
+  const sh = sharedOpen();
+  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(sh ? `${sh.name}'s list` : user.name)}</span>`; }
   else { el.href = '#/login'; el.className = 'acct'; el.textContent = authReady ? 'Sign in' : ''; }
 }
 function busy(text) { const b = $('#busy'); if (text) { b.textContent = text; b.hidden = false; } else b.hidden = true; }
@@ -743,6 +806,21 @@ function markWithUndo(ids, w, label) {
 const actions = {
   getapp() { getApp(); },
   'delete-account'() { deleteAccountDialog(); },
+  'open-list'(b) { openList(b.dataset.uid ? { uid: b.dataset.uid, name: b.dataset.name } : null); location.hash = '#/'; },
+  async unshare(b) {
+    const email = b.dataset.email;
+    if (!confirm(`Remove ${email}'s access to your list?`)) return;
+    try { await cloud.removeMember(email); toast(`${email} no longer has access`); drawMembers(); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
+  async 'verify-send'() {
+    try { await cloud.sendVerification(); toast(`Confirmation email sent to ${user.email}`); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
+  async 'verify-check'() {
+    try {
+      if (await cloud.refreshVerified()) { user.verified = true; drawShared(); toast('Email confirmed'); }
+      else toast('Not confirmed yet — click the link in the email first');
+    } catch (x) { toast(cloud.friendlyError(x)); }
+  },
   watch(b) {
     if (!requireAccount() || b.classList.contains('on')) return;
     const id = +b.dataset.ep, f = findEp(id);
@@ -885,6 +963,6 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 
 accountChip(); syncStatus(); appButton();
 render(true);
-cloud.start({ onUser, onData, onError: onCloudError })
+cloud.start({ onUser, onData, onError: onCloudError, pick: u => load(K_USE(u.uid), null)?.uid })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
 if (followed().length && now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
