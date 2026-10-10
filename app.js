@@ -510,21 +510,10 @@ views.account = () => {
     if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
     location.hash = '#/login'; return;
   }
-  const watchedCount = Object.values(state.watched).filter(w => w.w).length;
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
     <p>Your shows and checkmarks are private to this account and sync automatically to every device you sign in on.</p>
-    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
-  <div class="panel"><h3>Your data</h3>
-    <p>${followed().length} shows · ${watchedCount} episodes watched · episode data refreshed ${ago(meta.lastRefresh)}</p>
-    <div class="actions"><button class="btn" data-act="export">⬇ Export backup</button>
-      <label class="btn">⬆ Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
-      <button class="btn" data-act="clear-cache">Re-download all episode data</button></div></div>`;
-  $('#importFile').addEventListener('change', async e => {
-    const file = e.target.files[0]; if (!file) return;
-    try { absorb(norm(JSON.parse(await file.text()))); toast('Backup imported'); refreshAll(false); render(true); }
-    catch { toast('That file is not a TV Tracker backup'); }
-  });
+    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>`;
 };
 
 /* ---------- merging + cloud sync ---------- */
@@ -536,14 +525,6 @@ function canon(v) {
 // last-write-wins per show / per episode, so edits from several devices combine cleanly
 function mergeMap(a, b) { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) { const c = o[k]; if (!c || (v.t || 0) > (c.t || 0)) o[k] = v; } return o; }
 function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched: mergeMap(a.watched, b.watched) }); }
-
-// Merge another state (backup, guest list) into the current one and upload what's new.
-function absorb(other) {
-  const merged = merge(state, other);
-  for (const kind of ['shows', 'watched'])
-    for (const [k, v] of Object.entries(merged[kind])) if (canon(v) !== canon(state[kind][k])) queue(kind, k, v);
-  state = merged; persist();
-}
 
 let pending = null, flushTimer = null, inFlight = 0;
 const saving = () => inFlight > 0;
@@ -705,13 +686,6 @@ const actions = {
     if ((pending || saving() || !serverSynced) && !confirm('Your shows haven\'t been saved to your account — the site can\'t reach it right now (an ad blocker or privacy extension can cause this).\n\nIf you sign out, the shows on this computer will be deleted.\n\nSign out anyway?')) return;
     await cloud.signOut(); location.hash = '#/'; toast('Signed out');
   },
-  export() {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));
-    a.download = `tv-tracker-backup-${ymd(new Date())}.json`; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  },
-  'clear-cache'() { cache = {}; save(K.cache, cache); meta.lastRefresh = 0; save(K.meta, meta); refreshAll(true); }
 };
 
 document.addEventListener('click', e => {
