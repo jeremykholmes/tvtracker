@@ -87,11 +87,17 @@ export function openAccount(uid) {
   active = uid;
   listen(uid, handlers.onData, handlers.onError);
 }
-// [{ email, role }] for everyone the signed-in user has shared their list with.
+// [{ email, role, joined }] for everyone the signed-in user has shared their list with.
+// joined ({ t, name }) is set the first time that person signs in with the shared email.
 export async function members() {
-  const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
-  const m = (snap.exists() && snap.data().members) || {};
-  return Object.keys(m).sort().map(email => ({ email, role: m[email].role || 'edit' }));
+  const uid = auth.currentUser.uid;
+  const [snap, shares] = await Promise.all([
+    F.getDoc(F.doc(db, 'users', uid)),
+    F.getDocs(F.query(F.collection(db, 'shares'), F.where('owner', '==', uid))).catch(() => null)
+  ]);
+  const m = (snap.exists() && snap.data().members) || {}, joined = {};
+  shares?.forEach(d => { const x = d.data(); if (x.joined) joined[x.email] = x.joined; });
+  return Object.keys(m).sort().map(email => ({ email, role: m[email].role || 'edit', joined: joined[email] || null }));
 }
 // Adds someone, or changes their role if they already have access.
 export async function addMember(email, role = 'view') {
