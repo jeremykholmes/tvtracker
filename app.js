@@ -14,6 +14,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const strip = h => h ? (new DOMParser().parseFromString(h, 'text/html').body.textContent || '').trim() : '';
 const pad = n => String(n ?? 0).padStart(2, '0');
 const code = e => `S${pad(e.s)}E${pad(e.n)}`;
+const STREAMS_ON = { CBS: 'Paramount+' };   // network -> streaming service that also carries its shows
+const channel = n => n && STREAMS_ON[n] ? `${n} / ${STREAMS_ON[n]}` : (n || '');
 
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn('storage', e); } }
@@ -277,7 +279,7 @@ function card(s, p) {
   return `<article class="card">
     <div style="position:relative">${poster(s, '#/show/' + id)}${p?.fresh ? `<span class="badge">${p.fresh} new</span>` : ''}</div>
     <div class="body"><a class="title" href="#/show/${id}">${esc(s.name)}</a>
-      <div class="sub">${esc(s.network || '')}</div>
+      <div class="sub">${esc(channel(s.network))}</div>
       ${p ? `<div class="bar"><i style="width:${pct}%"></i></div>
       <div class="sub">${p.watched}/${p.total} watched${p.unwatched ? ` · <b>${p.unwatched} left</b>` : ''}</div>` : '<div class="sub">Loading episodes…</div>'}
       ${foot}</div></article>`;
@@ -316,7 +318,7 @@ views.show = arg => {
   }).join('');
   app.innerHTML = `<section class="hero">${poster(s)}
     <div class="meta"><h1>${esc(s.name)}</h1>
-      <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">${[channel(s.network), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
@@ -359,7 +361,7 @@ views.upcoming = () => {
   const row = ({ s, e }, check) => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub"><span class="code">${code(e)}</span> ${esc(e.name)}</div></div>
-    <div class="when">${fmtDate(e, true)}<br>${esc(s.network || '')}</div>
+    <div class="when">${fmtDate(e, true)}<br>${esc(channel(s.network))}</div>
     ${check ? `<label class="chk"><input type="checkbox" data-act="toggle" data-show="${s.id}" data-ep="${e.id}" ${isWatched(e.id) ? 'checked' : ''}><span></span></label>` : ''}</div>`;
   let days = '', cur = '';
   for (const it of soon) {
@@ -383,7 +385,7 @@ views.discover = () => {
   }
   const item = it => `<div class="row">${poster(it.show, '#/show/' + it.show.id)}
     <div class="info"><a href="#/show/${it.show.id}">${esc(it.show.name)}</a>
-      <div class="sub">${esc(it.show.network)}${it.season > 1 ? ` · Season ${it.season}` : ''}${it.show.genres?.length ? ' · ' + esc(it.show.genres.slice(0, 2).join(', ')) : ''}</div></div>
+      <div class="sub">${esc(channel(it.show.network))}${it.season > 1 ? ` · Season ${it.season}` : ''}${it.show.genres?.length ? ' · ' + esc(it.show.genres.slice(0, 2).join(', ')) : ''}</div></div>
     <div class="when">${fmtDate({ airstamp: it.airstamp, airdate: it.airdate })}</div>
     ${followBtn(it.show)}</div>`;
   const fresh = d.items.filter(i => i.season === 1), back = d.items.filter(i => i.season > 1);
@@ -459,7 +461,7 @@ function drawResults() {
   if (!lastResults.length) { box.innerHTML = `<p class="muted">${lastQuery ? `No matches for “${esc(lastQuery)}”.` : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
   box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”</p>` + lastResults.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
-      <div class="sub">${[s.network, s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">${[channel(s.network), s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
     ${followBtn(s)}</div>`).join('');
 }
