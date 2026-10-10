@@ -50,8 +50,10 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .btn:hover { border-color: var(--muted); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .btn.primary:hover { filter: brightness(1.06); }
+.btn:disabled { opacity: .6; cursor: default; }
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--danger); }
+.btn.danger.solid { background: var(--danger); color: #fff; border-color: transparent; }
 .btn.sm { padding: 6px 11px; font-size: 13px; }
 .btn.xs { padding: 3px 8px; font-size: 12px; border-radius: 8px; }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -175,6 +177,9 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .appdlg h2 { margin: 12px 0 8px; font-size: 19px; text-transform: none; letter-spacing: 0; color: var(--text); }
 .appdlg ol { padding-left: 20px; margin: 0 0 18px; line-height: 1.5; }
 .appdlg li { margin-bottom: 6px; }
+.appdlg p { margin: 0 0 12px; line-height: 1.5; }
+.appdlg .actions { justify-content: flex-end; }
+.appdlg .stack p { margin: 0; }
 .appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
