@@ -78,8 +78,8 @@ async function migrate(uid, legacy, current) {
 const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0], verified: !!u.emailVerified });
 
 /* ---------- shared access ----------
-   The owner lists people by email in users/{uid}.members; the rules let those people read and
-   edit that list's shows and checkmarks (not who has access). shares/{owner}_{email} lets the
+   The owner lists people by email in users/{uid}.members, each with a role: 'view' (look only) or
+   'edit' (add/remove shows, check off episodes). Nobody but the owner can change who has access. shares/{owner}_{email} lets the
    person find lists shared with them. */
 const lc = e => String(e || '').trim().toLowerCase();
 export function openAccount(uid) {
@@ -87,15 +87,18 @@ export function openAccount(uid) {
   active = uid;
   listen(uid, handlers.onData, handlers.onError);
 }
+// [{ email, role }] for everyone the signed-in user has shared their list with.
 export async function members() {
   const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
-  return Object.keys((snap.exists() && snap.data().members) || {}).sort();
+  const m = (snap.exists() && snap.data().members) || {};
+  return Object.keys(m).sort().map(email => ({ email, role: m[email].role || 'edit' }));
 }
-export async function addMember(email) {
+// Adds someone, or changes their role if they already have access.
+export async function addMember(email, role = 'view') {
   const u = auth.currentUser, e = lc(email);
   const b = F.writeBatch(db);
-  b.set(F.doc(db, 'users', u.uid), { members: { [e]: { t: Date.now() } } }, { merge: true });
-  b.set(F.doc(db, 'shares', `${u.uid}_${e}`), { owner: u.uid, ownerName: u.displayName || (u.email || '').split('@')[0], ownerEmail: u.email || '', email: e, t: Date.now() });
+  b.set(F.doc(db, 'users', u.uid), { members: { [e]: { t: Date.now(), role } } }, { merge: true });
+  b.set(F.doc(db, 'shares', `${u.uid}_${e}`), { owner: u.uid, ownerName: u.displayName || (u.email || '').split('@')[0], ownerEmail: u.email || '', email: e, role, t: Date.now() }, { merge: true });
   await b.commit();
 }
 export async function removeMember(email) {

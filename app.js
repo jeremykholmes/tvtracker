@@ -191,7 +191,11 @@ const views = {};
 // Adding shows and checking episodes requires an account.
 const needsAccount = () => cloud.configured && !user;
 function requireAccount() {
-  if (!needsAccount()) return true;
+  if (!needsAccount()) {
+    if (sharedOpen()?.role !== 'view') return true;
+    toast(`You can view ${sharedOpen().name}'s list but not change it`);
+    return false;
+  }
   if (!authReady) { toast('One moment — checking your sign-in…'); return false; }
   try { sessionStorage.setItem('tvt.return', location.hash || '#/'); } catch { }
   toast('Sign in or create a free account to add shows');
@@ -251,6 +255,16 @@ views.landing = () => {
     <div class="lp-posters">${LP_SHOWS.map(n => `<a class="lp-pc" href="#/search"><span class="lp-pimg" data-lp="${esc(n)}"><span class="noimg">${esc(n.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span></span><b>${esc(n)}</b></a>`).join('')}</div></section>
   <section class="lp-sec"><span class="eyebrow">Features</span><h2 class="lp-h2">Everything you need to keep up</h2>
     <div class="lp-feats">${feats.map(([i, t, d]) => `<div class="lp-feat"><span class="lp-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join('')}</div></section>
+  <section class="lp-sec lp-share">
+    <div class="lp-share-copy"><span class="eyebrow">Share with friends &amp; family</span>
+      <h2 class="lp-h2">See what the people you know are watching</h2>
+      <p class="lead">Share your list with anyone by email. Give them <b>view-only</b> access so they can see what you're watching and where you're up to, or let them <b>edit</b> so you can keep a household list together. You decide, and you can change it or remove access any time.</p>
+      <ul class="lp-checks"><li>View-only or edit access, per person</li><li>Great for households, couples and watch-alongs</li><li>Your list stays private to the people you choose</li></ul></div>
+    <div class="lp-visual" aria-hidden="true"><div class="mk-window lp-share-mk"><div class="mk-dots"><i></i><i></i><i></i></div>
+      <div class="mk-head">People with access</div>
+      ${[['Sam', 'sam@example.com', 'Can view'], ['Jordan', 'jordan@example.com', 'Can edit'], ['Riley', 'riley@example.com', 'Can view']].map(([n, e, r]) =>
+        `<div class="mk-mem"><span class="av">${n[0]}</span><span><b>${n}</b><br><small>${e}</small></span><span class="mk-role${r === 'Can edit' ? ' on' : ''}">${r}</span></div>`).join('')}
+    </div></div></section>
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
     <ol class="lp-steps">
       <li><b>Create your account</b><p>Sign up with Google in one click, or use your email.</p></li>
@@ -603,8 +617,10 @@ views.account = () => {
     <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
   <div class="panel" id="sharedWithMe"><h3>Lists shared with you</h3><p>Loading…</p></div>
   <div class="panel" id="shareMine"><h3>Share your list</h3>
-    <p>Give someone access to your list with their email. Once they sign in with that email, they can add and remove shows and check off episodes, just like you. Only you can change who has access or delete your account.</p>
-    <form class="search" id="shareForm"><input name="email" type="email" placeholder="Their email address" autocomplete="off" required><button class="btn primary">Give access</button></form>
+    <p>Give someone access to your list with their email. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you. Only you can change who has access or delete your account.</p>
+    <form class="search" id="shareForm"><input name="email" type="email" placeholder="Their email address" autocomplete="off" required>
+      <select name="role" class="rolesel" aria-label="Access"><option value="view">Can view</option><option value="edit">Can edit</option></select>
+      <button class="btn primary">Give access</button></form>
     <p class="formerr" id="shareErr" hidden></p>
     <div id="memberList"></div></div>
   <div class="panel"><h3>Delete account</h3>
@@ -617,7 +633,8 @@ views.account = () => {
     err.hidden = true;
     if (email === (user.email || '').toLowerCase()) { err.textContent = 'That\'s your own email.'; err.hidden = false; return; }
     f.querySelector('button').disabled = true;
-    try { await cloud.addMember(email); f.reset(); toast(`${email} can now use your list`); drawMembers(); }
+    const role = f.role.value;
+    try { await cloud.addMember(email, role); f.reset(); toast(`${email} can now ${role === 'view' ? 'view' : 'use'} your list`); drawMembers(); }
     catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
     f.querySelector('button').disabled = false;
   });
@@ -625,7 +642,7 @@ views.account = () => {
 async function drawShared() {
   const box = $('#sharedWithMe'); if (!box) return;
   const head = '<h3>Lists shared with you</h3>', sh = sharedOpen();
-  const mine = sh ? `<p>You're using <b>${esc(sh.name)}'s</b> list.</p><div class="actions"><button class="btn" data-act="open-list">Switch to my own list</button></div>` : '';
+  const mine = sh ? `<p>You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : ''}.</p><div class="actions"><button class="btn" data-act="open-list">Switch to my own list</button></div>` : '';
   if (!user.verified) {
     box.innerHTML = head + mine + `<p>To use a list someone shared with you, first confirm your email address (${esc(user.email)}).</p>
       <div class="actions"><button class="btn" data-act="verify-send">Send confirmation email</button><button class="btn" data-act="verify-check">I've confirmed it</button></div>`;
@@ -634,16 +651,23 @@ async function drawShared() {
   let list = [];
   try { list = await cloud.sharedWithMe(); } catch (x) { box.innerHTML = head + mine + `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (!$('#sharedWithMe')) return;
-  box.innerHTML = head + mine + (list.length ? list.map(x => `<div class="memrow"><span><b>${esc(x.ownerName)}</b> <span class="sub">${esc(x.ownerEmail)}</span></span>
-      ${sh?.uid === x.owner ? '<span class="sub">In use</span>' : `<button class="btn sm" data-act="open-list" data-uid="${esc(x.owner)}" data-name="${esc(x.ownerName)}">Use this list</button>`}</div>`).join('')
+  const cur = sh && list.find(x => x.owner === sh.uid);
+  if (cur && (cur.role || 'edit') !== sh.role) { sh.role = cur.role || 'edit'; save(K_USE(user.uid), sh); accountChip(); }   // the owner changed your access
+  box.innerHTML = head + mine + (list.length ? list.map(x => `<div class="memrow"><span><b>${esc(x.ownerName)}</b> <span class="sub">${esc(x.ownerEmail)} · ${x.role === 'view' ? 'can view' : 'can edit'}</span></span>
+      ${sh?.uid === x.owner ? '<span class="sub">In use</span>' : `<button class="btn sm" data-act="open-list" data-uid="${esc(x.owner)}" data-name="${esc(x.ownerName)}" data-role="${x.role === 'view' ? 'view' : 'edit'}">${x.role === 'view' ? 'View this list' : 'Use this list'}</button>`}</div>`).join('')
     : (sh ? '' : '<p>Nobody has shared a list with you yet.</p>'));
 }
 async function drawMembers() {
   const box = $('#memberList'); if (!box) return;
   try {
     const list = await cloud.members();
-    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${esc(m)}</span>
-      <button class="btn sm" data-act="unshare" data-email="${esc(m)}">Remove</button></div>`).join('') : '';
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${esc(m.email)}</span>
+      <span class="actions"><select class="rolesel" data-email="${esc(m.email)}" aria-label="Access for ${esc(m.email)}"><option value="view"${m.role === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${m.role === 'edit' ? ' selected' : ''}>Can edit</option></select>
+      <button class="btn sm" data-act="unshare" data-email="${esc(m.email)}">Remove</button></span></div>`).join('') : '';
+    box.querySelectorAll('select.rolesel').forEach(sel => sel.onchange = async () => {
+      try { await cloud.addMember(sel.dataset.email, sel.value); toast(`${sel.dataset.email} can now ${sel.value === 'view' ? 'only view' : 'edit'} your list`); }
+      catch (x) { toast(cloud.friendlyError(x)); drawMembers(); }
+    });
   } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
 }
 function deleteAccountDialog() {
@@ -684,7 +708,7 @@ function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched:
 let pending = null, flushTimer = null, inFlight = 0;
 const saving = () => inFlight > 0;
 function queue(kind, id, val) {
-  if (!user) return;
+  if (!user || sharedOpen()?.role === 'view') return;
   pending = pending || { shows: {}, watched: {} };
   pending[kind][id] = val;
   syncStatus('Syncing…');
@@ -779,7 +803,7 @@ function accountChip() {
   if (!cloud.configured) { el.hidden = true; return; }
   el.hidden = false;
   const sh = sharedOpen();
-  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(sh ? `${sh.name}'s list` : user.name)}</span>`; }
+  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(sh ? `${sh.name}'s list${sh.role === 'view' ? ' (view only)' : ''}` : user.name)}</span>`; }
   else { el.href = '#/login'; el.className = 'acct'; el.textContent = authReady ? 'Sign in' : ''; }
 }
 function busy(text) { const b = $('#busy'); if (text) { b.textContent = text; b.hidden = false; } else b.hidden = true; }
@@ -806,7 +830,7 @@ function markWithUndo(ids, w, label) {
 const actions = {
   getapp() { getApp(); },
   'delete-account'() { deleteAccountDialog(); },
-  'open-list'(b) { openList(b.dataset.uid ? { uid: b.dataset.uid, name: b.dataset.name } : null); location.hash = '#/'; },
+  'open-list'(b) { openList(b.dataset.uid ? { uid: b.dataset.uid, name: b.dataset.name, role: b.dataset.role } : null); location.hash = '#/'; },
   async unshare(b) {
     const email = b.dataset.email;
     if (!confirm(`Remove ${email}'s access to your list?`)) return;
@@ -852,6 +876,7 @@ const actions = {
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
+    if (!requireAccount()) return;
     const id = +b.dataset.show, name = showInfo(id)?.name || 'show';
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });

@@ -7,7 +7,7 @@ Live site: https://tvtracker.us
 ## Features
 - **Landing page** — signed-out visitors see a welcome page with Continue with Google, Create free account and Sign in.
 - **Accounts** — sign up with email/password or Google. Each person's shows and checkmarks are private and sync to every device they sign in on. Visitors can browse and search shows, but need to sign in (email or Google) to add shows or check off episodes.
-- **Shared access** — from the Account page, give someone access to your list by email. When they sign in with that email (Google, or an email account after confirming the address), they can open your list from their Account page and add/remove shows and check off episodes just like you. Only the owner can change who has access or delete the account. Remove someone any time.
+- **Shared access** — from the Account page, share your list with someone by email as **Can view** (see what you're watching and where you're up to) or **Can edit** (also add/remove shows and check off episodes), and switch between the two or remove them any time. When they sign in with that email (Google, or an email account after confirming the address), they open your list from their Account page. Only the owner can change who has access or delete the account.
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.

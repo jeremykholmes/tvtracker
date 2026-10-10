@@ -1,6 +1,7 @@
 rules_version = '2';
 // Each signed-in user can read and write their own document. An owner can also give other people
-// (by verified email, listed in users/{uid}.members) the same access to their shows and checkmarks.
+// (by verified email, listed in users/{uid}.members) access to their shows and checkmarks:
+// role 'view' can only look; role 'edit' (or no role, from before roles existed) can also make changes.
 // Only the owner can change who has access, their profile, or delete the account's data.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -8,17 +9,18 @@ service cloud.firestore {
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function myEmail() { return request.auth.token.email.lower(); }
     function verified() { return signedIn() && request.auth.token.email_verified == true; }
-    function isMember(uid) {
-      return verified() && myEmail() in get(/databases/$(database)/documents/users/$(uid)).data.get('members', {});
-    }
+    function members(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.get('members', {}); }
+    function isMember(uid) { return verified() && myEmail() in members(uid); }
+    function isEditor(uid) { return isMember(uid) && members(uid)[myEmail()].get('role', 'edit') == 'edit'; }
 
     match /users/{uid} {
       allow read: if isOwner(uid) || isMember(uid);
       allow create, delete: if isOwner(uid);
       allow update: if isOwner(uid)
-        || (isMember(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'profile']));
+        || (isEditor(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'profile']));
       match /watched/{bucket} {
-        allow read, write: if isOwner(uid) || isMember(uid);
+        allow read: if isOwner(uid) || isMember(uid);
+        allow write: if isOwner(uid) || isEditor(uid);
       }
     }
 
