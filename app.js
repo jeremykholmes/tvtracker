@@ -650,6 +650,7 @@ function markWithUndo(ids, w, label) {
   });
 }
 const actions = {
+  getapp() { getApp(); },
   watch(b) {
     if (!requireAccount()) return;
     const id = +b.dataset.ep, f = findEp(id);
@@ -760,7 +761,48 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', () => { flush(); });
 
-accountChip(); syncStatus();
+/* ---------- install as an app ---------- */
+let installPrompt = null;
+const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function appButton() { $('#getapp').hidden = installed(); }
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; appButton(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; $('#appDialog').close?.(); $('#getapp').hidden = true; toast('TV Tracker added to your device'); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+function installSteps() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios) return ['On iPhone or iPad',
+    ['Tap the <b>Share</b> button <span class="key">□↑</span> — in Safari it\'s in the toolbar (if you don\'t see it, tap <b>⋯</b> first); in Chrome it\'s at the top right.',
+     'Scroll down and tap <b>Add to Home Screen</b>.', 'Tap <b>Add</b>. TV Tracker now opens from its own icon, like an app.']];
+  if (/Android/.test(ua)) return ['On Android',
+    ['Open the browser menu <span class="key">⋮</span> (top right in Chrome).', 'Tap <b>Add to Home screen</b> or <b>Install app</b>.', 'Tap <b>Install</b> or <b>Add</b>.']];
+  if (/Firefox\//.test(ua)) return ['In Firefox',
+    ['Firefox on computers can\'t install websites as apps.', 'Open this site in <b>Chrome</b>, <b>Edge</b> or <b>Safari</b> and tap <b>Get the app</b> there.']];
+  if (/Edg\//.test(ua)) return ['In Edge',
+    ['Click the <b>App available</b> icon at the right of the address bar,', 'or open the menu <span class="key">⋯</span> → <b>Apps</b> → <b>Install this site as an app</b>.']];
+  if (/Chrome\//.test(ua)) return ['In Chrome',
+    ['Click the <b>Install</b> icon <span class="key">⤓</span> at the right of the address bar,', 'or open the menu <span class="key">⋮</span> → <b>Cast, save, and share</b> → <b>Install page as app</b>.']];
+  if (/Safari\//.test(ua)) return ['In Safari on a Mac',
+    ['Choose <b>File → Add to Dock</b> (or click the <b>Share</b> button <span class="key">□↑</span> → <b>Add to Dock</b>).', 'Click <b>Add</b>. TV Tracker now opens from the Dock like an app.']];
+  return ['Add TV Tracker to your device', ['Open your browser\'s menu and look for <b>Install app</b> or <b>Add to Home Screen</b>.']];
+}
+async function getApp() {
+  if (installPrompt) {
+    const p = installPrompt; installPrompt = null;
+    p.prompt();
+    const { outcome } = await p.userChoice;
+    if (outcome === 'accepted') $('#getapp').hidden = true;
+    return;
+  }
+  const [title, steps] = installSteps(), d = $('#appDialog');
+  d.innerHTML = `<img src="icons/icon-192.png" alt="" class="appico"><h2>${title}</h2>
+    <ol>${steps.map(x => `<li>${x}</li>`).join('')}</ol>
+    <form method="dialog"><button class="btn primary">Got it</button></form>`;
+  d.showModal();
+}
+$('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog') e.target.close(); });   // tap outside to close
+
+accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });

@@ -162,6 +162,16 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .acct:empty { display: none; }
 .topout { border-radius: 999px; white-space: nowrap; }
 .topout[hidden] { display: none; }
+.getapp { border-radius: 999px; white-space: nowrap; margin-left: auto; }
+.getapp[hidden] { display: none; }
+.getapp .lbl-s { display: none; }
+.appdlg { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); padding: 22px; max-width: min(420px, calc(100vw - 32px)); }
+.appdlg::backdrop { background: rgba(0,0,0,.55); }
+.appdlg .appico { width: 56px; height: 56px; border-radius: 13px; }
+.appdlg h2 { margin: 12px 0 8px; font-size: 19px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.appdlg ol { padding-left: 20px; margin: 0 0 18px; line-height: 1.5; }
+.appdlg li { margin-bottom: 6px; }
+.appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
 .auth { max-width: 400px; margin: 10px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
@@ -178,7 +188,7 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .linkbtn { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 13px; }
 .nudge { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
 .nudge a { font-weight: 700; }
-@media (max-width: 720px) { .acct .nm { display: none; } .acct.on { padding: 3px; margin-left: auto; } .sync { display: none; } .top .topout { margin-left: -6px; } }
+@media (max-width: 720px) { .getapp .lbl { display: none; } .getapp .lbl-s { display: inline; } .top .getapp { margin-right: -6px; } .top .getapp:not([hidden]) ~ .acct.on { margin-left: 0; } .acct .nm { display: none; } .acct.on { padding: 3px; margin-left: auto; } .sync { display: none; } .top .topout { margin-left: -6px; } }
 @media (max-width: 720px) { .sync.err { display: inline; white-space: normal; flex: 1; text-align: right; } }  /* always show save problems */
 
 /* Google button */
