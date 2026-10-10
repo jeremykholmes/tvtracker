@@ -24,6 +24,12 @@ Live site: https://jeremykholmes.github.io/tvtracker/
 
 The Firebase config values are designed to be public; `firestore.rules` is what keeps each user's data private (users can only read and write their own document). The free Spark plan covers a household and well beyond.
 
+## Email when someone signs up (optional)
+1. Go to https://web3forms.com, enter the email address you want notifications sent to, and copy the access key they email you.
+2. Paste it into `signupEmailKey` in `firebase-config.js` and commit.
+
+You'll then get an email with the new person's name, email and sign-up method each time an account is created. The key is meant to be public; it can only send email to you.
+
 ## Files
 - `index.html` — page shell
 - `app.js` — the app (shows, episodes, views)
