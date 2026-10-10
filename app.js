@@ -368,8 +368,7 @@ views.upcoming = () => {
     if (d !== cur) { cur = d; days += `<div class="dayhead">${fmtDate(it.e)}</div>`; }
     days += row(it, false);
   }
-  app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span>
-      <button class="btn sm" data-act="refresh-all">↻ Refresh</button></div>
+  app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
     ${!list.length ? `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>` : ''}
     ${recent.length ? `<h2>Aired this week</h2><div class="rows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
     ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
@@ -686,7 +685,6 @@ const actions = {
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
-  'refresh-all'() { meta.lastRefresh = Math.min(meta.lastRefresh || 0, now() - 21 * HOUR); refreshAll(true); },
   async 'refresh-show'(b) {
     const id = +b.dataset.show; busy('Refreshing…');
     try { await fetchShow(id); toast('Episodes updated'); } catch (e) { toast(e.message); }
