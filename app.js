@@ -14,6 +14,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const strip = h => h ? (new DOMParser().parseFromString(h, 'text/html').body.textContent || '').trim() : '';
 const pad = n => String(n ?? 0).padStart(2, '0');
 const code = e => `S${pad(e.s)}E${pad(e.n)}`;
+const spelled = e => `Season ${e.s}, Episode ${e.n}`;
 const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Hulu', FOX: 'Hulu', Fox: 'Hulu' };   // network -> streaming service that also carries its shows
 const channel = n => n && STREAMS_ON[n] ? `${n} / ${STREAMS_ON[n]}` : (n || '');
 
@@ -209,7 +210,7 @@ views.landing = () => {
   ];
   const mock = (cls, name, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
     <div class="mk-body"><b>${name}</b><span><span class="code">${ep}</span> Next episode</span>
-    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched ${ep}</span></div></div>`;
+    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched ${ep.replace(/S0?(\d+)E0?(\d+)/, 'Season $1, Episode $2')}</span></div></div>`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
     <div class="lp-copy">
@@ -273,7 +274,7 @@ function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
   if (p?.next) foot = `<div class="next"><span class="code">${code(p.next)}</span> ${esc(p.next.name)}</div>
-    <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${code(p.next)}</button>`;
+    <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${spelled(p.next)}</button>`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: <span class="code">${code(p.upcoming)}</span> · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
