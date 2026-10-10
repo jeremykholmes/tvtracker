@@ -208,7 +208,7 @@ views.landing = () => {
     ['◉', 'Private by design', 'Your watch history belongs to you. Only you can see your shows and checkmarks.']
   ];
   const mock = (cls, name, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
-    <div class="mk-body"><b>${name}</b><span><span class="code">${ep}</span> Next episode</span>
+    <div class="mk-body"><b>${name}</b>
     <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched ${ep}</span></div></div>`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
@@ -272,8 +272,7 @@ views.shows = () => {
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
-  if (p?.next) foot = `<div class="next"><span class="code">${code(p.next)}</span> ${esc(p.next.name)}</div>
-    <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${code(p.next)}</button>`;
+  if (p?.next) foot = `<button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${code(p.next)}</button>`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: <span class="code">${code(p.upcoming)}</span> · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
