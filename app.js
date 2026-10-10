@@ -4,7 +4,7 @@ import * as cloud from './cloud.js';
 
 const API = 'https://api.tvmaze.com';
 const K = { state: 'tvt.state.v1', cache: 'tvt.cache.v1', meta: 'tvt.meta.v1' };
-const DAY = 864e5, HOUR = 36e5, STALE = 6 * HOUR;
+const DAY = 864e5, HOUR = 36e5, STALE = 6 * HOUR, CHECK_EVERY = DAY;   // new episodes are checked for once a day
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
@@ -261,8 +261,7 @@ views.shows = () => {
   const loading = rows.filter(r => !r.p);
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
-      <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
-      <button class="btn sm" data-act="refresh-all">↻ Check for new episodes</button></div>
+      <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${sec('Finished', done)}${sec('Loading', loading)}`;
   if (loading.length) refreshAll(false);
@@ -759,7 +758,7 @@ function render(fromRoute) {
 window.addEventListener('hashchange', () => { render(true); scrollTo(0, 0); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  if (now() - (meta.lastRefresh || 0) > STALE) refreshAll(false);
+  if (now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
 });
 window.addEventListener('pagehide', () => { flush(); });
 
@@ -767,4 +766,4 @@ accountChip(); syncStatus();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
-if (followed().length && now() - (meta.lastRefresh || 0) > STALE) refreshAll(false);
+if (followed().length && now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
