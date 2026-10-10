@@ -94,6 +94,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .season > summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
 .season[open] > summary::before { transform: rotate(90deg); }
 .season > summary .grow { flex: 1; }
+.older { margin-bottom: 10px; }
 .season > summary .mini { width: 80px; }
 .eps { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .ep { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border-bottom: 1px solid var(--line); }
