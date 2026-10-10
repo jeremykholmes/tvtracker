@@ -207,9 +207,9 @@ views.landing = () => {
     ['⇄', 'Synced everywhere', 'Start on your phone, pick up on your laptop. Your list follows you to every device.'],
     ['◉', 'Private by design', 'Your watch history belongs to you. Only you can see your shows and checkmarks.']
   ];
-  const mock = (cls, name, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
+  const mock = (cls, name, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
     <div class="mk-body"><b>${name}</b>
-    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched ${ep}</span></div></div>`;
+    <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched</span></div></div>`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
     <div class="lp-copy">
@@ -222,9 +222,9 @@ views.landing = () => {
     <div class="lp-visual" aria-hidden="true">
       <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
         <div class="mk-head">Up next · 3</div>
-        ${mock('p1', 'The Night Shift', 'Season 2, Episode 5', 62, '2 new')}
-        ${mock('p2', 'Coastline', 'Season 1, Episode 8', 88, '')}
-        ${mock('p3', 'Northern Lights', 'Season 4, Episode 1', 24, '1 new')}
+        ${mock('p1', 'The Night Shift', 62, '2 new')}
+        ${mock('p2', 'Coastline', 88, '')}
+        ${mock('p3', 'Northern Lights', 24, '1 new')}
       </div>
     </div>
   </section>
@@ -272,7 +272,7 @@ views.shows = () => {
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
-  if (p?.next) foot = `<button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched ${code(p.next)}</button>`;
+  if (p?.next) foot = `<button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched</button>`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: <span class="code">${code(p.upcoming)}</span> · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
