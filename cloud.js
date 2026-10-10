@@ -1,11 +1,16 @@
 // Accounts + per-user storage via Firebase (Auth + Firestore), loaded from Google's CDN.
-// Each user's data lives in one private document: users/{uid}.
+// users/{uid}            — profile + followed shows (small)
+// users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
+//                          document grows huge (big documents make every save slow).
 import { firebaseConfig } from './firebase-config.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
 
-let A, F, auth, db, unsubDoc = null;
+const BUCKETS = 32;
+const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
+
+let A, F, auth, db, unsubs = [];
 
 export async function start({ onUser, onData, onError }) {
   if (!configured) { onUser(null); return; }
@@ -22,15 +27,45 @@ export async function start({ onUser, onData, onError }) {
   } catch (e) { console.warn('Offline cache unavailable, using memory', e); db = F.getFirestore(app); }
   A.getRedirectResult(auth).catch(onError);
   A.onAuthStateChanged(auth, user => {
-    if (unsubDoc) { unsubDoc(); unsubDoc = null; }
+    unsubs.forEach(u => u()); unsubs = [];
     onUser(user ? toUser(user) : null);
-    if (user) {
-      // includeMetadataChanges: also hear when data cached offline is confirmed by the server
-      unsubDoc = F.onSnapshot(F.doc(db, 'users', user.uid), { includeMetadataChanges: true },
-        snap => onData(snap.exists() ? snap.data() : null, !snap.metadata.fromCache, snap.metadata.hasPendingWrites),
-        onError);
-    }
+    if (user) listen(user.uid, onData, onError);
   });
+}
+
+// Two listeners (main doc + checkmark buckets) combined into one view for the app.
+function listen(uid, onData, onError) {
+  let main, mainSrv = false, mainPend = false, watched = null, wSrv = false, wPend = false, migrating = false;
+  const emit = () => {
+    if (main === undefined || watched === null) return;
+    const legacy = (main && main.watched) || {};
+    const all = { ...legacy };
+    for (const [k, v] of Object.entries(watched)) if (!all[k] || (v.t || 0) >= (all[k].t || 0)) all[k] = v;
+    const data = main || Object.keys(all).length ? { ...(main || {}), watched: all } : null;
+    onData(data, mainSrv && wSrv, mainPend || wPend);
+    // One-time move of checkmarks out of the old single big document.
+    if (!migrating && mainSrv && wSrv && main && main.watched) { migrating = true; migrate(uid, legacy, watched).catch(e => { migrating = false; onError(e); }); }
+  };
+  const opts = { includeMetadataChanges: true };
+  unsubs.push(F.onSnapshot(F.doc(db, 'users', uid), opts, snap => {
+    main = snap.exists() ? snap.data() : null; mainSrv = !snap.metadata.fromCache; mainPend = snap.metadata.hasPendingWrites; emit();
+  }, onError));
+  unsubs.push(F.onSnapshot(F.collection(db, 'users', uid, 'watched'), opts, snap => {
+    const w = {}; snap.forEach(d => Object.assign(w, d.data().e || {}));
+    watched = w; wSrv = !snap.metadata.fromCache; wPend = snap.metadata.hasPendingWrites; emit();
+  }, onError));
+}
+
+async function migrate(uid, legacy, current) {
+  const groups = {};
+  for (const [k, v] of Object.entries(legacy)) {
+    const c = current[k]; if (c && (c.t || 0) >= (v.t || 0)) continue;
+    (groups[bucketOf(k)] ||= {})[k] = v;
+  }
+  const b = F.writeBatch(db);
+  for (const [bk, e] of Object.entries(groups)) b.set(F.doc(db, 'users', uid, 'watched', bk), { e }, { merge: true });
+  b.update(F.doc(db, 'users', uid), { watched: F.deleteField() });
+  await b.commit();
 }
 
 const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] });
@@ -53,11 +88,19 @@ export async function google() {
 export const resetPassword = email => A.sendPasswordResetEmail(auth, email);
 export const signOut = () => A.signOut(auth);
 
-// Deep-merges into users/{uid}: only the episodes/shows that changed are sent.
-// The write is stored on the device immediately; the returned promise resolves once the server confirms it.
+// Saves only what changed, in one batch: shows/profile go to the main document,
+// checkmarks go to their bucket documents. Stored on the device immediately;
+// the returned promise resolves once the server confirms it.
 export function save(partial) {
   const u = auth?.currentUser; if (!u) return Promise.resolve();
-  return F.setDoc(F.doc(db, 'users', u.uid), partial, { merge: true });
+  const { watched, ...rest } = partial;
+  const b = F.writeBatch(db);
+  if (Object.keys(rest).length && !(Object.keys(rest).length === 1 && rest.shows && !Object.keys(rest.shows).length))
+    b.set(F.doc(db, 'users', u.uid), rest, { merge: true });
+  const groups = {};
+  for (const [k, v] of Object.entries(watched || {})) (groups[bucketOf(k)] ||= {})[k] = v;
+  for (const [bk, e] of Object.entries(groups)) b.set(F.doc(db, 'users', u.uid, 'watched', bk), { e }, { merge: true });
+  return b.commit();
 }
 // Resolves when every queued write has reached the server.
 export const waitForPendingWrites = () => db ? F.waitForPendingWrites(db) : Promise.resolve();

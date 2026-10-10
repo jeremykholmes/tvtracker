@@ -541,7 +541,7 @@ function queue(kind, id, val) {
   pending = pending || { shows: {}, watched: {} };
   pending[kind][id] = val;
   syncStatus('Syncing…');
-  clearTimeout(flushTimer); flushTimer = setTimeout(flush, 250);   // short pause so "Mark all" goes up as one write
+  clearTimeout(flushTimer); flushTimer = setTimeout(flush, 1000);  // pause so quick clicks and "Mark all" go up as one write
 }
 // Hands the batch to Firestore's on-device database (instant) without waiting for the server,
 // so the next change never queues behind a slow network round trip.
@@ -554,7 +554,7 @@ function flush() {
     syncStatus('Saved on this device — can\'t reach your account', true);
     toast('Your changes are saved on this device but aren\'t reaching your account. If you use an ad blocker or privacy extension, allow this site and reload.');
   }, 10000);
-  return cloud.save({ ...batch, profile: { name: user.name, email: user.email }, updated: now() })
+  return cloud.save(Object.keys(batch.shows).length ? { ...batch, updated: now() } : batch)
     .then(() => { if (!--inFlight && !pending) syncStatus(); })
     .catch(e => {
       inFlight--; console.warn(e);
