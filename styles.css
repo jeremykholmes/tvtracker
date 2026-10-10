@@ -286,3 +286,16 @@ body.landing .foot { padding-bottom: 28px; }
   .lp-netlist span { font-size: 15px; }
 }
 .toast[hidden], .busy[hidden] { display: none; }
+
+/* landing: real show posters */
+.mk-poster { overflow: hidden; }
+.mk-poster img, .lp-pimg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mk-poster .badge { z-index: 1; }
+.lp-posters { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 40px; text-align: left; }
+.lp-pc { display: flex; flex-direction: column; gap: 8px; color: var(--text); text-decoration: none; min-width: 0; }
+.lp-pc b { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-pimg { position: relative; display: block; aspect-ratio: 2/3; border-radius: 12px; overflow: hidden; background: var(--panel2); border: 1px solid var(--line); transition: transform .15s; }
+.lp-pc:hover .lp-pimg { transform: translateY(-3px); }
+.lp-pimg .noimg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 800; color: var(--muted); }
+@media (max-width: 900px) { .lp-posters { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 560px) { .lp-posters { grid-template-columns: repeat(3, 1fr); gap: 12px; } }

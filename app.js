@@ -222,8 +222,8 @@ views.landing = () => {
     ['⇄', 'Synced everywhere', 'Start on your phone, pick up on your laptop. Your list follows you to every device.'],
     ['◉', 'Private by design', 'Your watch history belongs to you. Only you can see your shows and checkmarks.']
   ];
-  const mock = (cls, name, pct, badge) => `<div class="mk-card"><div class="mk-poster ${cls}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
-    <div class="mk-body"><b>${name}</b>
+  const mock = (i, name, net, ep, pct, badge) => `<div class="mk-card"><div class="mk-poster p${i + 1}" data-lp="${esc(name)}">${badge ? `<span class="badge">${badge}</span>` : ''}</div>
+    <div class="mk-body"><b>${esc(name)}</b><span>${net} · ${ep}</span>
     <div class="bar"><i style="width:${pct}%"></i></div><span class="mk-btn"><span class="wbox"></span>Watched</span></div></div>`;
   app.innerHTML = `<div class="lp">
   <section class="lp-hero">
@@ -237,14 +237,14 @@ views.landing = () => {
     <div class="lp-visual" aria-hidden="true">
       <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
         <div class="mk-head">Up next · 3</div>
-        ${mock('p1', 'The Night Shift', 62, '2 new')}
-        ${mock('p2', 'Coastline', 88, '')}
-        ${mock('p3', 'Northern Lights', 24, '1 new')}
+        ${LP_UPNEXT.map((m, i) => mock(i, ...m)).join('')}
       </div>
     </div>
   </section>
   <section class="lp-nets"><p>Track shows from every network and streamer</p>
     <div class="lp-netlist">${nets.map(n => `<span>${n}</span>`).join('')}</div></section>
+  <section class="lp-sec"><span class="eyebrow">Popular shows</span><h2 class="lp-h2">Keep up with the shows everyone's watching</h2>
+    <div class="lp-posters">${LP_SHOWS.map(n => `<a class="lp-pc" href="#/search"><span class="lp-pimg" data-lp="${esc(n)}"><span class="noimg">${esc(n.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span></span><b>${esc(n)}</b></a>`).join('')}</div></section>
   <section class="lp-sec"><span class="eyebrow">Features</span><h2 class="lp-h2">Everything you need to keep up</h2>
     <div class="lp-feats">${feats.map(([i, t, d]) => `<div class="lp-feat"><span class="lp-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join('')}</div></section>
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
@@ -257,7 +257,32 @@ views.landing = () => {
     <p>Free to use. No credit card required.</p>${cta}
     <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></section>
 </div>`;
+  lpPosters();
 };
+
+// Real shows for the landing page. Posters come from TVmaze and are cached on the device for a week.
+const LP_UPNEXT = [['Severance', 'Apple TV+', 'S2 · E8', 62, '2 new'], ['The Last of Us', 'HBO', 'S2 · E5', 88, ''], ['Abbott Elementary', 'ABC', 'S4 · E12', 24, '1 new']];
+const LP_SHOWS = ['Stranger Things', 'The White Lotus', 'Ted Lasso', 'Wednesday', 'Only Murders in the Building', 'Squid Game', 'Slow Horses', 'Andor', 'Yellowjackets', 'The Boys', 'Reacher', 'Shrinking'];
+const K_LP = 'tvt.lp.v1';
+async function lpPosters() {
+  const imgs = load(K_LP, {});
+  const paint = () => document.querySelectorAll('[data-lp]').forEach(el => {
+    const { img: src, id } = imgs[el.dataset.lp] || {};
+    if (id && el.parentElement.matches('a.lp-pc')) el.parentElement.href = '#/show/' + id;
+    if (src && !el.querySelector('img')) { el.querySelector('.noimg')?.remove(); el.insertAdjacentHTML('afterbegin', `<img src="${esc(src)}" alt="" loading="lazy">`); }
+  });
+  paint();
+  const names = [...LP_UPNEXT.map(m => m[0]), ...LP_SHOWS].filter(n => !imgs[n] || now() - imgs[n].t > 7 * DAY);
+  for (const n of names) {
+    try {
+      const j = await api('/singlesearch/shows?q=' + encodeURIComponent(n));
+      imgs[n] = { id: j?.id || 0, img: j?.image?.medium || j?.image?.original || '', t: now() };
+    } catch { break; }
+    save(K_LP, imgs);
+    if (!document.body.classList.contains('landing')) return;
+    paint();
+  }
+}
 
 views.shows = () => {
   if (needsAccount()) return views.landing();
