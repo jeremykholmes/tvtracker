@@ -2,7 +2,7 @@
 // These values are meant to be public; your data is protected by firestore.rules.
 export const firebaseConfig = {
   apiKey: 'AIzaSyCtO6bU0TCjV_zcTTw41CzdcBz63SSXrys',
-  authDomain: 'tv-tracker-6135d.firebaseapp.com',
+  authDomain: 'tvtracker.us'   // sign-in helper pages are self-hosted at /__/auth/ (see .github/workflows/firebase-auth-helpers.yml),
   projectId: 'tv-tracker-6135d',
   storageBucket: 'tv-tracker-6135d.firebasestorage.app',
   messagingSenderId: '507132660816',
