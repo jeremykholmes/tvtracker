@@ -325,7 +325,6 @@ views.show = arg => {
       <div class="actions">
         ${f ? `<button class="btn" data-act="unfollow" data-show="${id}">Remove from my shows</button>`
             : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
-        <button class="btn" data-act="refresh-show" data-show="${id}">↻ Refresh episodes</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener">TVmaze ↗</a>` : ''}
       </div></div></section>
     <h2>Episodes</h2>
@@ -687,11 +686,6 @@ const actions = {
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
-  async 'refresh-show'(b) {
-    const id = +b.dataset.show; busy('Refreshing…');
-    try { await fetchShow(id); toast('Episodes updated'); } catch (e) { toast(e.message); }
-    busy(false); render();
-  },
   'discover-refresh'() { delete meta.discover; render(); },
   async google() {
     try { await cloud.google(); } catch (e) { const el = $('#authErr'); if (el) { el.textContent = cloud.friendlyError(e); el.hidden = false; } else toast(cloud.friendlyError(e)); }
