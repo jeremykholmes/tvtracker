@@ -2,7 +2,7 @@
 
 A website for tracking the TV shows you're watching, with accounts so anyone can sign up and keep their own private list. Hosted on GitHub Pages; accounts and data run on a free Firebase project.
 
-Live site: https://jeremykholmes.github.io/tvtracker/
+Live site: https://tvtracker.us
 
 ## Features
 - **Landing page** — signed-out visitors see a welcome page with Continue with Google, Create free account and Sign in.
@@ -17,7 +17,7 @@ Live site: https://jeremykholmes.github.io/tvtracker/
 ## Switching on accounts (one-time, ~10 minutes)
 1. Go to https://console.firebase.google.com → **Create a project** (e.g. `tvtracker`). Google Analytics is optional — you can turn it off.
 2. **Build → Authentication → Get started.** Under *Sign-in method*, enable **Email/Password** and **Google**.
-3. Authentication → **Settings → Authorized domains → Add domain** → `jeremykholmes.github.io`.
+3. Authentication → **Settings → Authorized domains → Add domain** → `tvtracker.us` and `www.tvtracker.us`.
 4. **Build → Firestore Database → Create database** → pick a location near you → start in **production mode**.
 5. Firestore → **Rules** tab → replace everything with the contents of `firestore.rules` from this repo → **Publish**.
 6. **Project settings** (gear icon) → *Your apps* → click the **`</>`** (Web) icon → register an app (any nickname, no Hosting needed) → copy the `firebaseConfig` values.
@@ -31,10 +31,14 @@ The Firebase config values are designed to be public; `firestore.rules` is what 
 
 You'll then get an email with the new person's name, email and sign-up method each time an account is created. The key is meant to be public; it can only send email to you.
 
+## Custom domain
+The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file holds the domain). DNS is on Cloudflare: four `A` records on `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `CNAME` on `www` → `jeremykholmes.github.io`, all set to **DNS only** (grey cloud) so GitHub can issue the HTTPS certificate.
+
 ## Files
 - `index.html` — page shell
 - `app.js` — the app (shows, episodes, views)
 - `cloud.js` — accounts and per-user storage (Firebase)
+- `CNAME` — the custom domain GitHub Pages serves the site on
 - `firebase-config.js` — your Firebase project's web config
 - `firestore.rules` — database security rules to paste into Firebase
 - `manifest.webmanifest`, `icons/`, `sw.js` — what lets the site be installed as an app
