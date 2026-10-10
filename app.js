@@ -331,7 +331,7 @@ views.show = arg => {
       </div></div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
-    <p class="sub">Tip: tap <b>↑ Up to here</b> on an episode to mark it and everything before it as watched.</p>`;
+    <p class="sub">Tip: tap <b>Catch up to here</b> on an episode to mark it and everything before it as watched.</p>`;
 };
 
 function epRow(sid, e) {
@@ -341,7 +341,7 @@ function epRow(sid, e) {
     <div class="epbody"><div class="name"><span class="code">${e.n}.</span> ${esc(e.name)}</div>
       <div class="sub">${fmtDate(e, !a)}${e.runtime ? ` · ${e.runtime} min` : ''}</div>
       ${e.summary ? `<details class="syn"><summary>Synopsis</summary><p>${esc(e.summary)}</p></details>` : ''}</div>
-    ${a && !w ? `<button class="btn ghost xs" data-act="upto" data-show="${sid}" data-ep="${e.id}" title="Mark this and every earlier episode watched">↑ Up to here</button>` : ''}
+    ${a && !w ? `<button class="btn ghost xs" data-act="upto" data-show="${sid}" data-ep="${e.id}" title="Mark this and every earlier episode watched">Catch up to here</button>` : ''}
   </li>`;
 }
 

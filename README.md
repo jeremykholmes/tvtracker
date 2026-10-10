@@ -9,7 +9,7 @@ Live site: https://jeremykholmes.github.io/tvtracker/
 - **Accounts** — sign up with email/password or Google. Each person's shows and checkmarks are private and sync to every device they sign in on. Visitors can browse and search shows, but need to sign in (email or Google) to add shows or check off episodes.
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
-- **Episode checklist** per season: check single episodes, **Mark all**, or **↑ Up to here** to catch up.
+- **Episode checklist** per season: check single episodes, **Mark all**, or **Catch up to here** to mark everything up to an episode watched.
 - **New episodes pulled automatically** every few hours (or tap *Check for new episodes*).
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 
