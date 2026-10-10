@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-import { firebaseConfig } from './firebase-config.js';
+import { firebaseConfig, signupEmailKey } from './firebase-config.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -30,6 +30,8 @@ export async function start({ onUser, onData, onError }) {
     unsubs.forEach(u => u()); unsubs = [];
     onUser(user ? toUser(user) : null);
     if (user) listen(user.uid, onData, onError);
+    // Google sign-ups are spotted here; email sign-ups are reported from signUp() once the name is set.
+    if (user && !user.providerData.some(p => p.providerId === 'password')) notifyIfNew(user);
   });
 }
 
@@ -73,7 +75,25 @@ const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || 
 export async function signUp(name, email, password) {
   const cred = await A.createUserWithEmailAndPassword(auth, email, password);
   if (name) await A.updateProfile(cred.user, { displayName: name });
+  notifyIfNew(cred.user);
   return toUser(cred.user);
+}
+
+// Emails the site owner (via Web3Forms) the first time a brand-new account signs in.
+function notifyIfNew(u) {
+  const m = u.metadata, created = Date.parse(m.creationTime);
+  if (!signupEmailKey || m.creationTime !== m.lastSignInTime || Date.now() - created > 10 * 60e3) return;
+  const flag = 'tvt.notified.' + u.uid;
+  try { if (localStorage.getItem(flag)) return; localStorage.setItem(flag, '1'); } catch { }
+  fetch('https://api.web3forms.com/submit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      access_key: signupEmailKey, subject: 'New TV Tracker sign-up', from_name: 'TV Tracker',
+      name: u.displayName || '(no name)', email: u.email || '',
+      'signed up with': u.providerData.map(p => p.providerId === 'password' ? 'email' : 'Google').join(', '),
+      when: new Date(created).toString()
+    })
+  }).catch(e => console.warn('sign-up email', e));
 }
 export const signIn = (email, password) => A.signInWithEmailAndPassword(auth, email, password);
 export async function google() {

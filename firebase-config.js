@@ -8,3 +8,7 @@ export const firebaseConfig = {
   messagingSenderId: '507132660816',
   appId: '1:507132660816:web:da6b530f6da246c4a59555'
 };
+
+// Web3Forms access key (free, from https://web3forms.com) — when set, you get an email each time
+// someone creates an account. Leave empty to turn the emails off.
+export const signupEmailKey = '';
