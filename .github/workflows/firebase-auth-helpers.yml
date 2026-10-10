@@ -1,0 +1,46 @@
+# Copies Firebase's sign-in helper pages onto this site (served at tvtracker.us/__/auth/…),
+# so Google sign-in can run on our own domain and say "continue to tvtracker.us"
+# instead of the firebaseapp.com address. Runs when this file changes, monthly to pick up
+# Firebase updates, and on demand from the Actions tab ("Run workflow").
+name: Update Firebase auth helpers
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/firebase-auth-helpers.yml']
+  schedule:
+    - cron: '17 9 3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download helper files from Firebase
+        run: |
+          set -euo pipefail
+          project=$(grep -oP "projectId:\s*'\K[^']+" firebase-config.js)
+          base="https://${project}.firebaseapp.com"
+          mkdir -p __/auth __/firebase
+          # GitHub Pages serves /__/auth/handler from handler.html (no-extension files would download instead of render)
+          curl -fsSL "$base/__/auth/handler"        -o __/auth/handler.html
+          curl -fsSL "$base/__/auth/handler.js"     -o __/auth/handler.js
+          curl -fsSL "$base/__/auth/experiments.js" -o __/auth/experiments.js
+          curl -fsSL "$base/__/auth/iframe"         -o __/auth/iframe.html
+          curl -fsSL "$base/__/auth/iframe.js"      -o __/auth/iframe.js
+          curl -fsSL "$base/__/firebase/init.json"  -o __/firebase/init.json
+          ls -la __/auth __/firebase
+
+      - name: Commit if changed
+        run: |
+          git add __
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Firebase auth helper files"
+          git push
