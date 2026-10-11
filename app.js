@@ -18,6 +18,7 @@ const twoLines = e => `<span class="code">Season ${e.s}</span><br><span class="c
 const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Hulu', FOX: 'Hulu', Fox: 'Hulu' };   // network -> streaming service that also carries its shows
 const STREAMS_SHOW = { 'FOX:Doc': 'Hulu / Netflix' };   // per-show exceptions, keyed "network:show name"
 const channel = (n, name) => { const x = STREAMS_SHOW[`${(n || '').toUpperCase()}:${name}`] || STREAMS_ON[n]; return n && x ? `${n} / ${x}` : (n || ''); };
+const services = s => channel(s?.network, s?.name).split(' / ').filter(Boolean);   // every network/streamer a show is on
 
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn('storage', e); } }
@@ -343,6 +344,7 @@ function lpPosters() {
   return lpLoading;
 }
 
+const K_NET = 'tvt.net';
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed();
@@ -353,7 +355,17 @@ views.shows = () => {
 </div>`;
     return;
   }
-  const rows = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
+  const all = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
+  // Filter by network or streaming service, remembered on this device. Only offered when shows span 2+ services.
+  const counts = {};
+  for (const r of all) for (const n of new Set(services(r.s))) counts[n] = (counts[n] || 0) + 1;
+  const nets = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  let net = load(K_NET, '');
+  if (net && !counts[net]) net = '';
+  const rows = net ? all.filter(r => services(r.s).includes(net)) : all;
+  const netChip = (n, label, c) => `<button type="button" class="nchip${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}">${esc(label)} <span>${c}</span></button>`;
+  const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
+    ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
   const watching = rows.filter(r => r.p?.next).sort((a, b) =>
     (b.p.fresh > 0) - (a.p.fresh > 0) || b.p.last - a.p.last);
   const caught = rows.filter(r => r.p && !r.p.next && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
@@ -363,6 +375,7 @@ views.shows = () => {
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
+    ${filterBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${sec('Finished', done)}${sec('Loading', loading)}`;
   if (loading.length) refreshAll(false);
@@ -883,6 +896,7 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
+  net(b) { save(K_NET, b.dataset.net); render(); },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
   'discover-refresh'() { delete meta.discover; render(); },
   async google() {
