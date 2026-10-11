@@ -10,7 +10,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%BA%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Load the newest app files on every visit: a unique address skips any browser or GitHub cache.
+    window.TVT_V = '?v=' + Date.now();
+    document.write('<link rel="stylesheet" href="styles.css' + TVT_V + '">');
+  </script>
+  <noscript><link rel="stylesheet" href="styles.css"></noscript>
 </head>
 <body>
   <header class="top">
@@ -31,6 +36,6 @@
   <div id="toast" class="toast" hidden></div>
   <dialog id="appDialog" class="appdlg"></dialog>
   <footer class="foot">Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA)</footer>
-  <script type="module" src="app.js"></script>
+  <script type="module">import('./app.js' + window.TVT_V);</script>
 </body>
 </html>
