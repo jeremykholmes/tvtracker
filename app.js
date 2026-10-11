@@ -1,6 +1,6 @@
 /* TV Tracker — static site. Show data: TVmaze API (all broadcast networks + streaming services).
    Accounts + per-user watch progress: Firebase (see cloud.js). Guests save on the device only. */
-import * as cloud from './cloud.js';
+const cloud = await import('./cloud.js' + new URL(import.meta.url).search);   // same fresh version as app.js
 
 const API = 'https://api.tvmaze.com';
 const K = { state: 'tvt.state.v1', cache: 'tvt.cache.v1', meta: 'tvt.meta.v1' };
