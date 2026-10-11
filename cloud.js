@@ -120,6 +120,24 @@ export async function sharedWithMe() {
   const snap = await F.getDocs(F.query(F.collection(db, 'shares'), F.where('email', '==', lc(u.email))));
   return snap.docs.map(d => d.data());
 }
+// Sends one email through EmailJS with the given template. Does nothing (resolves false) when EmailJS isn't set up.
+async function sendEmail(templateId, params) {
+  if (!shareEmail?.serviceId || !shareEmail.publicKey || !templateId) return false;
+  const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service_id: shareEmail.serviceId, template_id: templateId, user_id: shareEmail.publicKey, template_params: params })
+  });
+  if (!r.ok) throw new Error('EmailJS ' + r.status + ': ' + await r.text());
+  return true;
+}
+// Emails someone who was just given access to the signed-in user's list. Resolves true if an email went out.
+export function sendInvite(email, role) {
+  const u = auth.currentUser;
+  return sendEmail(shareEmail?.inviteTemplateId, {
+    to_email: lc(email), owner_name: u.displayName || (u.email || '').split('@')[0], owner_email: u.email || '',
+    access: role === 'view' ? 'view' : 'view and edit', site: location.origin
+  });
+}
 // The first time someone signs in with an email that was given access, mark the share as joined
 // and email the account owner (once — whichever device marks it first sends the email).
 async function notifyOwners() {
@@ -129,14 +147,9 @@ async function notifyOwners() {
       if (s.joined) continue;
       const name = u.displayName || (u.email || '').split('@')[0];
       await F.updateDoc(F.doc(db, 'shares', `${s.owner}_${s.email}`), { joined: { t: Date.now(), name } });
-      if (!shareEmail?.serviceId || !s.ownerEmail) continue;
-      fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_id: shareEmail.serviceId, template_id: shareEmail.templateId, user_id: shareEmail.publicKey,
-          template_params: { to_email: s.ownerEmail, to_name: s.ownerName, member_name: name, member_email: u.email, site: location.origin }
-        })
-      }).catch(e => console.warn('share email', e));
+      if (!s.ownerEmail) continue;
+      sendEmail(shareEmail?.templateId, { to_email: s.ownerEmail, to_name: s.ownerName, member_name: name, member_email: u.email, site: location.origin })
+        .catch(e => console.warn('share email', e));
     }
   } catch (e) { console.warn('share notify', e); }
 }

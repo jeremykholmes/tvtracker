@@ -13,8 +13,10 @@ export const firebaseConfig = {
 // someone creates an account. Leave empty to turn the emails off.
 export const signupEmailKey = '';
 
-// EmailJS (free, from https://www.emailjs.com) — when set, an account owner gets an email the first
-// time someone they shared their list with signs in. Leave empty to turn these emails off.
-// The template's "To Email" should be {{to_email}}; it can use {{to_name}}, {{member_name}},
-// {{member_email}} and {{site}}.
-export const shareEmail = { serviceId: '', templateId: '', publicKey: '' };
+// EmailJS (free, from https://www.emailjs.com) — sharing emails. Leave empty to turn them off. Each template's
+// "To Email" should be {{to_email}}.
+//  templateId:       to the owner, the first time someone they shared with signs in.
+//                    Can use {{to_name}}, {{member_name}}, {{member_email}}, {{site}}.
+//  inviteTemplateId: to the person, as soon as the owner gives them access.
+//                    Can use {{owner_name}}, {{owner_email}}, {{access}} ("view" or "view and edit"), {{site}}.
+export const shareEmail = { serviceId: '', templateId: '', inviteTemplateId: '', publicKey: '' };

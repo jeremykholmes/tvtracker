@@ -690,8 +690,12 @@ views.account = () => {
     if (email === (user.email || '').toLowerCase()) { err.textContent = 'That\'s your own email.'; err.hidden = false; return; }
     f.querySelector('button').disabled = true;
     const role = f.role.value;
-    try { await cloud.addMember(email, role); f.reset(); toast(`${email} can now ${role === 'view' ? 'view' : 'use'} your list`); drawMembers(); }
-    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
+    const isNew = !(await cloud.members().catch(() => [])).some(m => m.email === email);   // role changes aren't re-invited
+    try {
+      await cloud.addMember(email, role); f.reset(); drawMembers();
+      const emailed = isNew && await cloud.sendInvite(email, role).catch(x => { console.warn('invite email', x); return false; });
+      toast(`${email} can now ${role === 'view' ? 'view' : 'use'} your list${emailed ? ' — we emailed them' : ''}`);
+    } catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
     f.querySelector('button').disabled = false;
   });
 };
