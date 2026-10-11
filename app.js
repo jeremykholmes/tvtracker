@@ -377,9 +377,11 @@ views.shows = () => {
   const netChip = (n, label, c) => `<button type="button" class="nchip${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}">${esc(label)} <span>${c}</span></button>`;
   const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
+  // Shows whose new season starts within the next week join Up next, after the ones with episodes to watch.
+  const starting = rows.filter(r => premiering(r.p)).sort((a, b) => airTime(a.p.upcoming) - airTime(b.p.upcoming));
   const watching = rows.filter(r => r.p?.next).sort((a, b) =>
-    (b.p.fresh > 0) - (a.p.fresh > 0) || b.p.last - a.p.last);
-  const caught = rows.filter(r => r.p && !r.p.next && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
+    (b.p.fresh > 0) - (a.p.fresh > 0) || b.p.last - a.p.last).concat(starting);
+  const caught = rows.filter(r => r.p && !r.p.next && !premiering(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
   const loading = rows.filter(r => !r.p);
@@ -392,15 +394,17 @@ views.shows = () => {
   if (loading.length) refreshAll(false);
 };
 
+const premiering = p => !!(p && !p.next && p.upcoming && p.upcoming.n === 1 && airTime(p.upcoming) - now() <= 7 * DAY);
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
   if (p?.next) foot = `<div class="next">Next: ${twoLines(p.next)} · ${fmtDate(p.next)}</div>
     <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched</button>`;
+  else if (premiering(p)) foot = `<div class="next">New season: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming, true)}</div>`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
-    <div style="position:relative">${poster(s, '#/show/' + id)}${p?.fresh ? `<span class="badge">${p.fresh} new</span>` : ''}</div>
+    <div style="position:relative">${poster(s, '#/show/' + id)}${p?.fresh ? `<span class="badge">${p.fresh} new</span>` : premiering(p) ? '<span class="badge">New season</span>' : ''}</div>
     <div class="body"><a class="title" href="#/show/${id}">${esc(s.name)}</a>
       <div class="sub">${esc(channel(s.network, s.name))}</div>
       ${p ? `<div class="bar"><i style="width:${pct}%"></i></div>
