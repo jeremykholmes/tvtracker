@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-import { firebaseConfig, signupEmailKey, shareEmail } from './firebase-config.js';
+const { firebaseConfig, signupEmailKey, shareEmail } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
