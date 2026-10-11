@@ -346,6 +346,21 @@ function lpPosters() {
 }
 
 const K_NET = 'tvt.net';
+// Website of each network/streamer, used to show its app icon on the My Shows filter. Others show their name.
+const NET_SITES = {
+  'netflix': 'netflix.com', 'hbo max': 'hbomax.com', 'hulu': 'hulu.com', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
+  'apple tv': 'tv.apple.com', 'prime video': 'primevideo.com', 'amazon prime video': 'primevideo.com', 'peacock': 'peacocktv.com',
+  'paramount+': 'paramountplus.com', 'nbc': 'nbc.com', 'cbs': 'cbs.com', 'abc': 'abc.com', 'fox': 'fox.com', 'fx': 'fxnetworks.com',
+  'fxx': 'fxnetworks.com', 'amc': 'amc.com', 'amc+': 'amcplus.com', 'showtime': 'sho.com', 'starz': 'starz.com', 'bravo': 'bravotv.com',
+  'usa network': 'usanetwork.com', 'syfy': 'syfy.com', 'tbs': 'tbs.com', 'tnt': 'tntdrama.com', 'the cw': 'cwtv.com', 'pbs': 'pbs.org',
+  'comedy central': 'cc.com', 'mtv': 'mtv.com', 'adult swim': 'adultswim.com', 'cartoon network': 'cartoonnetwork.com',
+  'nickelodeon': 'nick.com', 'disney channel': 'disneynow.com', 'freeform': 'freeform.com', 'national geographic': 'nationalgeographic.com',
+  'discovery': 'discovery.com', 'discovery+': 'discoveryplus.com', 'hgtv': 'hgtv.com', 'food network': 'foodnetwork.com',
+  'history': 'history.com', 'a&e': 'aetv.com', 'lifetime': 'mylifetime.com', 'tlc': 'tlc.com', 'bbc one': 'bbc.co.uk', 'bbc two': 'bbc.co.uk',
+  'itv1': 'itv.com', 'itvx': 'itv.com', 'channel 4': 'channel4.com', 'britbox': 'britbox.com', 'acorn tv': 'acorn.tv', 'mgm+': 'mgmplus.com',
+  'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com'
+};
+const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=128` : ''; };
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed();
@@ -374,7 +389,9 @@ views.shows = () => {
   let net = load(K_NET, '');
   if (net && !counts[net]) net = '';
   const rows = net ? all.filter(r => services(r.s).includes(net)) : all;
-  const netChip = (n, label, c) => `<button type="button" class="nchip${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}">${esc(label)} <span>${c}</span></button>`;
+  const netChip = (n, label, c) => { const ic = n && netIcon(n);
+    return `<button type="button" class="nchip${ic ? ' logo' : ''}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
+      ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
   // Shows whose new season starts within the next week join Up next, after the ones with episodes to watch.
@@ -955,6 +972,13 @@ document.addEventListener('change', e => {
   setWatched([id], t.checked);
   render();
 });
+// A filter logo that won't load falls back to the network's name.
+document.addEventListener('error', e => {
+  const im = e.target;
+  if (!im.matches?.('.nchip img')) return;
+  im.closest('.nchip').classList.remove('logo');
+  im.replaceWith(im.dataset.name);
+}, true);
 document.addEventListener('toggle', e => {
   const d = e.target;
   if (!d.matches || !d.matches('details.season')) return;
