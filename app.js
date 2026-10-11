@@ -522,7 +522,7 @@ views.upcoming = () => {
   for (const it of soon) {
     const d = new Date(it.t).toDateString();
     if (d !== cur) { cur = d; days += `<div class="dayhead">${fmtDate(it.e)}</div>`; }
-    days += row(it, false);
+    days += row(it, airsToday(it.e));   // an episode out today can be checked off
   }
   app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
     ${!list.length ? `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>` : ''}
