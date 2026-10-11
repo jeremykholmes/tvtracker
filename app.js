@@ -18,7 +18,8 @@ const twoLines = e => `<span class="code">Season ${e.s}</span><br><span class="c
 const STREAMS_ON = { CBS: 'Paramount+', NBC: 'Peacock', ABC: 'Hulu', FOX: 'Hulu', Fox: 'Hulu' };   // network -> streaming service that also carries its shows
 const STREAMS_SHOW = { 'FOX:Doc': 'Hulu / Netflix' };   // per-show exceptions, keyed "network:show name"
 const channel = (n, name) => { const x = STREAMS_SHOW[`${(n || '').toUpperCase()}:${name}`] || STREAMS_ON[n]; return n && x ? `${n} / ${x}` : (n || ''); };
-const services = s => channel(s?.network, s?.name).split(' / ').filter(Boolean);   // every network/streamer a show is on
+const SAME_SERVICE = { HBO: 'HBO Max', Max: 'HBO Max' };   // names grouped together in the My Shows filter
+const services = s => [...new Set(channel(s?.network, s?.name).split(' / ').filter(Boolean).map(n => SAME_SERVICE[n] || n))];   // every network/streamer a show is on
 
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn('storage', e); } }
