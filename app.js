@@ -161,7 +161,7 @@ function progress(id) {
   const airedEps = c.episodes.filter(aired);
   const watched = airedEps.filter(e => isWatched(e.id)).length;
   const next = airedEps.find(e => !isWatched(e.id)) || null;
-  let upcoming = c.episodes.find(e => !aired(e) && e.airdate) || null;
+  let upcoming = c.episodes.find(e => !aired(e) && e.airdate && !isWatched(e.id)) || null;   // skips one checked off early on its air day
   // A new season: that season's first episode airs later or aired within the last 2 weeks.
   if (upcoming) upcoming = { ...upcoming, newSeason: Math.min(...c.episodes.filter(e => e.s === upcoming.s).map(airTime)) > now() - 14 * DAY };
   const fresh = airedEps.filter(e => !isWatched(e.id) && now() - airTime(e) < 7 * DAY).length;
@@ -421,12 +421,14 @@ views.shows = () => {
 
 // Caught up on a season that's just started (or starts soon), with its next episode airing today or within the next 7 days.
 const premiering = p => !!(p && !p.next && p.upcoming?.newSeason && airTime(p.upcoming) < new Date().setHours(0, 0, 0, 0) + 8 * DAY);
+const airsToday = e => new Date(airTime(e)).toDateString() === new Date().toDateString();
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
   if (p?.next) foot = `<div class="next">Next: ${twoLines(p.next)} · ${fmtDate(p.next)}</div>
     <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched</button>`;
-  else if (premiering(p)) foot = `<div class="next">Next: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming, true)}</div>`;
+  else if (premiering(p)) foot = `<div class="next">Next: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming, true)}</div>${airsToday(p.upcoming)   // it can be watched on its air day
+    ? `<button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.upcoming.id}"><span class="wbox"></span>Watched</button>` : ''}`;
   else if (p?.upcoming) foot = `<div class="next muted">Next: ${twoLines(p.upcoming)} · ${fmtDate(p.upcoming)}</div>`;
   else if (p) foot = `<div class="next muted">${/ended/i.test(s.status || '') ? 'Series finished' : 'No new episodes scheduled'}</div>`;
   return `<article class="card">
