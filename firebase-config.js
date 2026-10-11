@@ -19,4 +19,4 @@ export const signupEmailKey = '';
 //                    Can use {{to_name}}, {{member_name}}, {{member_email}}, {{site}}.
 //  inviteTemplateId: to the person, as soon as the owner gives them access.
 //                    Can use {{owner_name}}, {{owner_email}}, {{access}} ("view" or "view and edit"), {{site}}.
-export const shareEmail = { serviceId: '', templateId: '', inviteTemplateId: '', publicKey: '' };
+export const shareEmail = { serviceId: 'service_hm2a27k', templateId: 'template_2y6dvat', inviteTemplateId: 'template_d8flx0j', publicKey: 'MrUG-cxjteJBO9RCJ' };
