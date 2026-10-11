@@ -349,10 +349,20 @@ const K_NET = 'tvt.net';
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed();
+  if (!list.length && user && !serverSynced) {
+    // Nothing on this device yet and the account hasn't answered: don't claim the list is empty.
+    app.innerHTML = slowServer
+      ? `<div class="empty"><h1>Can't reach your account</h1>
+      <p>Your shows are saved in your account, but this browser can't connect to it right now. If you use an ad blocker or privacy extension, allow this site and reload. Otherwise check your connection and reload.</p>
+      <p class="sub">Signed in as ${esc(user.email)}</p></div>`
+      : '<p class="loading">Loading your shows…</p>';
+    return;
+  }
   if (!list.length) {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
+      ${user ? `<p class="sub" style="margin-top:18px">Signed in as ${esc(user.email)}${sharedOpen() ? ` · viewing ${esc(sharedOpen().name)}'s list` : ''}</p>` : ''}
 </div>`;
     return;
   }
@@ -753,6 +763,11 @@ function flush() {
 }
 
 let firstSnapshot = true, serverSynced = false;   // serverSynced: the account's data has been confirmed by the server
+let slowServer = false, slowTimer = null;          // slowServer: no answer from the server 10s after opening a list
+function waitForServer() {
+  slowServer = false; clearTimeout(slowTimer);
+  slowTimer = setTimeout(() => { if (user && !serverSynced) { slowServer = true; render(); } }, 10000);
+}
 function onUser(u) {
   if (!u && user) {
     const sh = load(K_USE(user.uid), null);
@@ -760,6 +775,7 @@ function onUser(u) {
   }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null;
+  if (u) waitForServer();
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus();
   const r = route().name;
@@ -772,7 +788,8 @@ function onUser(u) {
 }
 function onData(data, fromServer) {
   if (!user) return;
-  if (fromServer) serverSynced = true;
+  const confirmed = fromServer && !serverSynced;
+  if (fromServer) { serverSynced = true; slowServer = false; }
   if (!data && fromServer && cloud.activeUid() === user.uid) {   // brand-new account: create its document
     cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
   }
@@ -785,7 +802,7 @@ function onData(data, fromServer) {
   const changed = canon(merged) !== canon(state);
   state = merged; persist();
   firstSnapshot = false;
-  if (changed || first) { render(); refreshMissing(); }
+  if (changed || first || confirmed) { render(); refreshMissing(); }
 }
 function onCloudError(e) {
   console.warn(e);
@@ -800,7 +817,7 @@ function openList(share) {
   flush();
   try { share ? save(K_USE(user.uid), share) : localStorage.removeItem(K_USE(user.uid)); } catch { }
   cloud.openAccount(share ? share.uid : user.uid);
-  firstSnapshot = true; serverSynced = false; pending = null;
+  firstSnapshot = true; serverSynced = false; pending = null; waitForServer();
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus(); render(true); refreshMissing();
 }
