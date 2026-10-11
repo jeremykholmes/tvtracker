@@ -112,7 +112,7 @@ function refreshAll(manual) {
       busy('Checking for new episodes…');
       const ids = followed().map(s => s.id);
       const age = now() - (meta.lastRefresh || 0);
-      let todo = ids.filter(id => !cache[id]);
+      let todo = ids.filter(id => !cache[id] || recheck(id));
       if (ids.length) {
         if (!meta.lastRefresh || age > 27 * DAY) todo = ids;
         else {
@@ -143,6 +143,12 @@ function refreshAll(manual) {
   return refreshing;
 }
 
+// Running shows with nothing scheduled are re-downloaded once a day, so a newly announced season shows up.
+function recheck(id) {
+  const c = cache[id];
+  return !!c && now() - c.t > DAY && !/ended/i.test(c.show.status || '') && !c.episodes.some(e => !aired(e) && e.airdate);
+}
+
 /* ---------- progress ---------- */
 function airTime(e) {
   if (e.airstamp) return Date.parse(e.airstamp);
@@ -155,7 +161,9 @@ function progress(id) {
   const airedEps = c.episodes.filter(aired);
   const watched = airedEps.filter(e => isWatched(e.id)).length;
   const next = airedEps.find(e => !isWatched(e.id)) || null;
-  const upcoming = c.episodes.find(e => !aired(e) && e.airdate) || null;
+  let upcoming = c.episodes.find(e => !aired(e) && e.airdate) || null;
+  // A new season: none of that season's episodes have aired yet (its premiere may be a special TVmaze doesn't number).
+  if (upcoming) upcoming = { ...upcoming, newSeason: !airedEps.some(e => e.s === upcoming.s) };
   const fresh = airedEps.filter(e => !isWatched(e.id) && now() - airTime(e) < 7 * DAY).length;
   let last = state.shows[id]?.t || 0;
   for (const e of c.episodes) { const w = state.watched[e.id]; if (w && w.t > last) last = w.t; }
@@ -346,11 +354,11 @@ function lpPosters() {
 }
 
 const K_NET = 'tvt.net';
-// Website of each network/streamer, used to show its app icon on the My Shows filter. Others show their name.
+// Website of each network/streamer, used to show its app icon on the My Shows filter (or our own icon file). Others show their name.
 const NET_SITES = {
   'netflix': 'netflix.com', 'hbo max': 'hbomax.com', 'hulu': 'hulu.com', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
   'apple tv': 'tv.apple.com', 'prime video': 'primevideo.com', 'amazon prime video': 'primevideo.com', 'peacock': 'peacocktv.com',
-  'paramount+': 'paramountplus.com', 'nbc': 'nbc.com', 'cbs': 'cbs.com', 'abc': 'abc.com', 'fox': 'fox.com', 'fx': 'fxnetworks.com',
+  'paramount+': 'paramountplus.com', 'nbc': 'nbc.com', 'cbs': 'cbs.com', 'abc': 'abc.com', 'fox': 'icons/fox.svg', 'fx': 'fxnetworks.com',
   'fxx': 'fxnetworks.com', 'amc': 'amc.com', 'amc+': 'amcplus.com', 'showtime': 'sho.com', 'starz': 'starz.com', 'bravo': 'bravotv.com',
   'usa network': 'usanetwork.com', 'syfy': 'syfy.com', 'tbs': 'tbs.com', 'tnt': 'tntdrama.com', 'the cw': 'cwtv.com', 'pbs': 'pbs.org',
   'comedy central': 'cc.com', 'mtv': 'mtv.com', 'adult swim': 'adultswim.com', 'cartoon network': 'cartoonnetwork.com',
@@ -360,7 +368,7 @@ const NET_SITES = {
   'itv1': 'itv.com', 'itvx': 'itv.com', 'channel 4': 'channel4.com', 'britbox': 'britbox.com', 'acorn tv': 'acorn.tv', 'mgm+': 'mgmplus.com',
   'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com'
 };
-const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=128` : ''; };
+const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed();
@@ -408,10 +416,11 @@ views.shows = () => {
     ${filterBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${sec('Finished', done)}${sec('Loading', loading)}`;
-  if (loading.length) refreshAll(false);
+  if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
-const premiering = p => !!(p && !p.next && p.upcoming && p.upcoming.n === 1 && airTime(p.upcoming) - now() <= 7 * DAY);
+// Caught up, and a new season starts today or within the next 7 days.
+const premiering = p => !!(p && !p.next && p.upcoming?.newSeason && airTime(p.upcoming) < new Date().setHours(0, 0, 0, 0) + 8 * DAY);
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
