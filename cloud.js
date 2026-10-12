@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminUid } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -127,6 +127,18 @@ export async function addLogin(name, username, password, role) {
 }
 export const setLoginRole = (uid, role) => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid, 'role'), role);
 export const removeLogin = uid => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid), F.deleteField());
+
+/* ---------- admin ---------- */
+export const isAdmin = () => !!adminUid && auth?.currentUser?.uid === adminUid;
+// Every account's stored profile and list size (only the admin's account is allowed to read these).
+export async function allAccounts() {
+  const snap = await F.getDocs(F.collection(db, 'users'));
+  return snap.docs.map(d => {
+    const x = d.data();
+    return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
+      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0 };
+  });
+}
 
 export async function signUp(name, email, password) {
   const cred = await A.createUserWithEmailAndPassword(auth, email, password);
