@@ -413,12 +413,12 @@ views.shows = () => {
   if (day !== '' && !dc[day]) day = '';
   const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
   const dayChip = (d, label, c) => `<button type="button" class="nchip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
-  const dayBar = Object.keys(dc).length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by day of the week">
+  const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length)}${[1, 2, 3, 4, 5, 6, 0].filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
   const netChip = (n, label, c) => { const ic = n && netIcon(n);
     return `<button type="button" class="nchip${ic ? ' logo' : ''}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
-  const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
+  const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
   // Up next order: shows with an episode out today (aired today or airing later today), then caught-up shows with
   // an episode later this week (soonest first), then the rest with episodes to watch, newest episode first.
