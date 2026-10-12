@@ -413,7 +413,7 @@ views.shows = () => {
   let day = load(K_DAY, '');
   if (day !== '' && !dc[day]) day = '';
   const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
-  const dayChip = (d, label, c) => `<button type="button" class="nchip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
+  const dayChip = (d, label, c) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length)}${[0, 1, 2, 3, 4, 5, 6].map(i => (new Date().getDay() + i) % 7).filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
   const netChip = (n, label, c) => { const ic = n && netIcon(n);
