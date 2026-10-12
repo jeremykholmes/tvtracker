@@ -4,6 +4,7 @@ rules_version = '2';
 // role 'view' can only look; role 'edit' can also make changes.
 // Only the owner can change who has access, their profile, or delete the account's data.
 // The site admin (one account ID, below) can also read every account, for the Admin page.
+// Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -23,6 +24,15 @@ service cloud.firestore {
         allow read: if isOwner(uid) || isMember(uid);
         allow write: if isOwner(uid) || isEditor(uid);
       }
+    }
+
+    match /messages/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'email', 'message', 't', 'uid'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 100
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200
+        && request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 5000
+        && (request.resource.data.uid == '' || (signedIn() && request.resource.data.uid == request.auth.uid));
+      allow read, delete: if isAdmin();
     }
   }
 }

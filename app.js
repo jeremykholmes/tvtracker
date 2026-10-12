@@ -800,6 +800,30 @@ views.login = mode => {
 };
 
 // Site owner only: every account, its type and list size.
+// Contact us: a short form that lands on the Admin page.
+views.contact = arg => {
+  if (arg === 'sent') {
+    app.innerHTML = `<div class="empty"><h1>Thanks — message sent</h1><p>We've got your message and will get back to you at the email you gave.</p><a class="btn primary" href="#/">Back to TV Tracker</a></div>`;
+    return;
+  }
+  const email = user && !cloud.isLogin(user.email) ? user.email : '';
+  app.innerHTML = `<div class="auth"><h1>Contact us</h1>
+    <p class="sub">Questions, ideas, or something not working? Send a note and we'll reply by email.</p>
+    <form id="contactForm" class="stack">
+      <div class="field"><label>Your name</label><input name="name" autocomplete="name" required value="${esc(user?.name || '')}"></div>
+      <div class="field"><label>Your email</label><input name="email" type="email" autocomplete="email" required value="${esc(email)}"></div>
+      <div class="field"><label>Message</label><textarea name="message" rows="6" maxlength="5000" required></textarea></div>
+      <p class="formerr" id="contactErr" hidden></p>
+      <button class="btn primary wide">Send message</button></form></div>`;
+  $('#contactForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target, btn = f.querySelector('.primary'), err = $('#contactErr');
+    btn.disabled = true; btn.textContent = 'Sending…'; err.hidden = true;
+    try { await cloud.sendMessage({ name: f.name.value.trim(), email: f.email.value.trim(), message: f.message.value.trim() }); location.hash = '#/contact/sent'; }
+    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; btn.disabled = false; btn.textContent = 'Send message'; }
+  });
+};
+
 views.admin = async () => {
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; } location.hash = '#/login'; return; }
   if (!cloud.isAdmin()) {
@@ -808,8 +832,8 @@ views.admin = async () => {
     return;
   }
   app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
-  let list;
-  try { list = await cloud.allAccounts(); }
+  let list, msgs = [], msgErr = '';
+  try { [list, msgs] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; })]); }
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (route().name !== 'admin') return;
   const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
@@ -819,7 +843,11 @@ views.admin = async () => {
       <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + ' · login for ' + (names[a.listOf] || 'unknown') : a.email || 'no email saved')}</span></span>
     <span class="sub" style="text-align:right;white-space:nowrap">${a.listOf ? '' : `${a.shows} show${a.shows === 1 ? '' : 's'}${a.logins ? ` · ${a.logins} login${a.logins === 1 ? '' : 's'}` : ''}<br>`}Last change ${when(a.updated)}</span></div>`;
   const byRecent = (a, b) => b.updated - a.updated;
+  const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
+      <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
+      <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
   app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others</span></div>
+    <div class="panel"><h3>Contact us messages · ${msgs.length}</h3>${msgErr ? `<p class="formerr">${esc(msgErr)}</p>` : msgs.map(msgRow).join('') || '<p>No messages yet.</p>'}</div>
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
     <p class="sub">Counts accounts that have saved anything. Every sign-up, with last sign-in dates, is in the Firebase console under Authentication → Users.</p>`;
@@ -1066,6 +1094,10 @@ function markWithUndo(ids, w, label) {
 const actions = {
   getapp() { getApp(); },
   'delete-account'() { deleteAccountDialog(); },
+  async 'del-msg'(b) {
+    if (!confirm('Delete this message?')) return;
+    try { await cloud.deleteMessage(b.dataset.id); b.closest('.msg').remove(); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
   async 'remove-login'(b) {
     if (!confirm(`Remove ${b.dataset.name}'s login? They won't be able to see or change your list any more.`)) return;
     try { await cloud.removeLogin(b.dataset.uid); toast(`${b.dataset.name} no longer has access`); drawLogins(); } catch (x) { toast(cloud.friendlyError(x)); }
