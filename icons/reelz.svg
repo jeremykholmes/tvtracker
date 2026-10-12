@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><title>REELZ</title>
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8212b"/><stop offset="1" stop-color="#b3121b"/></linearGradient></defs>
+<rect width="32" height="32" fill="url(#g)"/>
+<text x="16" y="20.2" text-anchor="middle" textLength="27" lengthAdjust="spacingAndGlyphs" font-family="'Arial Black','Helvetica Neue',Arial,sans-serif" font-weight="900" font-size="11" fill="#fff" letter-spacing="-.2">REELZ</text>
+</svg>
