@@ -365,7 +365,7 @@ function airDay(r) {
 }
 // Website of each network/streamer, used to show its app icon on the My Shows filter (or our own icon file). Others show their name.
 const NET_SITES = {
-  'netflix': 'netflix.com', 'hbo max': 'hbomax.com', 'hulu': 'hulu.com', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
+  'netflix': 'netflix.com', 'hbo max': 'icons/hbomax.svg', 'hulu': 'hulu.com', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
   'apple tv': 'tv.apple.com', 'prime video': 'primevideo.com', 'amazon prime video': 'primevideo.com', 'peacock': 'peacocktv.com',
   'paramount+': 'paramountplus.com', 'nbc': 'nbc.com', 'cbs': 'cbs.com', 'abc': 'abc.com', 'fox': 'icons/fox.svg', 'fx': 'fxnetworks.com',
   'fxx': 'fxnetworks.com', 'amc': 'amc.com', 'amc+': 'amcplus.com', 'showtime': 'sho.com', 'starz': 'starz.com', 'bravo': 'bravotv.com',
