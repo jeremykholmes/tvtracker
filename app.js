@@ -414,7 +414,7 @@ views.shows = () => {
   const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
   const dayChip = (d, label, c) => `<button type="button" class="nchip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
-    ${dayChip('', 'Any day', byNet.length)}${[1, 2, 3, 4, 5, 6, 0].filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
+    ${dayChip('', 'Any day', byNet.length)}${[0, 1, 2, 3, 4, 5, 6].map(i => (new Date().getDay() + i) % 7).filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
   const netChip = (n, label, c) => { const ic = n && netIcon(n);
     return `<button type="button" class="nchip${ic ? ' logo' : ''}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
