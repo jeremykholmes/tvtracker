@@ -97,7 +97,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .nchip:hover { color: var(--text); border-color: var(--muted); }
 .nchip span { font-weight: 500; opacity: .75; }
 .nchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.nchip.daychip { width: 104px; justify-content: center; padding: 0 8px; }   /* every day button the same width */
+.nchip.daychip, .nchip.allchip { width: 104px; justify-content: center; padding: 0 8px; }   /* day buttons and All: same fixed width */
 .nchip.logo { min-width: 104px; padding: 0 24px 0 5px; gap: 16px; justify-content: space-between; }
 .nchip.logo img { width: 36px; height: 36px; border-radius: 9px; display: block; background: #fff; object-fit: contain; }
 .nchip.logo.on { box-shadow: 0 0 0 2px var(--accent); }
