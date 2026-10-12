@@ -10,7 +10,7 @@ service cloud.firestore {
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function logins(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.get('logins', {}); }
     function isMember(uid) { return signedIn() && request.auth.uid in logins(uid); }
-    function isAdmin() { return signedIn() && request.auth.uid == 'ADMIN_UID'; }
+    function isAdmin() { return signedIn() && request.auth.uid == 'EU3VXDDYuYa5gymkINeUNPxsEem1'; }
     function isEditor(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'edit'; }
 
     match /users/{uid} {

@@ -11,4 +11,4 @@ export const firebaseConfig = {
 
 // Firebase account ID (Authentication → Users → User UID) of the site owner, who gets the Admin page.
 // It must match the ID in firestore.rules, which is what actually grants access.
-export const adminUid = '';
+export const adminUid = 'EU3VXDDYuYa5gymkINeUNPxsEem1';
