@@ -662,6 +662,32 @@ views.login = mode => {
   });
 };
 
+// Site owner only: every account, its type and list size.
+views.admin = async () => {
+  if (!user) { if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; } location.hash = '#/login'; return; }
+  if (!cloud.isAdmin()) {
+    app.innerHTML = `<div class="empty"><h1>Admin</h1><p>This page is only for the site owner.</p>
+      <p class="sub">Your account ID: <code>${esc(user.uid)}</code></p></div>`;
+    return;
+  }
+  app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
+  let list;
+  try { list = await cloud.allAccounts(); }
+  catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
+  if (route().name !== 'admin') return;
+  const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
+  const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf);
+  const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
+      <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + ' · login for ' + (names[a.listOf] || 'unknown') : a.email || 'no email saved')}</span></span>
+    <span class="sub" style="text-align:right;white-space:nowrap">${a.listOf ? '' : `${a.shows} show${a.shows === 1 ? '' : 's'}${a.logins ? ` · ${a.logins} login${a.logins === 1 ? '' : 's'}` : ''}<br>`}Last change ${when(a.updated)}</span></div>`;
+  const byRecent = (a, b) => b.updated - a.updated;
+  app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others</span></div>
+    <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
+    ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
+    <p class="sub">Counts accounts that have saved anything. Every sign-up, with last sign-in dates, is in the Firebase console under Authentication → Users.</p>`;
+};
+
 views.account = () => {
   if (!user) {
     if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
@@ -694,7 +720,8 @@ views.account = () => {
     <div id="loginList"></div></div>
   <div class="panel"><h3>Delete account</h3>
     <p>Permanently delete your account and all of your data.</p>
-    <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>`;
+    <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>
+  ${cloud.isAdmin() ? '<div class="panel"><h3>Site admin</h3><p>See every account on the site.</p><div class="actions"><a class="btn" href="#/admin">Open admin page</a></div></div>' : ''}`;
   drawLogins();
   $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
