@@ -31,9 +31,8 @@ function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows
 let user = null;                        // { uid, email, name } when signed in
 let authReady = !cloud.configured;       // false until Firebase reports who's signed in
 const stateKey = () => user ? `${K.state}.${cloud.activeUid() || user.uid}` : K.state;
-// Which list is open: your own, or one someone shared with you ({ uid, name }), remembered per device.
-const K_USE = uid => 'tvt.use.' + uid;
-const sharedOpen = () => user && cloud.activeUid() && cloud.activeUid() !== user.uid ? load(K_USE(user.uid), null) : null;
+// For a login someone made for you: their list ({ uid, name, role }) while it's the one open.
+const sharedOpen = () => user?.linked && cloud.activeUid() === user.linked.uid ? user.linked : null;
 let state = norm(load(K.state, null));
 let cache = load(K.cache, {});           // showId -> { t, show, episodes }  (shared TVmaze data, not per user)
 let meta = load(K.meta, { lastRefresh: 0 });
@@ -268,11 +267,11 @@ views.landing = () => {
   <section class="lp-sec lp-share">
     <div class="lp-share-copy"><span class="eyebrow">Share with friends &amp; family</span>
       <h2 class="lp-h2">See what the people you know are watching</h2>
-      <p class="lead">Share your list with anyone by email. Give them <b>view-only</b> access so they can see what you're watching and where you're up to, or let them <b>edit</b> so you can keep a household list together. You decide, and you can change it or remove access any time.</p>
+      <p class="lead">Make a login for anyone in a few seconds — just a name, username and password. Give them <b>view-only</b> access so they can see what you're watching and where you're up to, or let them <b>edit</b> so you can keep a household list together. You decide, and you can change it or remove access any time.</p>
       <ul class="lp-checks"><li>View-only or edit access, per person</li><li>Great for households, couples and watch-alongs</li><li>Your list stays private to the people you choose</li></ul></div>
     <div class="lp-visual" aria-hidden="true"><div class="mk-window lp-share-mk"><div class="mk-dots"><i></i><i></i><i></i></div>
-      <div class="mk-head">People with access</div>
-      ${[['Sam', 'sam@example.com', 'Can view'], ['Jordan', 'jordan@example.com', 'Can edit'], ['Riley', 'riley@example.com', 'Can view']].map(([n, e, r]) =>
+      <div class="mk-head">Logins for your list</div>
+      ${[['Sam', 'Username: sam', 'Can view'], ['Jordan', 'Username: jordan', 'Can edit'], ['Riley', 'Username: riley', 'Can view']].map(([n, e, r]) =>
         `<div class="mk-mem"><span class="av">${n[0]}</span><span><b>${n}</b><br><small>${e}</small></span><span class="mk-role${r === 'Can edit' ? ' on' : ''}">${r}</span></div>`).join('')}
     </div></div></section>
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
@@ -385,7 +384,7 @@ views.shows = () => {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
-      ${user ? `<p class="sub" style="margin-top:18px">Signed in as ${esc(user.email)}${sharedOpen() ? ` · viewing ${esc(sharedOpen().name)}'s list` : ''}</p>` : ''}
+      ${user ? `<p class="sub" style="margin-top:18px">Signed in as ${esc(cloud.loginName(user.email))}${sharedOpen() ? ` · viewing ${esc(sharedOpen().name)}'s list` : ''}</p>` : ''}
 </div>`;
     return;
   }
@@ -638,7 +637,7 @@ views.login = mode => {
     <div class="or"><span>or use email</span></div>
     <form id="authForm" class="stack">
       ${create ? '<div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>' : ''}
-      <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label>${create ? 'Email' : 'Email or username'}</label><input name="email" ${create ? 'type="email" autocomplete="email"' : 'autocomplete="username" autocapitalize="none" spellcheck="false"'} required></div>
       <div class="field"><label>Password${create ? ' (6+ characters)' : ''}</label><input name="password" type="password" minlength="6" autocomplete="${create ? 'new-password' : 'current-password'}" required></div>
       ${create ? '<div class="field"><label>Repeat password</label><input name="password2" type="password" minlength="6" autocomplete="new-password" required></div>' : ''}
       <p class="formerr" id="authErr" hidden></p>
@@ -667,68 +666,58 @@ views.account = () => {
     if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; }
     location.hash = '#/login'; return;
   }
+  const sh = sharedOpen();
+  if (cloud.isLogin(user.email)) {   // a login someone made: it only opens their list
+    app.innerHTML = `<h1>Account</h1>
+    <div class="panel"><h3>${esc(user.name)}</h3><p>Username: <b>${esc(cloud.loginName(user.email))}</b></p>
+      <p>${sh ? `You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : ' and can make changes'}. ${esc(sh.name)} made this login and can change or remove it.`
+        : 'This login no longer has access to a list. Ask the person who made it to add you again.'}</p>
+      <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>`;
+    return;
+  }
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
-    <p>Your shows and checkmarks are private to you (and anyone you share your list with) and sync automatically to every device you sign in on.</p>
+    <p>Your shows and checkmarks are private to you (and anyone you make a login for) and sync automatically to every device you sign in on.</p>
     <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
-  <div class="panel" id="sharedWithMe"><h3>Lists shared with you</h3><p>Loading…</p></div>
-  <div class="panel" id="shareMine"><h3>Share your list</h3>
-    <p>Give someone access to your list with their email. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you. Only you can change who has access or delete your account.</p>
-    <form class="search" id="shareForm"><input name="email" type="email" placeholder="Their email address" autocomplete="off" required>
-      <select name="role" class="rolesel" aria-label="Access"><option value="view">Can view</option><option value="edit">Can edit</option></select>
-      <button class="btn primary">Give access</button></form>
-    <p class="formerr" id="shareErr" hidden></p>
-    <div id="memberList"></div></div>
+  <div class="panel"><h3>Share your list</h3>
+    <p>Make a login for someone so they can use your list. They sign in with the username and password you choose here. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you.</p>
+    <form class="stack" id="loginForm" autocomplete="off">
+      <div class="lgrid">
+        <div class="field"><label>Their name</label><input name="name" required></div>
+        <div class="field"><label>Username</label><input name="username" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" title="3–30 letters, numbers, dots, dashes or underscores" autocapitalize="none" spellcheck="false"></div>
+        <div class="field"><label>Password (6+ characters)</label><input name="password" type="text" minlength="6" required autocomplete="new-password"></div>
+        <div class="field"><label>Access</label><select name="role" class="rolesel"><option value="edit">Can edit</option><option value="view">Can view</option></select></div>
+      </div>
+      <p class="formerr" id="loginErr" hidden></p>
+      <div class="actions"><button class="btn primary">Create login</button></div></form>
+    <div id="loginList"></div></div>
   <div class="panel"><h3>Delete account</h3>
     <p>Permanently delete your account and all of your data.</p>
     <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>`;
-  drawShared(); drawMembers();
-  $('#shareForm').addEventListener('submit', async e => {
+  drawLogins();
+  $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const f = e.target, email = f.email.value.trim().toLowerCase(), err = $('#shareErr');
-    err.hidden = true;
-    if (email === (user.email || '').toLowerCase()) { err.textContent = 'That\'s your own email.'; err.hidden = false; return; }
-    f.querySelector('button').disabled = true;
-    const role = f.role.value;
-    const isNew = !(await cloud.members().catch(() => [])).some(m => m.email === email);   // role changes aren't re-invited
+    const f = e.target, err = $('#loginErr'), btn = f.querySelector('.primary');
+    const name = f.name.value.trim(), username = f.username.value.trim(), password = f.password.value, role = f.role.value;
+    err.hidden = true; btn.disabled = true; btn.textContent = 'Creating…';
     try {
-      await cloud.addMember(email, role); f.reset(); drawMembers();
-      const emailed = isNew && await cloud.sendInvite(email, role).catch(x => { console.warn('invite email', x); return false; });
-      toast(`${email} can now ${role === 'view' ? 'view' : 'use'} your list${emailed ? ' — we emailed them' : ''}`);
+      await cloud.addLogin(name, username, password, role);
+      f.reset(); drawLogins();
+      toast(`Login created — ${name} can sign in with username ${username.toLowerCase()}`);
     } catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
-    f.querySelector('button').disabled = false;
+    btn.disabled = false; btn.textContent = 'Create login';
   });
 };
-async function drawShared() {
-  const box = $('#sharedWithMe'); if (!box) return;
-  const head = '<h3>Lists shared with you</h3>', sh = sharedOpen();
-  const mine = sh ? `<p>You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : ''}.</p><div class="actions"><button class="btn" data-act="open-list">Switch to my own list</button></div>` : '';
-  if (!user.verified) {
-    box.innerHTML = head + mine + `<p>To use a list someone shared with you, first confirm your email address (${esc(user.email)}).</p>
-      <div class="actions"><button class="btn" data-act="verify-send">Send confirmation email</button><button class="btn" data-act="verify-check">I've confirmed it</button></div>`;
-    return;
-  }
-  let list = [];
-  try { list = await cloud.sharedWithMe(); } catch (x) { box.innerHTML = head + mine + `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
-  if (!$('#sharedWithMe')) return;
-  const cur = sh && list.find(x => x.owner === sh.uid);
-  if (cur && (cur.role || 'edit') !== sh.role) { sh.role = cur.role || 'edit'; save(K_USE(user.uid), sh); accountChip(); }   // the owner changed your access
-  box.innerHTML = head + mine + (list.length ? list.map(x => `<div class="memrow"><span><b>${esc(x.ownerName)}</b> <span class="sub">${esc(x.ownerEmail)} · ${x.role === 'view' ? 'can view' : 'can edit'}</span></span>
-      ${sh?.uid === x.owner ? '<span class="sub">In use</span>' : `<button class="btn sm" data-act="open-list" data-uid="${esc(x.owner)}" data-name="${esc(x.ownerName)}" data-role="${x.role === 'view' ? 'view' : 'edit'}">${x.role === 'view' ? 'View this list' : 'Use this list'}</button>`}</div>`).join('')
-    : (sh ? '' : '<p>Nobody has shared a list with you yet.</p>'));
-}
-async function drawMembers() {
-  const box = $('#memberList'); if (!box) return;
+async function drawLogins() {
+  const box = $('#loginList'); if (!box) return;
   try {
-    const list = await cloud.members();
-    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">People with access</p>' + list.map(m => `<div class="memrow"><span>${m.joined?.name ? `<b>${esc(m.joined.name)}</b> ` : ''}${esc(m.email)}<br>${m.joined
-        ? `<span class="mstat on">Joined ${esc(new Date(m.joined.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</span>`
-        : '<span class="mstat">Invited · hasn\'t signed in yet</span>'}</span>
-      <span class="actions"><select class="rolesel" data-email="${esc(m.email)}" aria-label="Access for ${esc(m.email)}"><option value="view"${m.role === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${m.role === 'edit' ? ' selected' : ''}>Can edit</option></select>
-      <button class="btn sm" data-act="unshare" data-email="${esc(m.email)}">Remove</button></span></div>`).join('') : '';
+    const list = await cloud.logins();
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}</span></span>
+      <span class="actions"><select class="rolesel" data-uid="${esc(l.uid)}" aria-label="Access for ${esc(l.name)}"><option value="view"${l.role === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${l.role === 'edit' ? ' selected' : ''}>Can edit</option></select>
+      <button class="btn sm" data-act="remove-login" data-uid="${esc(l.uid)}" data-name="${esc(l.name)}">Remove</button></span></div>`).join('') : '';
     box.querySelectorAll('select.rolesel').forEach(sel => sel.onchange = async () => {
-      try { await cloud.addMember(sel.dataset.email, sel.value); toast(`${sel.dataset.email} can now ${sel.value === 'view' ? 'only view' : 'edit'} your list`); }
-      catch (x) { toast(cloud.friendlyError(x)); drawMembers(); }
+      try { await cloud.setLoginRole(sel.dataset.uid, sel.value); toast(`Access changed to ${sel.value === 'view' ? 'view only' : 'can edit'}`); }
+      catch (x) { toast(cloud.friendlyError(x)); drawLogins(); }
     });
   } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
 }
@@ -791,6 +780,7 @@ function flush() {
     .then(() => { if (!--inFlight && !pending) syncStatus(); })
     .catch(e => {
       inFlight--; console.warn(e);
+      if (e?.code === 'permission-denied' && sharedOpen()) { syncStatus(); onCloudError(e); return; }   // access changed: drop the change
       pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) } };
       syncStatus(cloud.friendlyError(e), true);
       flushTimer = setTimeout(flush, 5000);
@@ -806,8 +796,7 @@ function waitForServer() {
 }
 function onUser(u) {
   if (!u && user) {
-    const sh = load(K_USE(user.uid), null);
-    try { localStorage.removeItem(`${K.state}.${user.uid}`); if (sh) localStorage.removeItem(`${K.state}.${sh.uid}`); } catch { }
+    try { localStorage.removeItem(`${K.state}.${user.uid}`); if (user.linked) localStorage.removeItem(`${K.state}.${user.linked.uid}`); } catch { }
   }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null;
@@ -842,17 +831,20 @@ function onData(data, fromServer) {
 }
 function onCloudError(e) {
   console.warn(e);
-  if (e?.code === 'permission-denied' && sharedOpen()) {   // the owner stopped sharing with you
+  if (e?.code === 'permission-denied' && sharedOpen()) {   // the owner changed or removed this login
     const name = sharedOpen().name;
-    openList(null); toast(`You no longer have access to ${name}'s list`); return;
+    cloud.relink().then(l => {
+      if (l) { user.linked = l; accountChip(); toast(l.role === 'view' ? `${name} changed your access to view only` : 'Couldn\'t save that change — try again'); return; }
+      user.linked = null; openList(); toast(`You no longer have access to ${name}'s list`);
+    });
+    return;
   }
   syncStatus(cloud.friendlyError(e), true);
 }
-// Switch to someone's shared list ({ uid, name }), or back to your own (null).
-function openList(share) {
+// Re-opens the signed-in user's own list (after the owner of a shared list removed their login).
+function openList() {
   flush();
-  try { share ? save(K_USE(user.uid), share) : localStorage.removeItem(K_USE(user.uid)); } catch { }
-  cloud.openAccount(share ? share.uid : user.uid);
+  cloud.openAccount(user.uid);
   firstSnapshot = true; serverSynced = false; pending = null; waitForServer();
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus(); render(true); refreshMissing();
@@ -899,20 +891,9 @@ function markWithUndo(ids, w, label) {
 const actions = {
   getapp() { getApp(); },
   'delete-account'() { deleteAccountDialog(); },
-  'open-list'(b) { openList(b.dataset.uid ? { uid: b.dataset.uid, name: b.dataset.name, role: b.dataset.role } : null); location.hash = '#/'; },
-  async unshare(b) {
-    const email = b.dataset.email;
-    if (!confirm(`Remove ${email}'s access to your list?`)) return;
-    try { await cloud.removeMember(email); toast(`${email} no longer has access`); drawMembers(); } catch (x) { toast(cloud.friendlyError(x)); }
-  },
-  async 'verify-send'() {
-    try { await cloud.sendVerification(); toast(`Confirmation email sent to ${user.email}`); } catch (x) { toast(cloud.friendlyError(x)); }
-  },
-  async 'verify-check'() {
-    try {
-      if (await cloud.refreshVerified()) { user.verified = true; drawShared(); toast('Email confirmed'); }
-      else toast('Not confirmed yet — click the link in the email first');
-    } catch (x) { toast(cloud.friendlyError(x)); }
+  async 'remove-login'(b) {
+    if (!confirm(`Remove ${b.dataset.name}'s login? They won't be able to see or change your list any more.`)) return;
+    try { await cloud.removeLogin(b.dataset.uid); toast(`${b.dataset.name} no longer has access`); drawLogins(); } catch (x) { toast(cloud.friendlyError(x)); }
   },
   watch(b) {
     if (!requireAccount() || b.classList.contains('on')) return;
@@ -959,6 +940,7 @@ const actions = {
   async forgot() {
     const email = $('#authForm input[name=email]')?.value.trim(), el = $('#authErr');
     if (!email) { el.textContent = 'Type your email above first, then tap "Forgot password?"'; el.hidden = false; return; }
+    if (!email.includes('@')) { el.textContent = 'Logins with a username can\'t reset their password by email. Ask the person who made your login to remove it and make a new one.'; el.hidden = false; return; }
     try { await cloud.resetPassword(email); toast('Password reset email sent'); } catch (e) { el.textContent = cloud.friendlyError(e); el.hidden = false; }
   },
   async signout() {
@@ -1065,6 +1047,6 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 
 accountChip(); syncStatus(); appButton();
 render(true);
-cloud.start({ onUser, onData, onError: onCloudError, pick: u => load(K_USE(u.uid), null)?.uid })
+cloud.start({ onUser, onData, onError: onCloudError })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
 if (followed().length && now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
