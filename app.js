@@ -570,8 +570,8 @@ views.discover = () => {
     ${followBtn(it.show)}</div>`;
   const fresh = d ? d.items.filter(i => i.season === 1) : [], back = d ? d.items.filter(i => i.season > 1) : [];
   const premieres = !d ? '<p class="loading">Pulling this week\'s premieres across networks &amp; streaming…</p>'
-    : `<h3 class="dsub">New series · ${fresh.length}</h3><div class="rows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
-       <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
+    : `<h3 class="dsub">New series · ${fresh.length}</h3><div class="rows drows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
+       <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows drows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
   app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Shows picked for you from what you watch</span>
       <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
     ${recsSection()}
@@ -583,7 +583,7 @@ views.discover = () => {
    For each followed show, TMDB's "people who liked this also liked" list, shown as a row of posters. "Top picks"
    ranks shows that come up for several of your shows, and near the top of those lists. A pick is matched to
    TVmaze only when it's opened or added. Kept on the device: show matches for good, recommendation lists for a week. */
-const TMDB = 'https://api.themoviedb.org/3', TMDB_IMG = 'https://image.tmdb.org/t/p/w185', K_TMDB = 'tvt.tmdb.v2';
+const TMDB = 'https://api.themoviedb.org/3', TMDB_IMG = 'https://image.tmdb.org/t/p/w342', K_TMDB = 'tvt.tmdb.v2';
 const tm = Object.assign({ map: {}, recs: {}, tvm: {} }, load(K_TMDB, {}));   // map: TVmaze id -> TMDB id; recs: TMDB id -> { t, list }; tvm: TMDB id -> TVmaze show (0 = none)
 let recsLoading = null, recsError = '', recsAt = 0;   // recsAt: last load, so lookups that failed aren't retried in a loop
 async function tmdb(path) {
