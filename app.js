@@ -1,6 +1,7 @@
 /* TV Tracker — static site. Show data: TVmaze API (all broadcast networks + streaming services).
    Accounts + per-user watch progress: Firebase (see cloud.js). Guests save on the device only. */
 const cloud = await import('./cloud.js' + new URL(import.meta.url).search);   // same fresh version as app.js
+const config = await import('./firebase-config.js' + new URL(import.meta.url).search);
 
 const API = 'https://api.tvmaze.com';
 const K = { state: 'tvt.state.v1', cache: 'tvt.cache.v1', meta: 'tvt.meta.v1' };
@@ -84,7 +85,8 @@ function trimShow(s) {
     id: s.id, name: s.name, image: s.image?.medium || s.image?.original || '',
     network: s.network?.name || s.webChannel?.name || '', status: s.status || '',
     premiered: s.premiered || '', schedule: s.schedule || null, genres: s.genres || [],
-    summary: strip(s.summary).slice(0, 700), updated: s.updated || 0, url: s.url || ''
+    summary: strip(s.summary).slice(0, 700), updated: s.updated || 0, url: s.url || '',
+    imdb: s.externals?.imdb || '', tvdb: s.externals?.thetvdb || null
   };
 }
 function trimEp(e) {
@@ -544,11 +546,111 @@ views.discover = () => {
     <div class="when">${fmtDate({ airstamp: it.airstamp, airdate: it.airdate })}</div>
     ${followBtn(it.show)}</div>`;
   const fresh = d.items.filter(i => i.season === 1), back = d.items.filter(i => i.season > 1);
-  app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Premieres in the next 7 days · US networks + streaming</span>
+  app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Recommendations and premieres in the next 7 days · US networks + streaming</span>
       <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
+    ${recsSection()}
     <h2>New series · ${fresh.length}</h2><div class="rows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
     <h2>Returning seasons · ${back.length}</h2><div class="rows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
 };
+
+/* ---------- recommendations (TMDB) ----------
+   For each followed show, TMDB's "people who liked this also liked" list. Shows that come up for several of
+   your shows, and near the top of those lists, rank first. Each is matched back to TVmaze so it can be added.
+   Everything TMDB returns is kept on the device: show matches for good, recommendation lists for a week. */
+const TMDB = 'https://api.themoviedb.org/3', K_TMDB = 'tvt.tmdb.v1';
+const tm = Object.assign({ map: {}, recs: {}, tvm: {} }, load(K_TMDB, {}));   // map: TVmaze id -> TMDB id; recs: TMDB id -> { t, list }; tvm: TMDB id -> TVmaze show (0 = none)
+let recsLoading = null, recsError = '', recsAt = 0;   // recsAt: last load, so lookups that failed aren't retried in a loop
+async function tmdb(path) {
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(`${TMDB}${path}${path.includes('?') ? '&' : '?'}api_key=${config.tmdbKey}`);
+    if (r.status === 429) { await sleep(1500 * (i + 1)); continue; }
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('TMDB error ' + r.status);
+    return r.json();
+  }
+  throw new Error('TMDB is busy, try again in a moment');
+}
+async function tmdbId(s) {
+  const find = async (id, src) => (await tmdb(`/find/${encodeURIComponent(id)}?external_source=${src}`))?.tv_results?.[0]?.id;
+  let id = (s.imdb && await find(s.imdb, 'imdb_id')) || (s.tvdb && await find(s.tvdb, 'tvdb_id'));
+  if (!id) {
+    const y = (s.premiered || '').slice(0, 4);
+    id = (await tmdb(`/search/tv?query=${encodeURIComponent(s.name)}${y ? '&first_air_date_year=' + y : ''}`))?.results?.[0]?.id;
+  }
+  return id || 0;
+}
+async function tvmazeFor(id) {
+  const ex = await tmdb(`/tv/${id}/external_ids`);
+  let s = ex?.imdb_id ? await api(`/lookup/shows?imdb=${ex.imdb_id}`) : null;
+  if (!s && ex?.tvdb_id) s = await api(`/lookup/shows?thetvdb=${ex.tvdb_id}`);
+  if (!s) return 0;
+  const t = trimShow(s); t.summary = t.summary.slice(0, 200);
+  return t;
+}
+async function inFours(items, fn) {   // 4 at a time, which keeps well under both sites' rate limits
+  for (let i = 0; i < items.length; i += 4) await Promise.all(items.slice(i, i + 4).map(x => fn(x).catch(e => console.warn('recs', e))));
+}
+function rankRecs() {
+  const mine = followed(), mineT = new Set(mine.map(f => tm.map[f.id]).filter(Boolean)), mineV = new Set(mine.map(f => f.id));
+  const score = {};
+  for (const f of mine) {
+    const list = tm.recs[tm.map[f.id]]?.list || [];
+    list.forEach((r, i) => {
+      if (mineT.has(r.id) || (r.lang && r.lang !== 'en')) return;
+      const x = score[r.id] || (score[r.id] = { id: r.id, score: 0, pop: r.pop || 0, because: [] });
+      x.score += 1 + (list.length - i) / list.length;
+      x.because.push(showInfo(f.id)?.name || f.name);
+    });
+  }
+  return Object.values(score).sort((a, b) => b.score - a.score || b.pop - a.pop)
+    .filter(x => tm.tvm[x.id] !== 0 && !(tm.tvm[x.id] && mineV.has(tm.tvm[x.id].id)));
+}
+function loadRecs() {
+  if (recsLoading) return recsLoading;
+  recsAt = now();
+  recsLoading = (async () => {
+    recsError = '';
+    try {
+      busy('Finding shows you might like…');
+      const mine = followed().map(f => showInfo(f.id)).filter(Boolean);
+      await inFours(mine.filter(s => tm.map[s.id] === undefined), async s => { tm.map[s.id] = await tmdbId(s); });
+      const ids = [...new Set(mine.map(s => tm.map[s.id]).filter(Boolean))].filter(id => !tm.recs[id] || now() - tm.recs[id].t > 7 * DAY);
+      await inFours(ids, async id => {
+        const j = await tmdb(`/tv/${id}/recommendations?language=en-US&page=1`);
+        tm.recs[id] = { t: now(), list: (j?.results || []).map(r => ({ id: r.id, lang: r.original_language, pop: r.popularity })) };
+      });
+      save(K_TMDB, tm);
+      // Match the top picks to TVmaze until there are enough to show.
+      for (let tries = 0; tries < 4; tries++) {
+        const todo = rankRecs().slice(0, 24).filter(x => tm.tvm[x.id] === undefined);
+        if (!todo.length) break;
+        await inFours(todo, async x => { tm.tvm[x.id] = await tvmazeFor(x.id); });
+        save(K_TMDB, tm);
+      }
+    } catch (e) { recsError = e.message; console.warn('recs', e); }
+    finally { busy(false); recsLoading = null; if (route().name === 'discover') render(); }
+  })();
+  return recsLoading;
+}
+function recsSection() {
+  if (!config.tmdbKey || !user || !followed().length) return '';
+  const mine = followed();
+  const ready = mine.every(f => tm.map[f.id] !== undefined && (!tm.map[f.id] || (tm.recs[tm.map[f.id]] && now() - tm.recs[tm.map[f.id]].t < 7 * DAY)));
+  const picks = rankRecs().filter(x => tm.tvm[x.id]).slice(0, 20);
+  if ((!ready || rankRecs().slice(0, 24).some(x => tm.tvm[x.id] === undefined)) && now() - recsAt > 5 * 60e3) loadRecs();
+  const item = x => {
+    const s = tm.tvm[x.id]; showLookup[s.id] = s;
+    const b = x.because.slice(0, 2).join(' and ') + (x.because.length > 2 ? ` +${x.because.length - 2} more` : '');
+    return `<div class="row">${poster(s, '#/show/' + s.id)}
+    <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
+      <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), s.genres?.slice(0, 2).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">Because you watch ${esc(b)}</div></div>
+    ${followBtn(s)}</div>`;
+  };
+  return `<h2>Recommended for you${picks.length ? ' · ' + picks.length : ''}</h2>
+    ${picks.length ? `<div class="rows">${picks.map(item).join('')}</div>`
+      : `<p class="muted">${recsError ? `Couldn't load recommendations: ${esc(recsError)}` : 'Finding shows you might like…'}</p>`}`;
+}
 
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 async function loadDiscover() {

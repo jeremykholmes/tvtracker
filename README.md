@@ -14,6 +14,7 @@ Live site: https://tvtracker.us
 - **New episodes pulled automatically** once a day.
 - **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
+- **Recommended for you** — on Discover, shows similar to the ones on your list (from TMDB's "people who liked this also liked" data), each with a ＋ Add button. Uses the free TMDB API key in `firebase-config.js`.
 
 ## Switching on accounts (one-time, ~10 minutes)
 1. Go to https://console.firebase.google.com → **Create a project** (e.g. `tvtracker`). Google Analytics is optional — you can turn it off.

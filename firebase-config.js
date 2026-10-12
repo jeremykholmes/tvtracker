@@ -9,6 +9,9 @@ export const firebaseConfig = {
   appId: '1:507132660816:web:da6b530f6da246c4a59555'
 };
 
+// TMDB (https://www.themoviedb.org) API key, used for show recommendations on the Discover page. Meant to be public.
+export const tmdbKey = 'ee8ab7c29b7aa9166f87292204ab04ba';
+
 // Firebase account ID (Authentication → Users → User UID) of the site owner, who gets the Admin page.
 // It must match the ID in firestore.rules, which is what actually grants access.
 export const adminUid = 'EU3VXDDYuYa5gymkINeUNPxsEem1';
