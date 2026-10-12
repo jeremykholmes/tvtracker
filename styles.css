@@ -94,8 +94,9 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .nchip:hover { color: var(--text); border-color: var(--muted); }
 .nchip span { font-weight: 500; opacity: .75; }
 .nchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.nchip.logo { min-width: 104px; padding: 0 24px 0 5px; gap: 16px; justify-content: space-between; }
+.nchip.logo { min-width: 112px; padding: 0 18px 0 4px; gap: 12px; justify-content: space-between; }
 .nchip.logo img { width: 36px; height: 36px; border-radius: 9px; display: block; background: #fff; object-fit: contain; }
+.nchip.logo img.wide { width: 58.5px; }   /* our own icons (icons/*.svg) are drawn wide */
 .nchip.logo.on { box-shadow: 0 0 0 2px var(--accent); }
 @media (max-width: 720px) { .netfilter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding: 2px 16px; } .netfilter::-webkit-scrollbar { display: none; } .nchip { flex: 0 0 auto; } }
 .stats { display: flex; gap: 18px; margin: 12px 0; flex-wrap: wrap; }
