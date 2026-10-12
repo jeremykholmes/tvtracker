@@ -40,6 +40,9 @@ img { display: block; }
 
 main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 100px; }
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 90px; }
+.foot .contactlink { display: inline-block; margin: 8px 0 12px; font-size: 15px; font-weight: 650; color: var(--accent); text-decoration: none; }
+.foot .contactlink:hover { text-decoration: underline; }
+.foot > span { display: block; }
 h1 { font-size: 26px; margin: 4px 0 4px; letter-spacing: -.02em; }
 h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 12px; font-weight: 650; }
 .muted, .sub { color: var(--muted); }

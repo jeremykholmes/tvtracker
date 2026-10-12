@@ -883,6 +883,7 @@ views.account = () => {
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
+  <div class="panel"><h3>Questions or feedback?</h3><p>Send a note and we'll reply by email.</p><div class="actions"><a class="btn" href="#/contact">✉ Contact us</a></div></div>
   <div class="panel"><h3>Delete account</h3>
     <p>Permanently delete your account and all of your data.</p>
     <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>
@@ -1275,6 +1276,9 @@ async function getApp() {
 }
 $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog') e.target.close(); });   // tap outside to close
 
+// The footer is drawn here (app.js always loads fresh) so changes to it show up even if index.html is cached.
+$('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contact us</a>
+  <span>Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
