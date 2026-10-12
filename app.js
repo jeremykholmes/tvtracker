@@ -375,7 +375,8 @@ const NET_SITES = {
   'discovery': 'discovery.com', 'discovery+': 'discoveryplus.com', 'hgtv': 'hgtv.com', 'food network': 'foodnetwork.com',
   'history': 'history.com', 'a&e': 'aetv.com', 'lifetime': 'mylifetime.com', 'tlc': 'tlc.com', 'bbc one': 'bbc.co.uk', 'bbc two': 'bbc.co.uk',
   'itv1': 'itv.com', 'itvx': 'itv.com', 'channel 4': 'channel4.com', 'britbox': 'britbox.com', 'acorn tv': 'acorn.tv', 'mgm+': 'mgmplus.com',
-  'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com'
+  'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com',
+  'reelz': 'reelz.com', 'reelzchannel': 'reelz.com', 'reelz channel': 'reelz.com'
 };
 const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
 views.shows = () => {
