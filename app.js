@@ -662,7 +662,7 @@ function recCard(r) {
   const s = tm.tvm[r.id], added = s && isFollowed(s.id);
   return `<div class="rcard"><button type="button" class="rposter" data-act="rec-open" data-tmdb="${r.id}" title="${esc(r.name)}">${r.poster
       ? `<img src="${TMDB_IMG}${esc(r.poster)}" alt="" loading="lazy">` : `<span class="noimg">${esc(r.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span>`}</button>
-    <b>${esc(r.name)}</b><span class="sub">${esc([r.year, r.because?.slice(0, 2).join(', ')].filter(Boolean).join(' · ')) || '&nbsp;'}</span>
+    <button type="button" class="rname" data-act="rec-open" data-tmdb="${r.id}">${esc(r.name)}</button><span class="sub">${esc([r.year, r.because?.slice(0, 2).join(', ')].filter(Boolean).join(' · ')) || '&nbsp;'}</span>
     ${added ? '<span class="btn xs">✓ Added</span>' : `<button type="button" class="btn primary xs" data-act="rec-add" data-tmdb="${r.id}">＋ Add</button>`}</div>`;
 }
 function recsSection() {
