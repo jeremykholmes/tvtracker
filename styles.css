@@ -153,7 +153,9 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .rcard .rposter { padding: 0; border: 0; cursor: pointer; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: var(--panel2); display: grid; place-items: center; }
 .rcard .rposter img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rcard .rposter:hover { outline: 2px solid var(--accent); }
-.rcard b { font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rcard .rname { background: none; border: 0; padding: 0; text-align: left; font: inherit; font-weight: 650; color: var(--text); cursor: pointer; }
+.rcard .rname:hover { text-decoration: underline; }
+.rcard .rname { font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rcard .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rcard .btn { align-self: flex-start; margin-top: auto; }
 @media (max-width: 720px) { .rrow { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; } .rcard { flex-basis: 160px; } }
