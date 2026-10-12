@@ -404,10 +404,13 @@ views.shows = () => {
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
-  // Caught-up shows with an episode airing within the next week lead Up next (soonest first), then the ones with
-  // episodes to watch, newest episode first.
+  // Up next order: shows with an episode out today (aired today or airing later today), then caught-up shows with
+  // an episode later this week (soonest first), then the rest with episodes to watch, newest episode first.
+  const today = new Date().toDateString(), outToday = p => new Date(p.next ? p.latest : airTime(p.upcoming)).toDateString() === today;
   const starting = rows.filter(r => airingSoon(r.p)).sort((a, b) => airTime(a.p.upcoming) - airTime(b.p.upcoming));
-  const watching = starting.concat(rows.filter(r => r.p?.next).sort((a, b) => b.p.latest - a.p.latest || b.p.last - a.p.last));
+  const ready = rows.filter(r => r.p?.next).sort((a, b) => b.p.latest - a.p.latest || b.p.last - a.p.last);
+  const ordered = starting.concat(ready), first = ordered.filter(r => outToday(r.p));
+  const watching = first.concat(ordered.filter(r => !outToday(r.p)));
   const caught = rows.filter(r => r.p && !r.p.next && !airingSoon(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
