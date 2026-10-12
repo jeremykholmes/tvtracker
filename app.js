@@ -355,7 +355,14 @@ function lpPosters() {
   return lpLoading;
 }
 
-const K_NET = 'tvt.net';
+const K_NET = 'tvt.net', K_DAY = 'tvt.day', DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// 0–6 (Sunday–Saturday, local time) for when a show's next episode airs, or its latest one aired; null if unknown.
+function airDay(r) {
+  const t = r.p?.upcoming ? airTime(r.p.upcoming) : r.p?.latest;
+  if (t && isFinite(t)) return new Date(t).getDay();
+  const d = DAYS.findIndex(x => (r.s?.schedule?.days || [])[0]?.startsWith(x));   // TVmaze's schedule, while episodes load
+  return d < 0 ? null : d;
+}
 // Website of each network/streamer, used to show its app icon on the My Shows filter (or our own icon file). Others show their name.
 const NET_SITES = {
   'netflix': 'netflix.com', 'hbo max': 'hbomax.com', 'hulu': 'hulu.com', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
@@ -398,7 +405,16 @@ views.shows = () => {
   const nets = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
   let net = load(K_NET, '');
   if (net && !counts[net]) net = '';
-  const rows = net ? all.filter(r => services(r.s).includes(net)) : all;
+  const byNet = net ? all.filter(r => services(r.s).includes(net)) : all;
+  // Day filter: the weekday (your time) the show's next episode airs, or its latest one did. Remembered on this device.
+  const dc = {};
+  for (const r of byNet) { const d = airDay(r); if (d != null) dc[d] = (dc[d] || 0) + 1; }
+  let day = load(K_DAY, '');
+  if (day !== '' && !dc[day]) day = '';
+  const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
+  const dayChip = (d, label, c) => `<button type="button" class="nchip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
+  const dayBar = Object.keys(dc).length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by day of the week">
+    ${dayChip('', 'Any day', byNet.length)}${[1, 2, 3, 4, 5, 6, 0].filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
   const netChip = (n, label, c) => { const ic = n && netIcon(n);
     return `<button type="button" class="nchip${ic ? ' logo' : ''}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
@@ -418,7 +434,7 @@ views.shows = () => {
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
-    ${filterBar}
+    ${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${sec('Finished', done)}${sec('Loading', loading)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
@@ -1075,6 +1091,7 @@ const actions = {
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
   net(b) { save(K_NET, b.dataset.net); render(); },
+  day(b) { save(K_DAY, b.dataset.day); render(); },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
   'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; render(); },
   async 'rec-open'(b) { const s = await recShow(b); if (s) { showLookup[s.id] = s; location.hash = '#/show/' + s.id; } },
