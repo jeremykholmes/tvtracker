@@ -25,8 +25,8 @@ img { display: block; }
 .top::before { content: ""; position: absolute; inset: 0; z-index: -1;
   background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); }
 .brand { font-weight: 750; text-decoration: none; letter-spacing: -.01em; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
-.logo { width: 28px; height: 28px; display: block; flex: 0 0 auto; }
-.logo.sm { width: 20px; height: 20px; }
+.brandlogo { width: 28px; height: 28px; display: block; flex: 0 0 auto; }
+.brandlogo.sm { width: 20px; height: 20px; }
 .tabs { display: flex; gap: 4px; flex: 1; }
 .tabs a { text-decoration: none; padding: 7px 12px; border-radius: 999px; color: var(--muted); font-weight: 550; }
 .tabs a:hover { color: var(--text); background: var(--panel2); }
@@ -88,15 +88,16 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
-.netfilter { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 -6px; }
-.nchip { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--muted); cursor: pointer; }
+.netfilter { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+.netfilter + .netfilter { margin-top: 10px; }
+.nchip { font: inherit; font-size: 13px; font-weight: 600; height: 38px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--muted); cursor: pointer; }
 .nchip:hover { color: var(--text); border-color: var(--muted); }
-.nchip span { font-weight: 500; opacity: .75; margin-left: 2px; }
+.nchip span { font-weight: 500; opacity: .75; }
 .nchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.nchip.logo { padding: 4px 10px 4px 4px; display: inline-flex; align-items: center; gap: 6px; }
+.nchip.logo { padding: 0 12px 0 4px; }
 .nchip.logo img { width: 30px; height: 30px; border-radius: 8px; display: block; background: #fff; object-fit: contain; }
 .nchip.logo.on { box-shadow: 0 0 0 2px var(--accent); }
-@media (max-width: 720px) { .netfilter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; } .netfilter::-webkit-scrollbar { display: none; } .nchip { flex: 0 0 auto; } }
+@media (max-width: 720px) { .netfilter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding: 2px 16px; } .netfilter::-webkit-scrollbar { display: none; } .nchip { flex: 0 0 auto; } }
 .stats { display: flex; gap: 18px; margin: 12px 0; flex-wrap: wrap; }
 .stats b { display: block; font-size: 20px; }
 .stats span { font-size: 12px; color: var(--muted); }
