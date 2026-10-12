@@ -166,7 +166,8 @@ function progress(id) {
   const fresh = airedEps.filter(e => !isWatched(e.id) && now() - airTime(e) < 7 * DAY).length;
   let last = state.shows[id]?.t || 0;
   for (const e of c.episodes) { const w = state.watched[e.id]; if (w && w.t > last) last = w.t; }
-  return { total: airedEps.length, watched, unwatched: airedEps.length - watched, next, upcoming, fresh, last };
+  const latest = airedEps.length ? airTime(airedEps[airedEps.length - 1]) : 0;   // when the newest episode aired
+  return { total: airedEps.length, watched, unwatched: airedEps.length - watched, next, upcoming, fresh, last, latest };
 }
 function findEp(epId) {
   for (const [sid, c] of Object.entries(cache)) { const e = c.episodes.find(x => x.id === epId); if (e) return { sid: +sid, e, c }; }
@@ -401,10 +402,10 @@ views.shows = () => {
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="netfilter" role="group" aria-label="Filter by network or streaming service">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
-  // Caught-up shows with an episode airing within the next week lead Up next (soonest first), then the ones with episodes to watch.
+  // Caught-up shows with an episode airing within the next week lead Up next (soonest first), then the ones with
+  // episodes to watch, newest episode first.
   const starting = rows.filter(r => airingSoon(r.p)).sort((a, b) => airTime(a.p.upcoming) - airTime(b.p.upcoming));
-  const watching = starting.concat(rows.filter(r => r.p?.next).sort((a, b) =>
-    (b.p.fresh > 0) - (a.p.fresh > 0) || b.p.last - a.p.last));
+  const watching = starting.concat(rows.filter(r => r.p?.next).sort((a, b) => b.p.latest - a.p.latest || b.p.last - a.p.last));
   const caught = rows.filter(r => r.p && !r.p.next && !airingSoon(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
