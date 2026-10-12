@@ -314,6 +314,8 @@ body.landing .foot { padding-bottom: 28px; }
 .memrow > span { min-width: 0; overflow-wrap: anywhere; }
 .rolesel { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
 .memrow .actions { flex-wrap: nowrap; align-items: center; }
+.lgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 12px; }
+.lgrid .rolesel { width: 100%; padding: 11px 10px; }
 
 /* landing: sharing promo */
 #shareForm { flex-wrap: wrap; }
@@ -331,6 +333,3 @@ body.landing .foot { padding-bottom: 28px; }
 .mk-role { margin-left: auto; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .mk-role.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 @media (max-width: 900px) { .lp-share { grid-template-columns: 1fr; gap: 32px; } .lp-share-mk { transform: none; max-width: 460px; } }
-.mstat { display: inline-block; margin-top: 3px; font-size: 12px; font-weight: 650; color: var(--muted); }
-.mstat.on { color: var(--ok, #1f9d55); }
-.mstat.on::before { content: '● '; }
