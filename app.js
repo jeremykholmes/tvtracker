@@ -492,7 +492,11 @@ views.show = arg => {
       </summary>
       <ol class="eps">${eps.map(e => epRow(id, e)).join('')}</ol></details>`;
   }).join('');
-  app.innerHTML = `<section class="hero">${poster(s)}
+  // Opened from a friend's recommendation link (#/show/<id>/<their name>).
+  let from = ''; try { from = decodeURIComponent(route().extra || '').trim().slice(0, 40); } catch { }
+  const banner = from ? `<div class="recbanner"><span aria-hidden="true">★</span><span><b>${esc(from)}</b> recommends this show${f ? ' — it\'s already on your list'
+    : needsAccount() ? '. Create a free account to add it to your list and track episodes.' : '.'}</span></div>` : '';
+  app.innerHTML = `${banner}<section class="hero">${poster(s)}
     <div class="meta"><h1>${esc(s.name)}</h1>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
@@ -503,6 +507,7 @@ views.show = arg => {
       <div class="actions">
         ${f ? `<button class="btn" data-act="unfollow" data-show="${id}">Remove from my shows</button>`
             : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
+        <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener">TVmaze ↗</a>` : ''}
       </div></div></section>
     <h2>Episodes</h2>
@@ -966,9 +971,19 @@ function onUser(u) {
   if (u && r === 'login') {
     let back = '#/'; try { back = sessionStorage.getItem('tvt.return') || '#/'; sessionStorage.removeItem('tvt.return'); } catch { }
     location.hash = /login/.test(back) ? '#/' : back;
+    addAfterSignIn();
   }
   else if (!(r === 'login' && !u)) render(true);   // don't wipe a sign-in form someone is typing in
   refreshMissing();
+}
+// A show someone tapped Add on before they had an account (e.g. from a recommendation) is added once they're in.
+function addAfterSignIn() {
+  let id = 0; try { id = +sessionStorage.getItem('tvt.addAfter') || 0; sessionStorage.removeItem('tvt.addAfter'); } catch { }
+  if (!id || isFollowed(id) || !requireAccount()) return;
+  (cache[id] ? Promise.resolve(cache[id]) : fetchShow(id)).then(c => {
+    if (!c || !user || isFollowed(id)) return;
+    follow(c.show); render(); toast(`Added ${c.show.name} to your shows`);
+  }).catch(() => {});
 }
 function onData(data, fromServer) {
   if (!user) return;
@@ -1077,8 +1092,9 @@ const actions = {
     markWithUndo(ids, true, `Marked ${ids.length} episode${ids.length === 1 ? '' : 's'} watched`);
   },
   async follow(b) {
-    if (!requireAccount()) return;
     const id = +b.dataset.show;
+    if (needsAccount() && authReady) try { sessionStorage.setItem('tvt.addAfter', id); } catch { }   // added once they've signed up
+    if (!requireAccount()) return;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
     follow(s); render(); toast(`Added ${s.name}`);   // search results stay put so you can add more
@@ -1092,6 +1108,19 @@ const actions = {
   },
   net(b) { save(K_NET, b.dataset.net); render(); },
   day(b) { save(K_DAY, b.dataset.day); render(); },
+  // Shares a link to the show page that greets the friend with "<your name> recommends this show".
+  async recommend(b) {
+    const id = +b.dataset.show, s = showInfo(id) || cache[id]?.show; if (!s) return;
+    const name = (user?.name || '').trim().split(/\s+/)[0];
+    const url = `${location.origin}${location.pathname}#/show/${id}${name ? '/' + encodeURIComponent(name) : ''}`;
+    const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
+    if (navigator.share) {
+      try { await navigator.share({ title: s.name, text, url }); } catch (e) { if (e?.name !== 'AbortError') toast('Couldn\'t open sharing'); }
+      return;
+    }
+    try { await navigator.clipboard.writeText(`${text}: ${url}`); toast('Link copied — paste it in a message to your friend'); }
+    catch { prompt('Copy this and send it to your friend:', `${text}: ${url}`); }
+  },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
   'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; render(); },
   async 'rec-open'(b) { const s = await recShow(b); if (s) { showLookup[s.id] = s; location.hash = '#/show/' + s.id; } },
@@ -1152,7 +1181,7 @@ document.addEventListener('toggle', e => {
 }, true);
 
 /* ---------- router ---------- */
-function route() { const [name, arg] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'shows', arg }; }
+function route() { const [name, arg, extra] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'shows', arg, extra }; }
 function render(fromRoute) {
   const r = route();
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;

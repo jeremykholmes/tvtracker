@@ -10,6 +10,7 @@ Live site: https://tvtracker.us
 - **Shared access** — from the Account page, make a login for someone (their name, a username and a password) as **Can view** (see what you're watching and where you're up to) or **Can edit** (also add/remove shows and check off episodes). They sign in with that username and password and go straight to your list. Change their access or remove the login any time. Only the owner can change who has access or delete the account.
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
+- **Recommend to a friend** — a button on every show page shares a link (phone share sheet, or copied on a computer). The friend lands on the show with a "<your name> recommends this show" banner and an Add button; if they sign up first, the show is added once they're in.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
 - **New episodes pulled automatically** once a day.
 - **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.
