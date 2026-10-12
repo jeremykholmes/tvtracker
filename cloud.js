@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig, adminUid } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminUid, contactEmailKey } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -127,6 +127,22 @@ export async function addLogin(name, username, password, role) {
 }
 export const setLoginRole = (uid, role) => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid, 'role'), role);
 export const removeLogin = uid => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid), F.deleteField());
+
+/* ---------- contact form ---------- */
+// Saves a Contact us message (anyone can send one; only the admin can read them), and emails a copy if set up.
+export async function sendMessage({ name, email, message }) {
+  const m = { name: name.slice(0, 100), email: email.slice(0, 200), message: message.slice(0, 5000), t: Date.now(), uid: auth?.currentUser?.uid || '' };
+  await F.addDoc(F.collection(db, 'messages'), m);
+  if (contactEmailKey) fetch('https://api.web3forms.com/submit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ access_key: contactEmailKey, subject: 'TV Tracker contact form', from_name: 'TV Tracker', name: m.name, email: m.email, message: m.message })
+  }).catch(e => console.warn('contact email', e));
+}
+export async function messages() {
+  const snap = await F.getDocs(F.query(F.collection(db, 'messages'), F.orderBy('t', 'desc'), F.limit(200)));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+export const deleteMessage = id => F.deleteDoc(F.doc(db, 'messages', id));
 
 /* ---------- admin ---------- */
 export const isAdmin = () => !!adminUid && auth?.currentUser?.uid === adminUid;

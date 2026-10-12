@@ -11,6 +11,7 @@ Live site: https://tvtracker.us
 - **Add any show** from any broadcast network or streaming service (Netflix, HBO/Max, Hulu, Disney+, Apple TV+, Prime Video, NBC, CBS…), powered by the free [TVmaze](https://www.tvmaze.com) API.
 - **My Shows** — what's up next for each show, episodes left, and a one-tap **✓ Watched** button.
 - **Recommend to a friend** — a button on every show page shares a link (phone share sheet, or copied on a computer). The friend lands on the show with a "<your name> recommends this show" banner and an Add button; if they sign up first, the show is added once they're in.
+- **Contact us** — a footer link opens a short form (name, email, message). Messages are saved in Firestore and listed on the owner's Admin page; set `contactEmailKey` (a free Web3Forms key) in `firebase-config.js` to also get each one by email.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
 - **New episodes pulled automatically** once a day.
 - **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.

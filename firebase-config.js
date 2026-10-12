@@ -10,6 +10,10 @@ export const firebaseConfig = {
 };
 
 // TMDB (https://www.themoviedb.org) API key, used for show recommendations on the Discover page. Meant to be public.
+// Optional: a Web3Forms access key (free, https://web3forms.com) to also get each Contact us message by email.
+// Messages always appear on the Admin page; leave this empty to skip the emails.
+export const contactEmailKey = '';
+
 export const tmdbKey = 'ee8ab7c29b7aa9166f87292204ab04ba';
 
 // Firebase account ID (Authentication → Users → User UID) of the site owner, who gets the Admin page.
