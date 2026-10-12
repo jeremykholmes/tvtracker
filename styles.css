@@ -149,14 +149,14 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .dhead { margin-top: 30px; }
 .dsub { font-size: 14px; margin: 18px 0 10px; color: var(--text); }
 .rrow { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 10px; scrollbar-width: thin; }
-.rcard { flex: 0 0 132px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rcard { flex: 0 0 176px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rcard .rposter { padding: 0; border: 0; cursor: pointer; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: var(--panel2); display: grid; place-items: center; }
 .rcard .rposter img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rcard .rposter:hover { outline: 2px solid var(--accent); }
-.rcard b { font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rcard b { font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rcard .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rcard .btn { align-self: flex-start; margin-top: auto; }
-@media (max-width: 720px) { .rrow { margin-inline: -16px; padding-inline: 16px; } .rcard { flex-basis: 112px; } }
+@media (max-width: 720px) { .rrow { margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; } .rcard { flex-basis: 142px; } }
 .dayhead { font-size: 13px; font-weight: 700; margin: 18px 0 8px; color: var(--text); }
 
 .search { display: flex; gap: 8px; margin: 12px 0 18px; }
@@ -359,3 +359,4 @@ body.landing .foot { padding-bottom: 28px; }
 .msghead { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 14px; }
 .msghead .sub { display: inline-flex; gap: 8px; align-items: center; }
 .panel .msg p { color: var(--text); margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.drows .row .poster { width: 72px; border-radius: 8px; }   /* Discover's premiere lists: bigger posters */
