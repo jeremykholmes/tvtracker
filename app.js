@@ -378,7 +378,7 @@ const NET_SITES = {
   'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com',
   'reelz': 'icons/reelz.svg', 'reelzchannel': 'icons/reelz.svg', 'reelz channel': 'icons/reelz.svg'
 };
-const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
+const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d + new URL(import.meta.url).search : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed();
