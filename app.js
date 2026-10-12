@@ -365,8 +365,8 @@ function airDay(r) {
 }
 // Website of each network/streamer, used to show its app icon on the My Shows filter (or our own icon file). Others show their name.
 const NET_SITES = {
-  'netflix': 'icons/netflix.svg', 'hbo max': 'icons/hbomax.svg', 'hulu': 'icons/hulu.svg', 'disney+': 'disneyplus.com', 'apple tv+': 'tv.apple.com',
-  'apple tv': 'tv.apple.com', 'prime video': 'primevideo.com', 'amazon prime video': 'primevideo.com', 'peacock': 'peacocktv.com',
+  'netflix': 'icons/netflix.svg', 'hbo max': 'icons/hbomax.svg', 'hulu': 'icons/hulu.svg', 'disney+': 'disneyplus.com', 'apple tv+': 'icons/appletv.svg',
+  'apple tv': 'icons/appletv.svg', 'prime video': 'icons/primevideo.svg', 'amazon prime video': 'icons/primevideo.svg', 'peacock': 'peacocktv.com',
   'paramount+': 'icons/paramountplus.svg', 'nbc': 'icons/nbc.svg', 'cbs': 'icons/cbs.svg', 'abc': 'abc.com', 'fox': 'icons/fox.svg', 'fx': 'fxnetworks.com',
   'fxx': 'fxnetworks.com', 'amc': 'amc.com', 'amc+': 'amcplus.com', 'showtime': 'sho.com', 'starz': 'starz.com', 'bravo': 'bravotv.com',
   'usa network': 'usanetwork.com', 'syfy': 'syfy.com', 'tbs': 'tbs.com', 'tnt': 'tntdrama.com', 'the cw': 'cwtv.com', 'pbs': 'pbs.org',
