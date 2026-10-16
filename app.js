@@ -508,11 +508,11 @@ views.show = arg => {
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
       ${s.summary ? `<p class="summary">${esc(s.summary)}</p>` : ''}
       <div class="actions">
-        ${f ? `<button class="btn" data-act="unfollow" data-show="${id}">Remove from my shows</button>`
-            : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
+        ${f ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
-      </div></div></section>
+      </div>
+      ${f ? `<div class="actions"><button class="btn" data-act="unfollow" data-show="${id}">Remove from my shows</button></div>` : ''}</div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
     <p class="sub">Tip: tap <b>Watched Up To Here</b> on an episode to mark it and everything before it as watched.</p>`;

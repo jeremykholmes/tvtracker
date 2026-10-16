@@ -89,6 +89,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .hero .meta { flex: 1; min-width: 0; }
 .hero .summary { color: var(--muted); max-width: 720px; margin: 10px 0 14px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions + .actions { margin-top: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
 .netfilter { display: flex; flex-wrap: wrap; gap: 8px; }
