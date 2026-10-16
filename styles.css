@@ -371,3 +371,6 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows:
 .ptr-ico { display: inline-block; color: var(--accent); font-size: 17px; line-height: 1; }
 .ptr.spin .ptr-ico { animation: ptrspin .8s linear infinite; }
 @keyframes ptrspin { to { transform: rotate(360deg); } }
+.backbtn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px -6px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.backbtn span { font-size: 20px; line-height: 1; }
+.backbtn:hover, .backbtn:focus-visible { color: var(--text); background: var(--panel2); }
