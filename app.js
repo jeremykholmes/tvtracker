@@ -498,7 +498,8 @@ views.show = arg => {
   let from = ''; try { from = decodeURIComponent(route().extra || '').trim().slice(0, 40); } catch { }
   const banner = from ? `<div class="recbanner"><span aria-hidden="true">★</span><span><b>${esc(from)}</b> recommends this show${f ? ' — it\'s already on your list'
     : needsAccount() ? '. Create a free account to add it to your list and track episodes.' : '.'}</span></div>` : '';
-  app.innerHTML = `${banner}<section class="hero">${poster(s)}
+  app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
+    ${banner}<section class="hero">${poster(s)}
     <div class="meta"><h1>${esc(s.name)}</h1>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
@@ -1156,6 +1157,8 @@ const actions = {
     try { await navigator.clipboard.writeText(`${text}: ${url}`); toast('Link copied — paste it in a message to your friend'); }
     catch { prompt('Copy this and send it to your friend:', `${text}: ${url}`); }
   },
+  // Back to the page this show was opened from; opened straight from a link, go to My Shows.
+  back() { if (navDepth > 0) { restoreScroll = true; history.back(); } else location.hash = '#/'; },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
   'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; render(); },
   async 'rec-open'(b) { const s = await recShow(b); if (s) { showLookup[s.id] = s; location.hash = '#/show/' + s.id; } },
@@ -1265,7 +1268,16 @@ function render(fromRoute) {
   (views[r.name] || views.shows)(r.arg);
   if (!fromRoute) scrollTo(0, y);
 }
-window.addEventListener('hashchange', () => { render(true); scrollTo(0, 0); });
+// navDepth: pages visited inside the app this visit, so Back never leaves the site. Each page's scroll spot is kept
+// so going back returns to where you were instead of the top.
+let navDepth = 0, restoreScroll = false;
+const scrollSpots = {};
+window.addEventListener('scroll', () => { scrollSpots[location.hash] = scrollY; }, { passive: true });
+window.addEventListener('hashchange', () => {
+  const back = restoreScroll; restoreScroll = false;
+  navDepth = back ? Math.max(0, navDepth - 1) : navDepth + 1;
+  render(true); scrollTo(0, back ? scrollSpots[location.hash] || 0 : 0);
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
