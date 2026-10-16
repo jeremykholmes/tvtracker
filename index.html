@@ -10,6 +10,17 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/logo.svg" type="image/svg+xml">
+  <style>
+    /* Shown instantly, before styles.css and the app load, so a fresh visit isn't a blank screen. */
+    html, body { background: #0e1014; color: #eef1f6; }
+    @media (prefers-color-scheme: light) { html, body { background: #f4f5f7; color: #141821; } }
+    .splash { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      min-height: 60vh; color: #98a1b0; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
+    .splash img { width: 72px; height: 72px; animation: splash-pulse 1.4s ease-in-out infinite; }
+    .splash p { margin: 0; }
+    @keyframes splash-pulse { 50% { opacity: .45; transform: scale(.94); } }
+    @media (prefers-reduced-motion: reduce) { .splash img { animation: none; } }
+  </style>
   <script>
     // Load the newest app files on every visit: a unique address skips any browser or GitHub cache.
     window.TVT_V = '?v=' + Date.now();
@@ -32,7 +43,7 @@
     <button type="button" class="btn sm topout" id="topout" data-act="signout" hidden>Sign out</button>
   </header>
   <div class="busy" id="busy" hidden></div>
-  <main id="app"></main>
+  <main id="app"><div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div></main>
   <div id="toast" class="toast" hidden></div>
   <dialog id="appDialog" class="appdlg"></dialog>
   <footer class="foot"><a href="#/contact">Contact us</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
