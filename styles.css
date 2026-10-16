@@ -332,6 +332,8 @@ body.landing .foot { padding-bottom: 28px; }
 /* account sharing */
 .memrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .memrow > span { min-width: 0; overflow-wrap: anywhere; }
+.memrow > .admeta { text-align: right; min-width: min-content; overflow-wrap: normal; }   /* admin page: wraps between pieces, never runs off the edge */
+.admeta > span { white-space: nowrap; }
 .rolesel { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
 .memrow .actions { flex-wrap: nowrap; align-items: center; }
 .lgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 12px; }

@@ -843,7 +843,7 @@ views.admin = async () => {
   const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
       <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + ' · login for ' + (names[a.listOf] || 'unknown') : a.email || 'no email saved')}</span></span>
-    <span class="sub" style="text-align:right;white-space:nowrap">${a.listOf ? '' : `${a.shows} show${a.shows === 1 ? '' : 's'}${a.logins ? ` · ${a.logins} login${a.logins === 1 ? '' : 's'}` : ''}<br>`}Last change ${when(a.updated)}</span></div>`;
+    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last change</span> <span>${when(a.updated)}</span></span></div>`;
   const byRecent = (a, b) => b.updated - a.updated;
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
       <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
