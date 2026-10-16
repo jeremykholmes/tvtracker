@@ -364,7 +364,7 @@ body.landing .foot { padding-bottom: 28px; }
 .msghead .sub { display: inline-flex; gap: 8px; align-items: center; }
 .panel .msg p { color: var(--text); margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .drows .row .poster { width: 88px; border-radius: 8px; }   /* Discover's premiere lists: bigger posters */
-html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows: our pull-to-refresh instead of a full page reload */
+html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows, Admin: our pull-to-refresh instead of a full page reload */
 .ptr { position: fixed; left: 0; right: 0; margin-inline: auto; width: max-content; top: calc(env(safe-area-inset-top) + 8px); z-index: 60; transform: translateY(-70px); opacity: 0; pointer-events: none;
   display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 6px 18px rgba(0, 0, 0, .18); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; transition: opacity .15s; }
