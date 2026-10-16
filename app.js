@@ -421,13 +421,15 @@ views.shows = () => {
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
-  // Up next order: shows with an episode out today (aired today or airing later today), then caught-up shows with
-  // an episode later this week (soonest first), then the rest with episodes to watch, newest episode first.
+  // Up next order: shows not started yet (no episodes watched) always come first, then shows with an episode out today
+  // (aired today or airing later today), then caught-up shows with an episode later this week (soonest first), then the
+  // rest with episodes to watch, newest episode first. Each group keeps that same order inside it.
   const today = new Date().toDateString(), outToday = p => new Date(p.next ? p.latest : airTime(p.upcoming)).toDateString() === today;
   const starting = rows.filter(r => airingSoon(r.p)).sort((a, b) => airTime(a.p.upcoming) - airTime(b.p.upcoming));
   const ready = rows.filter(r => r.p?.next).sort((a, b) => b.p.latest - a.p.latest || b.p.last - a.p.last);
   const ordered = starting.concat(ready), first = ordered.filter(r => outToday(r.p));
-  const watching = first.concat(ordered.filter(r => !outToday(r.p)));
+  const byDay = first.concat(ordered.filter(r => !outToday(r.p))), unstarted = r => !r.p.watched;
+  const watching = byDay.filter(unstarted).concat(byDay.filter(r => !unstarted(r)));
   const caught = rows.filter(r => r.p && !r.p.next && !airingSoon(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
