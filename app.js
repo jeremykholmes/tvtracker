@@ -864,18 +864,19 @@ views.account = () => {
     location.hash = '#/login'; return;
   }
   const sh = sharedOpen();
+  const pwBtn = cloud.usesPassword() ? '<button class="btn" data-act="change-password">Change password</button>' : '';   // Google sign-ins have no password here
   if (cloud.isLogin(user.email)) {   // a login someone made: it only opens their list
     app.innerHTML = `<h1>Account</h1>
     <div class="panel"><h3>${esc(user.name)}</h3><p>Username: <b>${esc(cloud.loginName(user.email))}</b></p>
       <p>${sh ? `You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : ' and can make changes'}. ${esc(sh.name)} made this login and can change or remove it.`
         : 'This login no longer has access to a list. Ask the person who made it to add you again.'}</p>
-      <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>`;
+      <div class="actions">${pwBtn}<button class="btn" data-act="signout">Sign out</button></div></div>`;
     return;
   }
   app.innerHTML = `<h1>Account</h1>
   <div class="panel"><h3>${esc(user.name)}</h3><p>${esc(user.email)}</p>
     <p>Your shows and checkmarks are private to you (and anyone you make a login for) and sync automatically to every device you sign in on.</p>
-    <div class="actions"><button class="btn" data-act="signout">Sign out</button></div></div>
+    <div class="actions">${pwBtn}<button class="btn" data-act="signout">Sign out</button></div></div>
   <div class="panel"><h3>Share your list</h3>
     <p>Make a login for someone so they can use your list. They sign in with the username and password you choose here. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you.</p>
     <form class="stack" id="loginForm" autocomplete="off">
@@ -919,6 +920,34 @@ async function drawLogins() {
       catch (x) { toast(cloud.friendlyError(x)); drawLogins(); }
     });
   } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
+}
+function changePasswordDialog() {
+  const d = $('#appDialog');
+  d.innerHTML = `<form class="stack" id="pwForm"><h2>Change password</h2>
+    <div class="field"><label>Current password</label><input name="current" type="password" autocomplete="current-password" required></div>
+    <div class="field"><label>New password (6+ characters)</label><input name="password" type="password" minlength="6" autocomplete="new-password" required></div>
+    <div class="field"><label>Repeat new password</label><input name="password2" type="password" minlength="6" autocomplete="new-password" required></div>
+    <p class="formerr" id="pwErr" hidden></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Change password</button></div></form>`;
+  d.querySelector('[data-close]').onclick = () => d.close();
+  $('#pwForm').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, btn = f.querySelector('.primary'), err = $('#pwErr');
+    err.hidden = true;
+    if (f.password.value !== f.password2.value) {
+      err.textContent = 'New passwords don\'t match — please type the same password in both boxes.'; err.hidden = false;
+      f.password2.focus(); return;
+    }
+    btn.disabled = true; btn.textContent = 'Changing…';
+    try {
+      await cloud.changePassword(f.current.value, f.password.value);
+      d.close(); toast('Password changed');
+    } catch (x) {
+      err.textContent = /invalid-credential|wrong-password/.test(x?.code || '') ? 'Current password is incorrect.' : cloud.friendlyError(x);
+      err.hidden = false; btn.disabled = false; btn.textContent = 'Change password';
+    }
+  };
+  d.showModal();
 }
 function deleteAccountDialog() {
   const pw = cloud.usesPassword(), d = $('#appDialog');
@@ -1100,6 +1129,7 @@ function markWithUndo(ids, w, label) {
 }
 const actions = {
   getapp() { getApp(); },
+  'change-password'() { changePasswordDialog(); },
   'delete-account'() { deleteAccountDialog(); },
   async 'del-msg'(b) {
     if (!confirm('Delete this message?')) return;

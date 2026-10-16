@@ -175,6 +175,13 @@ export async function google() {
 export const resetPassword = email => A.sendPasswordResetEmail(auth, email);
 export const usesPassword = () => !!auth?.currentUser?.providerData.some(p => p.providerId === 'password');
 
+// Firebase only lets someone change a password they've just proved they know, so this re-checks the current one first.
+export async function changePassword(current, next) {
+  const u = auth.currentUser; if (!u) throw new Error('Not signed in.');
+  await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, current));
+  await A.updatePassword(u, next);
+}
+
 // Permanently deletes the signed-in account and everything stored for it. Firebase only lets
 // someone delete an account they've just proved is theirs, so this re-checks the password
 // (or Google) first, then removes their data, then the account itself.
