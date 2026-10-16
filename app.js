@@ -1207,6 +1207,41 @@ document.addEventListener('error', e => {
   im.closest('.nchip').classList.remove('logo');
   im.replaceWith(im.dataset.name);
 }, true);
+/* ---------- pull to refresh (My Shows, touch screens) ----------
+   Swipe down from the top of the page: a bubble follows the finger, and letting go past the mark checks for new episodes. */
+const ptr = document.createElement('div');
+ptr.className = 'ptr'; ptr.setAttribute('aria-hidden', 'true');
+ptr.innerHTML = '<span class="ptr-ico">↻</span><span class="ptr-txt"></span>';
+document.body.append(ptr);
+const PTR_GO = 64;
+let ptrStart = null, ptrPull = 0;
+const ptrHide = () => { ptr.classList.remove('show', 'spin'); ptr.style.transform = ''; };
+document.addEventListener('touchstart', e => {
+  ptrStart = null;
+  if (route().name !== 'shows' || scrollY > 0 || e.touches.length > 1 || refreshing || document.body.classList.contains('landing')) return;
+  ptrStart = e.touches[0].clientY; ptrPull = 0;
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (ptrStart == null) return;
+  const d = Math.min(Math.max(0, e.touches[0].clientY - ptrStart) * .5, 90);   // resistance, like native pull-to-refresh
+  ptrPull = scrollY > 0 ? 0 : d;
+  if (!ptrPull) return ptrHide();
+  ptr.classList.add('show');
+  ptr.style.transform = `translateY(${ptrPull}px)`;
+  ptr.querySelector('.ptr-ico').style.transform = `rotate(${ptrPull * 4}deg)`;
+  ptr.querySelector('.ptr-txt').textContent = ptrPull >= PTR_GO ? 'Release to refresh' : 'Pull to refresh';
+}, { passive: true });
+document.addEventListener('touchend', () => {
+  if (ptrStart == null) return;
+  ptrStart = null;
+  if (ptrPull < PTR_GO) return ptrHide();
+  ptr.classList.add('spin'); ptr.style.transform = '';
+  ptr.querySelector('.ptr-ico').style.transform = '';
+  ptr.querySelector('.ptr-txt').textContent = 'Checking for new episodes…';
+  Promise.resolve(refreshAll(true)).finally(() => setTimeout(ptrHide, 300));
+});
+document.addEventListener('touchcancel', () => { ptrStart = null; if (!ptr.classList.contains('spin')) ptrHide(); });
+
 document.addEventListener('toggle', e => {
   const d = e.target;
   if (!d.matches || !d.matches('details.season')) return;
@@ -1221,6 +1256,7 @@ function render(fromRoute) {
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
+  document.documentElement.classList.toggle('ptr-on', r.name === 'shows');   // our pull-to-refresh replaces the browser's here
   // Don't wipe forms the user is typing in on background updates.
   if (!fromRoute && r.name === 'search') return drawResults();
   if (!fromRoute && (r.name === 'login' || r.name === 'account') && document.activeElement?.tagName === 'INPUT') return;

@@ -13,7 +13,7 @@ Live site: https://tvtracker.us
 - **Recommend to a friend** — a button on every show page shares a link (phone share sheet, or copied on a computer). The friend lands on the show with a "<your name> recommends this show" banner and an Add button; if they sign up first, the show is added once they're in.
 - **Contact us** — a footer link opens a short form (name, email, message). Messages are saved in Firestore and listed on the owner's Admin page; set `contactEmailKey` (a free Web3Forms key) in `firebase-config.js` to also get each one by email.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
-- **New episodes pulled automatically** once a day.
+- **New episodes pulled automatically** once a day. On a phone, **pull down** on My Shows to check right away.
 - **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 - **Recommended for you** — Discover opens with Top picks for you and a "Because you watch …" row of posters for each show on your list (from TMDB's "people who liked this also liked" data), each with a ＋ Add button; this week's premieres follow below. Uses the free TMDB API key in `firebase-config.js`.
