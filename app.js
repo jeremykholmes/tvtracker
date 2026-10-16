@@ -106,7 +106,7 @@ async function fetchShow(id) {
 
 let refreshing = null, refreshFailedAt = 0, redrawTimer = null;
 const redrawSoon = () => { clearTimeout(redrawTimer); redrawTimer = setTimeout(() => render(), 150); };
-function refreshAll(manual) {
+function refreshAll(manual, quiet) {   // quiet: no toast at the end (the opening refresh shows its own bubble)
   if (refreshing) return refreshing;
   if (!manual && now() - refreshFailedAt < 30e3) return Promise.resolve();   // don't hammer TVmaze after a failure
   refreshing = (async () => {
@@ -139,9 +139,10 @@ function refreshAll(manual) {
       }
       if (failed) { refreshFailedAt = now(); toast(`Couldn't update ${failed} show${failed > 1 ? 's' : ''} — will try again shortly`); }
       else { meta.lastRefresh = now(); save(K.meta, meta); }
-      if (manual && !failed) toast(n ? `Updated ${n} show${n > 1 ? 's' : ''}` : 'Everything is up to date');
+      if (manual && !quiet && !failed) toast(n ? `Updated ${n} show${n > 1 ? 's' : ''}` : 'Everything is up to date');
     } catch (e) { refreshFailedAt = now(); toast('Refresh failed: ' + e.message); }
     finally { busy(false); refreshing = null; clearTimeout(redrawTimer); render(); }
+    return { n, failed };
   })();
   return refreshing;
 }
@@ -1008,6 +1009,7 @@ function onUser(u) {
     addAfterSignIn();
   }
   else if (!(r === 'login' && !u)) render(true);   // don't wipe a sign-in form someone is typing in
+  if (!openRefreshed) openRefresh();   // the list only just arrived, so do the opening refresh now
   refreshMissing();
 }
 // A show someone tapped Add on before they had an account (e.g. from a recommendation) is added once they're in.
@@ -1286,9 +1288,27 @@ window.addEventListener('hashchange', () => {
   navDepth = back ? Math.max(0, navDepth - 1) : navDepth + 1;
   render(true); scrollTo(0, back ? scrollSpots[location.hash] || 0 : 0);
 });
+/* ---------- refresh on open ----------
+   Every time the app is opened (launched, or switched back to after a few minutes away) it checks for new episodes,
+   with the same spinning bubble as pull-to-refresh on My Shows so you can see it happening. */
+const REOPEN_AFTER = 5 * 60e3;
+let openRefreshed = false, hiddenAt = 0;
+function openRefresh() {
+  if (!followed().length) return;   // nothing to check yet (e.g. the signed-in list hasn't loaded)
+  openRefreshed = true;
+  if (refreshing) return;
+  const show = route().name === 'shows' && !ptr.classList.contains('spin');
+  if (show) { ptr.querySelector('.ptr-txt').textContent = 'Checking for new episodes…'; ptr.classList.add('spin'); }
+  refreshAll(true, true).then(r => {
+    if (!show) return;
+    if (r && !r.failed) ptr.querySelector('.ptr-txt').textContent = r.n ? `Updated ${r.n} show${r.n > 1 ? 's' : ''}` : 'Up to date';
+    setTimeout(ptrHide, r && !r.failed ? 900 : 0);
+  }, () => show && ptrHide());
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  if (now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
+  if (document.visibilityState !== 'visible') { hiddenAt = now(); return; }
+  if (hiddenAt && now() - hiddenAt > REOPEN_AFTER) openRefresh();
+  else if (now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
 });
 window.addEventListener('pagehide', () => { flush(); });
 
@@ -1340,4 +1360,4 @@ accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
-if (followed().length && now() - (meta.lastRefresh || 0) > CHECK_EVERY) refreshAll(false);
+openRefresh();
