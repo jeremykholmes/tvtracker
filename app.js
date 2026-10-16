@@ -826,14 +826,14 @@ views.contact = arg => {
   });
 };
 
-views.admin = async () => {
+views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = '<p class="loading">Loading…</p>'; return; } location.hash = '#/login'; return; }
   if (!cloud.isAdmin()) {
     app.innerHTML = `<div class="empty"><h1>Admin</h1><p>This page is only for the site owner.</p>
       <p class="sub">Your account ID: <code>${esc(user.uid)}</code></p></div>`;
     return;
   }
-  app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
+  if (!quiet) app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
   let list, msgs = [], msgErr = '';
   try { [list, msgs] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; })]); }
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
@@ -1211,8 +1211,12 @@ document.addEventListener('error', e => {
   im.closest('.nchip').classList.remove('logo');
   im.replaceWith(im.dataset.name);
 }, true);
-/* ---------- pull to refresh (My Shows, touch screens) ----------
-   Swipe down from the top of the page: a bubble follows the finger, and letting go past the mark checks for new episodes. */
+/* ---------- pull to refresh (My Shows and Admin, touch screens) ----------
+   Swipe down from the top of the page: a bubble follows the finger, and letting go past the mark reloads that page's data. */
+const PTR_PAGES = {
+  shows: { busy: () => refreshing, msg: 'Checking for new episodes…', run: () => refreshAll(true) },
+  admin: { busy: () => false, msg: 'Refreshing…', run: () => cloud.isAdmin() && views.admin(null, true) }
+};
 const ptr = document.createElement('div');
 ptr.className = 'ptr'; ptr.setAttribute('aria-hidden', 'true');
 ptr.innerHTML = '<span class="ptr-ico">↻</span><span class="ptr-txt"></span>';
@@ -1222,7 +1226,8 @@ let ptrStart = null, ptrPull = 0;
 const ptrHide = () => { ptr.classList.remove('show', 'spin'); ptr.style.transform = ''; };
 document.addEventListener('touchstart', e => {
   ptrStart = null;
-  if (route().name !== 'shows' || scrollY > 0 || e.touches.length > 1 || refreshing || document.body.classList.contains('landing')) return;
+  const pg = PTR_PAGES[route().name];
+  if (!pg || pg.busy() || ptr.classList.contains('spin') || scrollY > 0 || e.touches.length > 1 || document.body.classList.contains('landing')) return;
   ptrStart = e.touches[0].clientY; ptrPull = 0;
 }, { passive: true });
 document.addEventListener('touchmove', e => {
@@ -1241,8 +1246,9 @@ document.addEventListener('touchend', () => {
   if (ptrPull < PTR_GO) return ptrHide();
   ptr.classList.add('spin'); ptr.style.transform = '';
   ptr.querySelector('.ptr-ico').style.transform = '';
-  ptr.querySelector('.ptr-txt').textContent = 'Checking for new episodes…';
-  Promise.resolve(refreshAll(true)).finally(() => setTimeout(ptrHide, 300));
+  const pg = PTR_PAGES[route().name];
+  ptr.querySelector('.ptr-txt').textContent = pg.msg;
+  Promise.resolve(pg.run()).finally(() => setTimeout(ptrHide, 300));
 });
 document.addEventListener('touchcancel', () => { ptrStart = null; if (!ptr.classList.contains('spin')) ptrHide(); });
 
@@ -1260,7 +1266,7 @@ function render(fromRoute) {
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
-  document.documentElement.classList.toggle('ptr-on', r.name === 'shows');   // our pull-to-refresh replaces the browser's here
+  document.documentElement.classList.toggle('ptr-on', r.name in PTR_PAGES);   // our pull-to-refresh replaces the browser's here
   // Don't wipe forms the user is typing in on background updates.
   if (!fromRoute && r.name === 'search') return drawResults();
   if (!fromRoute && (r.name === 'login' || r.name === 'account') && document.activeElement?.tagName === 'INPUT') return;
