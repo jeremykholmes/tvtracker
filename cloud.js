@@ -238,10 +238,18 @@ export async function deleteAccount(password) {
   const b = F.writeBatch(db);
   for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
   b.delete(F.doc(db, 'users', u.uid));
+  b.delete(F.doc(db, 'emailPrefs', u.uid));
   await Promise.race([b.commit(), new Promise((_, no) => setTimeout(() => no({ code: 'auth/network-request-failed' }), 15000))]);
   await A.deleteUser(u);
 }
 export const signOut = () => A.signOut(auth);
+
+// The weekly "new episodes to watch" email (sent by email/weekly.mjs). On unless switched off.
+export async function weeklyEmailOn() {
+  const snap = await F.getDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid));
+  return !(snap.exists() && snap.data().off);
+}
+export const setWeeklyEmail = on => F.setDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid), { off: !on }, { merge: true });
 
 // Saves only what changed, in one batch: shows/profile go to the main document,
 // checkmarks go to their bucket documents. Stored on the device immediately;

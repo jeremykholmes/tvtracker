@@ -1,0 +1,50 @@
+# Weekly "new episodes to watch" email (email/weekly.mjs). Sundays, and on demand from the Actions tab
+# ("Run workflow"), where the mode picks what happens:
+#   test    - emails only the site owner their own list (nothing is recorded)
+#   dry-run - sends nothing; the log says how many people would get an email
+#   send    - emails everyone, like the Sunday run
+# Needs two repository secrets: FIREBASE_SERVICE_ACCOUNT (a Firebase service account key, the whole JSON)
+# and RESEND_API_KEY. See "Weekly email" in README.md.
+name: Weekly new-episodes email
+
+on:
+  schedule:
+    # Sundays 14:07 UTC: 7:07am Pacific / 10:07am Eastern in summer, an hour earlier in winter.
+    - cron: '7 14 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = only to the site owner, dry-run = send nothing, send = everyone'
+        type: choice
+        options: [test, dry-run, send]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency: weekly-email   # never two runs at once, so nobody gets it twice
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+
+      - run: npm ci
+
+      - run: node weekly.mjs
+        env:
+          MODE: ${{ inputs.mode || 'send' }}
+          TEST_TO: jeremykholmes@gmail.com
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
