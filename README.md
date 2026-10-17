@@ -63,6 +63,7 @@ The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file ho
 - `firebase-config.js` — your Firebase project's web config
 - `firestore.rules` — database security rules to paste into Firebase
 - `email/` — the weekly email job (`weekly.mjs`; `digest.mjs` picks the episodes and writes the email), run by `.github/workflows/weekly-email.yml`
+- `sitemap.xml`, `robots.txt` — tell search engines about the site's real pages (the homepage and the privacy policy; `#/…` views aren't separate pages to Google)
 - `privacy.html`, `unsubscribe.html` — the privacy policy, and where the weekly email's unsubscribe link lands
 - `manifest.webmanifest`, `icons/`, `sw.js` — what lets the site be installed as an app
 - `styles.css` — styles (dark/light automatic, mobile bottom tab bar)
