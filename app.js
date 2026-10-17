@@ -416,9 +416,12 @@ views.shows = () => {
   let day = load(K_DAY, '');
   if (day !== '' && !dc[day]) day = '';
   const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
-  const dayChip = (d, label, c) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}">${label} <span>${c}</span></button>`;
+  // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
+  const dayChip = (d, label, c, full) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}" aria-label="${full}, ${c} show${c === 1 ? '' : 's'}">${label}<span>${c} show${c === 1 ? '' : 's'}</span></button>`;
+  const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[d]; };
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
-    ${dayChip('', 'Any day', byNet.length)}${[0, 1, 2, 3, 4, 5, 6].map(i => (new Date().getDay() + i) % 7).filter(d => dc[d]).map(d => dayChip(d, DAYS[d], dc[d])).join('')}</div>` : '';
+    ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
+      .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   const netChip = (n, label, c) => { const ic = n && netIcon(n);
     return `<button type="button" class="nchip${ic ? ' logo' : ''}${n ? '' : ' allchip'}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
