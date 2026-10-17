@@ -800,7 +800,14 @@ views.login = mode => {
         const u = await cloud.signUp(String(fd.get('name')).trim(), String(fd.get('email')).trim(), String(fd.get('password')));
         if (user && user.uid === u.uid) { user.name = u.name; accountChip(); }
       } else await cloud.signIn(String(fd.get('email')).trim(), String(fd.get('password')));
-    } catch (ex) { err.textContent = cloud.friendlyError(ex); err.hidden = false; btn.disabled = false; }
+    } catch (ex) {
+      if (create && ex?.code === 'auth/email-already-in-use')   // maybe a Google account: offer to add this password to it
+        err.innerHTML = `That email already has an account. If you signed up with Google, continue with Google and we'll add this password to that account.
+          <button type="button" class="btn wide gbtn" data-act="google-add-password" style="margin-top:10px">${GOOGLE_G} Continue with Google</button>`;
+      else err.textContent = cloud.friendlyError(ex) +
+        (!create && /invalid-credential|wrong-password/.test(ex?.code || '') && String(fd.get('email')).includes('@') ? ' If you signed up with Google, use Continue with Google.' : '');
+      err.hidden = false; btn.disabled = false;
+    }
   });
 };
 
@@ -864,7 +871,8 @@ views.account = () => {
     location.hash = '#/login'; return;
   }
   const sh = sharedOpen();
-  const pwBtn = cloud.usesPassword() ? '<button class="btn" data-act="change-password">Change password</button>' : '';   // Google sign-ins have no password here
+  const pwBtn = cloud.usesPassword() ? '<button class="btn" data-act="change-password">Change password</button>'
+    : '<button class="btn" data-act="add-password">Add a password</button>';   // Google-only: lets them also sign in with email + password
   if (cloud.isLogin(user.email)) {   // a login someone made: it only opens their list
     app.innerHTML = `<h1>Account</h1>
     <div class="panel"><h3>${esc(user.name)}</h3><p>Username: <b>${esc(cloud.loginName(user.email))}</b></p>
@@ -946,6 +954,48 @@ function changePasswordDialog() {
       err.textContent = /invalid-credential|wrong-password/.test(x?.code || '') ? 'Current password is incorrect.' : cloud.friendlyError(x);
       err.hidden = false; btn.disabled = false; btn.textContent = 'Change password';
     }
+  };
+  d.showModal();
+}
+// Google-only account: add a password so the same email + password also opens this list.
+function addPasswordDialog() {
+  const d = $('#appDialog');
+  d.innerHTML = `<form class="stack" id="addPwForm"><h2>Add a password</h2>
+    <p>You'll be able to sign in with <b>${esc(user.email)}</b> and this password, as well as with Google. Both open the same list.</p>
+    <div class="field"><label>Password (6+ characters)</label><input name="password" type="password" minlength="6" autocomplete="new-password" required></div>
+    <div class="field"><label>Repeat password</label><input name="password2" type="password" minlength="6" autocomplete="new-password" required></div>
+    <p class="formerr" id="addPwErr" hidden></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Add password</button></div></form>`;
+  d.querySelector('[data-close]').onclick = () => d.close();
+  $('#addPwForm').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, btn = f.querySelector('.primary'), err = $('#addPwErr');
+    err.hidden = true;
+    if (f.password.value !== f.password2.value) {
+      err.textContent = 'Passwords don\'t match — please type the same password in both boxes.'; err.hidden = false;
+      f.password2.focus(); return;
+    }
+    btn.disabled = true; btn.textContent = 'Adding…';
+    try { await cloud.addPassword(f.password.value); d.close(); toast('Password added'); render(); }
+    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; btn.disabled = false; btn.textContent = 'Add password'; }
+  };
+  d.showModal();
+}
+// Google sign-in refused because the email already has a password account: prove it with the password, then add Google to it.
+function linkGoogleDialog() {
+  const d = $('#appDialog'), email = cloud.pendingGoogleEmail();
+  d.innerHTML = `<form class="stack" id="linkForm"><h2>You already have an account</h2>
+    <p>There's already an account for <b>${esc(email || 'this email')}</b> with a password. Enter that password to sign in, and Google sign-in will be added to the same account.</p>
+    <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+    <p class="formerr" id="linkErr" hidden></p>
+    <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Sign in and add Google</button></div></form>`;
+  d.querySelector('[data-close]').onclick = () => d.close();
+  $('#linkForm').onsubmit = async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('.primary'), err = $('#linkErr');
+    btn.disabled = true; err.hidden = true;
+    try { await cloud.linkPendingGoogle(e.target.password.value); d.close(); toast('Signed in — you can now also use Continue with Google'); }
+    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; btn.disabled = false; }
   };
   d.showModal();
 }
@@ -1070,6 +1120,7 @@ function onData(data, fromServer) {
 }
 function onCloudError(e) {
   console.warn(e);
+  if (e?.code === 'auth/account-exists-with-different-credential') { linkGoogleDialog(); return; }   // after a Google redirect sign-in
   if (e?.code === 'permission-denied' && sharedOpen()) {   // the owner changed or removed this login
     const name = sharedOpen().name;
     cloud.relink().then(l => {
@@ -1204,8 +1255,23 @@ const actions = {
     if (!cache[s.id]) { try { await fetchShow(s.id); render(); } catch { } }
   },
   async google() {
-    try { await cloud.google(); } catch (e) { const el = $('#authErr'); if (el) { el.textContent = cloud.friendlyError(e); el.hidden = false; } else toast(cloud.friendlyError(e)); }
+    try { await cloud.google(); } catch (e) {
+      if (e?.code === 'auth/account-exists-with-different-credential') { linkGoogleDialog(); return; }
+      const el = $('#authErr'); if (el) { el.textContent = cloud.friendlyError(e); el.hidden = false; } else toast(cloud.friendlyError(e));
+    }
   },
+  async 'google-add-password'() {
+    const f = $('#authForm');
+    try {
+      const added = await cloud.googleThenAddPassword(f.email.value.trim(), f.password.value);
+      toast(added ? 'Signed in — you can now also sign in with your email and password' : 'Signed in with Google');
+    } catch (e) {
+      if (e?.code === 'auth/account-exists-with-different-credential') { linkGoogleDialog(); return; }
+      const el = $('#authErr');   // gone if the Google sign-in already went through
+      if (el) { el.textContent = cloud.friendlyError(e); el.hidden = false; } else toast(cloud.friendlyError(e));
+    }
+  },
+  'add-password'() { addPasswordDialog(); },
   async forgot() {
     const email = $('#authForm input[name=email]')?.value.trim(), el = $('#authErr');
     if (!email) { el.textContent = 'Type your email above first, then tap "Forgot password?"'; el.hidden = false; return; }
