@@ -29,7 +29,7 @@ export async function start({ onUser, onData, onError }) {
   try {
     db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
   } catch (e) { console.warn('Offline cache unavailable, using memory', e); db = F.getFirestore(app); }
-  A.getRedirectResult(auth).catch(onError);
+  A.getRedirectResult(auth).catch(e => onError(rememberPending(e)));
   A.onAuthStateChanged(auth, async user => {
     unsubs.forEach(u => u()); unsubs = [];
     const u = user ? toUser(user) : null;
@@ -169,8 +169,52 @@ export async function google() {
   try { await A.signInWithPopup(auth, provider); }
   catch (e) {
     if (/popup-blocked|operation-not-supported/.test(e.code || '')) return A.signInWithRedirect(auth, provider);
-    throw e;
+    throw rememberPending(e);
   }
+}
+
+/* ---------- one account per email: Google + password ----------
+   Firebase keeps one account per email address. Google sign-in on an email that already has a password
+   account usually just opens that account, but for some addresses (e.g. work emails) Firebase refuses until
+   the password proves it's the same person — then the Google sign-in is added to it. */
+let pendingGoogle = null;   // { email, cred } from the refused Google sign-in
+function rememberPending(e) {
+  if (e?.code === 'auth/account-exists-with-different-credential')
+    pendingGoogle = { email: e.customData?.email || '', cred: A.GoogleAuthProvider.credentialFromError(e) };
+  return e;
+}
+export const pendingGoogleEmail = () => pendingGoogle?.email || '';
+export async function linkPendingGoogle(password) {
+  const p = pendingGoogle; if (!p?.cred) throw new Error('Please start again with "Continue with Google".');
+  const { user: u } = await A.signInWithEmailAndPassword(auth, p.email, password);
+  pendingGoogle = null;
+  await A.linkWithCredential(u, p.cred);
+}
+// Adds an email + password sign-in to a Google account, so either one opens the same list.
+export async function addPassword(password) {
+  const u = auth.currentUser; if (!u) throw new Error('Not signed in.');
+  const cred = A.EmailAuthProvider.credential(u.email, password);
+  try { await A.linkWithCredential(u, cred); }
+  catch (e) {
+    if (e?.code !== 'auth/requires-recent-login') throw e;
+    await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
+    await A.linkWithCredential(u, cred);
+  }
+}
+// "Create account" with an email that already has a Google account: sign in with Google, then add the password to it.
+// Resolves false if that account already had a password (nothing added).
+export async function googleThenAddPassword(email, password) {
+  const provider = new A.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account', login_hint: email });
+  let u;
+  try { ({ user: u } = await A.signInWithPopup(auth, provider)); } catch (e) { throw rememberPending(e); }
+  if ((u.email || '').toLowerCase() !== email.toLowerCase()) {
+    await A.signOut(auth);
+    throw new Error(`That Google account is ${u.email}, not ${email}. Try again and choose ${email}.`);
+  }
+  if (usesPassword()) return false;
+  await A.linkWithCredential(u, A.EmailAuthProvider.credential(u.email, password));
+  return true;
 }
 export const resetPassword = email => A.sendPasswordResetEmail(auth, email);
 export const usesPassword = () => !!auth?.currentUser?.providerData.some(p => p.providerId === 'password');
@@ -230,6 +274,9 @@ export function friendlyError(e) {
     'auth/popup-closed-by-user': 'Google sign-in was closed before finishing.',
     'auth/user-mismatch': 'That\'s a different Google account — choose the one you\'re signed in with.',
     'auth/requires-recent-login': 'Please sign out, sign back in, then try again.',
+    'auth/account-exists-with-different-credential': 'You already have an account with this email. Sign in with its password to add Google to it.',
+    'auth/provider-already-linked': 'This account already has that sign-in.',
+    'auth/credential-already-in-use': 'That sign-in already belongs to a different account.',
     'auth/unauthorized-domain': 'This website isn\'t on Firebase\'s authorized domains list yet.',
     'auth/operation-not-allowed': 'That sign-in method isn\'t turned on in Firebase yet.',
     'auth/network-request-failed': 'Network problem — check your connection.',
