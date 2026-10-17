@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Unsubscribe · TV Tracker</title>
+  <meta name="theme-color" content="#0e1014">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icons/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- The link at the bottom of the weekly email (email/weekly.mjs) lands here: ?u=<account id>&k=<token>.
+       It switches the email off without signing in; firestore.rules only allows that with the right token. -->
+  <header class="top">
+    <a href="./" class="brand"><img src="icons/logo.svg" alt="" class="brandlogo"> TV Tracker</a>
+  </header>
+  <main id="app"><div class="empty"><h1 id="title">Unsubscribing…</h1><p id="msg">One moment.</p></div></main>
+  <script type="module">
+    const title = document.getElementById('title'), msg = document.getElementById('msg');
+    const show = (t, m) => { title.textContent = t; msg.innerHTML = m; };
+    const q = new URLSearchParams(location.search), uid = q.get('u'), token = q.get('k');
+    try {
+      if (!uid || !token) throw new Error('missing');
+      const { firebaseConfig } = await import('./firebase-config.js');
+      const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
+      const [{ initializeApp }, F] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-firestore.js`)]);
+      const db = F.getFirestore(initializeApp(firebaseConfig));
+      await F.updateDoc(F.doc(db, 'emailPrefs', uid), { off: true, unsubToken: token });
+      show('You\'re unsubscribed', 'You won\'t get the weekly new-episodes email any more. You can switch it back on from your <a href="./#/account">Account page</a>.');
+    } catch (e) {
+      console.warn(e);
+      show('That link didn\'t work', 'It may be incomplete or out of date. You can switch the weekly email off on your <a href="./#/account">Account page</a> instead, or <a href="./#/contact">contact us</a>.');
+    }
+  </script>
+</body>
+</html>

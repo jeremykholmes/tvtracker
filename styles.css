@@ -93,6 +93,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
 .netfilter { display: flex; flex-wrap: wrap; gap: 8px; }
+.checkrow { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+.checkrow input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .flabel { font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
 .nchip { font: inherit; font-size: 13px; font-weight: 600; height: 44px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--muted); cursor: pointer; }
 .nchip:hover { color: var(--text); border-color: var(--muted); }

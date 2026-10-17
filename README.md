@@ -14,6 +14,7 @@ Live site: https://tvtracker.us
 - **Contact us** — a footer link opens a short form (name, email, message). Messages are saved in Firestore and listed on the owner's Admin page; set `contactEmailKey` (a free Web3Forms key) in `firebase-config.js` to also get each one by email.
 - **Episode checklist** per season: check single episodes, **Mark all**, or **Watched Up To Here** to mark everything up to an episode watched.
 - **New episodes pulled automatically** once a day. On a phone, **pull down** on My Shows to check right away.
+- **Weekly email** — on Sundays, everyone with new episodes from the past week that they haven't checked off gets a short list of them by email. Unsubscribe link in every email; on/off switch on the Account page. See [Weekly email](#weekly-email) below.
 - **Get the app** — install TV Tracker with its own icon on a phone (iPhone or Android) or computer. Chrome and Edge show their install prompt; other browsers get step-by-step instructions.
 - **Upcoming** air dates for your shows, and **Discover** for this week's premieres.
 - **Recommended for you** — Discover opens with Top picks for you and a "Because you watch …" row of posters for each show on your list (from TMDB's "people who liked this also liked" data), each with a ＋ Add button; this week's premieres follow below. Uses the free TMDB API key in `firebase-config.js`.
@@ -29,6 +30,18 @@ Live site: https://tvtracker.us
 
 The Firebase config values are designed to be public; `firestore.rules` is what keeps each user's data private (users can only read and write their own document, plus the lists of the owners who made a login for them). The free Spark plan covers a household and well beyond.
 
+## Weekly email
+`.github/workflows/weekly-email.yml` runs `email/weekly.mjs` every Sunday at 14:07 UTC. For each account with a real email address (not logins made for others), it reads their shows and checkmarks from Firestore, gets each show's episodes from TVmaze, and if any episode aired in the past 7 days and isn't checked off, emails them a list through [Resend](https://resend.com). Each person gets it at most once every 6 days. `emailPrefs/{uid}` in Firestore holds each person's on/off setting, their unsubscribe token and when they were last emailed. The unsubscribe link goes to `unsubscribe.html`, which switches the email off without signing in.
+
+One-time setup:
+1. **Resend**: create a free account (100 emails a day, 3,000 a month), then **Domains → Add domain** → `tvtracker.us`, and add the DNS records it shows in Cloudflare (DNS only). Once it says *Verified*, **API Keys → Create API key** (sending access).
+2. **Firebase service account**: Firebase console → **Project settings → Service accounts → Generate new private key**. This downloads a JSON file; it gives full access to the project, so keep it private and delete the file once it's saved in GitHub.
+3. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**: `RESEND_API_KEY` (the Resend key) and `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file's contents).
+4. Publish the latest `firestore.rules` (it adds the rules for `emailPrefs`).
+5. Actions → **Weekly new-episodes email → Run workflow** with mode **test**: it emails only the site owner's own list (if they have something new from the past week). **dry-run** reports how many people would get an email, without sending.
+
+The repo is public, so its Actions logs are too: the job never prints anyone's email address.
+
 ## Custom domain
 The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file holds the domain). DNS is on Cloudflare: four `A` records on `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `CNAME` on `www` → `jeremykholmes.github.io`, all set to **DNS only** (grey cloud) so GitHub can issue the HTTPS certificate.
 
@@ -39,5 +52,7 @@ The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file ho
 - `CNAME` — the custom domain GitHub Pages serves the site on
 - `firebase-config.js` — your Firebase project's web config
 - `firestore.rules` — database security rules to paste into Firebase
+- `email/` — the weekly email job (`weekly.mjs`; `digest.mjs` picks the episodes and writes the email), run by `.github/workflows/weekly-email.yml`
+- `privacy.html`, `unsubscribe.html` — the privacy policy, and where the weekly email's unsubscribe link lands
 - `manifest.webmanifest`, `icons/`, `sw.js` — what lets the site be installed as an app
 - `styles.css` — styles (dark/light automatic, mobile bottom tab bar)

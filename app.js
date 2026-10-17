@@ -902,12 +902,23 @@ views.account = () => {
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
+  <div class="panel"><h3>Weekly email</h3>
+    <label class="checkrow"><input type="checkbox" id="weeklyEmail" disabled> Email me once a week when new episodes of my shows are out</label>
+    <p class="sub">Sent on Sundays to ${esc(user.email)}, only when there's something new you haven't checked off.</p></div>
   <div class="panel"><h3>Questions or feedback?</h3><p>Send a note and we'll reply by email.</p><div class="actions"><a class="btn" href="#/contact">✉ Contact us</a></div></div>
   <div class="panel"><h3>Delete account</h3>
     <p>Permanently delete your account and all of your data.</p>
     <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>
   ${cloud.isAdmin() ? '<div class="panel"><h3>Site admin</h3><p>See every account on the site.</p><div class="actions"><a class="btn" href="#/admin">Open admin page</a></div></div>' : ''}`;
   drawLogins();
+  const we = $('#weeklyEmail');
+  cloud.weeklyEmailOn().then(on => { we.checked = on; we.disabled = false; }).catch(x => console.warn('weekly email setting', x));
+  we.onchange = async () => {
+    we.disabled = true;
+    try { await cloud.setWeeklyEmail(we.checked); toast(we.checked ? 'Weekly email switched on' : 'Weekly email switched off'); }
+    catch (x) { we.checked = !we.checked; toast(cloud.friendlyError(x)); }
+    we.disabled = false;
+  };
   $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target, err = $('#loginErr'), btn = f.querySelector('.primary');

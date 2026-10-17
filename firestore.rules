@@ -5,6 +5,9 @@ rules_version = '2';
 // Only the owner can change who has access, their profile, or delete the account's data.
 // The site admin (one verified email address, below) can also read every account, for the Admin page.
 // Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
+// emailPrefs/{uid}: the weekly email's settings. The email job (which bypasses these rules) stores an unsubscribe
+// token and when it last emailed. The owner can switch the email on or off; anyone holding the token (from the
+// unsubscribe link in an email) can switch it off, without signing in.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -24,6 +27,15 @@ service cloud.firestore {
         allow read: if isOwner(uid) || isMember(uid);
         allow write: if isOwner(uid) || isEditor(uid);
       }
+    }
+
+    match /emailPrefs/{uid} {
+      allow get: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['off']) && request.resource.data.off is bool;
+      allow update: if (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off']) && request.resource.data.off is bool)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'unsubToken']) && request.resource.data.off == true
+            && 'token' in resource.data && request.resource.data.unsubToken == resource.data.token);
+      allow delete: if isOwner(uid);
     }
 
     match /messages/{id} {

@@ -1,0 +1,9 @@
+{
+  "name": "tvtracker-weekly-email",
+  "private": true,
+  "type": "module",
+  "description": "Weekly new-episodes email, run by .github/workflows/weekly-email.yml",
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}
