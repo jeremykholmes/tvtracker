@@ -422,9 +422,10 @@ views.shows = () => {
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
-  const netChip = (n, label, c) => { const ic = n && netIcon(n);
-    return `<button type="button" class="nchip${ic ? ' logo' : ''}${n ? '' : ' allchip'}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}">${ic
-      ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)} <span>${c}</span></button>`; };
+  // Like the day buttons: the service (its logo, or its name over the count) and how many of your shows are on it.
+  const netChip = (n, label, c) => { const ic = n && netIcon(n), shows = `${c} show${c === 1 ? '' : 's'}`;
+    return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
+      ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
   // Up next order: every show with aired episodes not checked off yet comes first — shows not started at all, then one
@@ -1319,7 +1320,7 @@ document.addEventListener('change', e => {
 document.addEventListener('error', e => {
   const im = e.target;
   if (!im.matches?.('.nchip img')) return;
-  im.closest('.nchip').classList.remove('logo');
+  im.closest('.nchip').classList.replace('logo', 'stack');   // name over the count, like other services
   im.replaceWith(im.dataset.name);
 }, true);
 /* ---------- pull to refresh (My Shows and Admin, touch screens) ----------

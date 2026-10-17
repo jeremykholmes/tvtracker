@@ -99,8 +99,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .nchip span { font-weight: 500; opacity: .75; }
 .nchip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .nchip.daychip, .nchip.allchip { width: 104px; justify-content: center; padding: 0 8px; }   /* day buttons and All: same fixed width */
-.nchip.daychip { flex-direction: column; gap: 1px; line-height: 1.15; }   /* day on top, "3 shows" under it */
-.nchip.daychip span { font-size: 11.5px; }
+.nchip.daychip, .nchip.stack { flex-direction: column; gap: 1px; line-height: 1.15; }   /* day or service name on top, "3 shows" under it */
+.nchip.daychip span, .nchip.stack span, .nchip.logo span { font-size: 11.5px; }
 .nchip.logo { min-width: 104px; padding: 0 24px 0 5px; gap: 16px; justify-content: space-between; }
 .nchip.logo img { width: 36px; height: 36px; border-radius: 9px; display: block; background: #fff; object-fit: contain; }
 .nchip.logo.on { box-shadow: 0 0 0 2px var(--accent); }
