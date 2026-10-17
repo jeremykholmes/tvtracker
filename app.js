@@ -1459,7 +1459,7 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 
 // The footer is drawn here (app.js always loads fresh) so changes to it show up even if index.html is cached.
 $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contact us</a>
-  <span>Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
+  <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError })
