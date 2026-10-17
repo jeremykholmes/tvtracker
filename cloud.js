@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig, adminEmail, contactEmailKey } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminEmail, contactEmailKey, weeklyEmail } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -245,6 +245,7 @@ export async function deleteAccount(password) {
 export const signOut = () => A.signOut(auth);
 
 // The weekly "new episodes to watch" email (sent by email/weekly.mjs). On unless switched off.
+export const weeklyEmailEnabled = !!weeklyEmail;   // the site offers the switch only once the email is set up
 export async function weeklyEmailOn() {
   const snap = await F.getDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid));
   return !(snap.exists() && snap.data().off);

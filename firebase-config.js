@@ -19,3 +19,7 @@ export const tmdbKey = 'ee8ab7c29b7aa9166f87292204ab04ba';
 // Email of the site owner, who gets the Admin page (whether they sign in with Google or a password —
 // both open the same account). It must match the email in firestore.rules, which is what actually grants access.
 export const adminEmail = 'jeremykholmes@gmail.com';
+
+// Weekly "new episodes to watch" email: true shows its on/off switch on the Account page. Leave false until the
+// email is set up (see "Weekly email" in README.md); the Sunday run also waits for the WEEKLY_EMAIL repo variable.
+export const weeklyEmail = false;

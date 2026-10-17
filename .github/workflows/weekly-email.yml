@@ -26,6 +26,9 @@ concurrency: weekly-email   # never two runs at once, so nobody gets it twice
 
 jobs:
   email:
+    # Paused until the email is set up: the Sunday run only goes ahead once the repo variable WEEKLY_EMAIL is "on"
+    # (Settings → Secrets and variables → Actions → Variables). Manual runs always go ahead.
+    if: github.event_name == 'workflow_dispatch' || vars.WEEKLY_EMAIL == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
