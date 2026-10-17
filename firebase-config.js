@@ -16,6 +16,6 @@ export const contactEmailKey = '';
 
 export const tmdbKey = 'ee8ab7c29b7aa9166f87292204ab04ba';
 
-// Firebase account ID (Authentication → Users → User UID) of the site owner, who gets the Admin page.
-// It must match the ID in firestore.rules, which is what actually grants access.
-export const adminUid = 'EU3VXDDYuYa5gymkINeUNPxsEem1';
+// Email of the site owner, who gets the Admin page (whether they sign in with Google or a password —
+// both open the same account). It must match the email in firestore.rules, which is what actually grants access.
+export const adminEmail = 'jeremykholmes@gmail.com';

@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig, adminUid, contactEmailKey } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminEmail, contactEmailKey } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -145,7 +145,8 @@ export async function messages() {
 export const deleteMessage = id => F.deleteDoc(F.doc(db, 'messages', id));
 
 /* ---------- admin ---------- */
-export const isAdmin = () => !!adminUid && auth?.currentUser?.uid === adminUid;
+// Verified email only: Google confirms it on Google sign-in, so nobody can claim the address with a password sign-up.
+export const isAdmin = () => !!adminEmail && !!auth?.currentUser?.emailVerified && (auth.currentUser.email || '').toLowerCase() === adminEmail.toLowerCase();
 // Every account's stored profile and list size (only the admin's account is allowed to read these).
 export async function allAccounts() {
   const snap = await F.getDocs(F.collection(db, 'users'));

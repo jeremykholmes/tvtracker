@@ -3,7 +3,7 @@ rules_version = '2';
 // people (listed by account id in users/{uid}.logins) with access to their shows and checkmarks:
 // role 'view' can only look; role 'edit' can also make changes.
 // Only the owner can change who has access, their profile, or delete the account's data.
-// The site admin (one account ID, below) can also read every account, for the Admin page.
+// The site admin (one verified email address, below) can also read every account, for the Admin page.
 // Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -11,7 +11,7 @@ service cloud.firestore {
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function logins(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.get('logins', {}); }
     function isMember(uid) { return signedIn() && request.auth.uid in logins(uid); }
-    function isAdmin() { return signedIn() && request.auth.uid == 'EU3VXDDYuYa5gymkINeUNPxsEem1'; }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'jeremykholmes@gmail.com' && request.auth.token.email_verified == true; }
     function isEditor(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'edit'; }
 
     match /users/{uid} {
