@@ -803,7 +803,8 @@ views.login = mode => {
     } catch (ex) {
       if (create && ex?.code === 'auth/email-already-in-use')   // maybe a Google account: offer to add this password to it
         err.innerHTML = `That email already has an account. If you signed up with Google, continue with Google and we'll add this password to that account.
-          <button type="button" class="btn wide gbtn" data-act="google-add-password" style="margin-top:10px">${GOOGLE_G} Continue with Google</button>`;
+          <button type="button" class="btn wide gbtn" data-act="google-add-password" style="margin-top:10px">${GOOGLE_G} Continue with Google</button>
+          If you signed up with a password and don't remember it, <button type="button" class="linkbtn" data-act="forgot">email me a reset link</button>.`;
       else err.textContent = cloud.friendlyError(ex) +
         (!create && /invalid-credential|wrong-password/.test(ex?.code || '') && String(fd.get('email')).includes('@') ? ' If you signed up with Google, use Continue with Google.' : '');
       err.hidden = false; btn.disabled = false;
@@ -987,9 +988,16 @@ function linkGoogleDialog() {
   d.innerHTML = `<form class="stack" id="linkForm"><h2>You already have an account</h2>
     <p>There's already an account for <b>${esc(email || 'this email')}</b> with a password. Enter that password to sign in, and Google sign-in will be added to the same account.</p>
     <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
-    <p class="formerr" id="linkErr" hidden></p>
+    <p class="formerr" id="linkErr" hidden></p><p class="sub" id="linkMsg" hidden></p>
+    <button type="button" class="linkbtn" data-reset>Forgot password? Email me a reset link</button>
     <div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Sign in and add Google</button></div></form>`;
   d.querySelector('[data-close]').onclick = () => d.close();
+  d.querySelector('[data-reset]').onclick = async () => {   // they can set a new one from the email, then enter it here
+    const err = $('#linkErr'), msg = $('#linkMsg');
+    err.hidden = msg.hidden = true;
+    try { await cloud.resetPassword(email); msg.textContent = `Reset email sent to ${email}. Set a new password from it, then enter that password here.`; msg.hidden = false; }
+    catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
+  };
   $('#linkForm').onsubmit = async e => {
     e.preventDefault();
     const btn = e.target.querySelector('.primary'), err = $('#linkErr');
