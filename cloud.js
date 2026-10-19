@@ -37,8 +37,16 @@ export async function start({ onUser, onData, onError }) {
     if ((auth.currentUser?.uid || null) !== (user?.uid || null)) return;   // signed in/out again meanwhile
     active = u ? u.linked?.uid || u.uid : null;
     onUser(u);
-    if (u) listen(active, onData, onError);
+    if (u) { listen(active, onData, onError); noteLogin(user); }
   });
+}
+
+// Records when this account last opened the site signed in, for the Admin page's "Last login".
+// At most once an hour per device; only on an account that already has a document (so it never creates one).
+function noteLogin(user) {
+  const key = 'tvt-lastlogin-' + user.uid, now = Date.now();
+  try { if (now - (+localStorage.getItem(key) || 0) < 3600e3) return; localStorage.setItem(key, String(now)); } catch (e) {}
+  F.updateDoc(F.doc(db, 'users', user.uid), { lastLogin: now }).catch(() => {});
 }
 
 // Two listeners (main doc + checkmark buckets) combined into one view for the app.
@@ -153,7 +161,7 @@ export async function allAccounts() {
   return snap.docs.map(d => {
     const x = d.data();
     return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
-      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0 };
+      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0 };
   });
 }
 
