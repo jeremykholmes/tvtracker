@@ -714,30 +714,43 @@ async function recShow(b) {
 
 /* ---------- kid logins ----------
    An owner can make a login with Kid access: it sees only the shows the owner allows (up to a highest US TV rating, from
-   TMDB, minus any shows they pick to hide), can't add or remove shows, and keeps its own checkmarks. The allowed shows are
+   TMDB, plus any they allow anyway, minus any they pick to hide), can't add or remove shows, and keeps its own checkmarks. The allowed shows are
    written to a separate copy (users/{owner}/kids/{kid}) that's all the kid's login can read, so hidden shows never reach
    its device. The owner's app — or an editor's — rewrites the copy whenever the list or the settings change. */
 const RATINGS = ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'];
 const RATING_NAMES = { 'TV-Y': 'All children', 'TV-Y7': 'Age 7 and up', 'TV-G': 'General audience', 'TV-PG': 'Parental guidance', 'TV-14': 'Age 14 and up', 'TV-MA': 'Mature audience' };
 const KID_DEFAULT_RATING = 'TV-PG';
 const ratingOk = (r, max) => !max || (RATINGS.includes(r) && RATINGS.indexOf(r) <= RATINGS.indexOf(max));   // no rating: hidden while there's a limit
-// A show's US TV rating ('' when it has none), from TMDB; kept on the device for a month.
+// With no US rating, another country's is used instead, as the closest US level — on the strict side where they differ.
+const ABROAD = {
+  GB: { U: 'TV-G', PG: 'TV-PG', '12': 'TV-14', '12A': 'TV-14', '15': 'TV-MA', '18': 'TV-MA' },
+  CA: { C: 'TV-Y', C8: 'TV-Y7', G: 'TV-G', PG: 'TV-PG', '14+': 'TV-14', '18+': 'TV-MA' },
+  AU: { P: 'TV-Y', C: 'TV-Y7', G: 'TV-G', PG: 'TV-PG', M: 'TV-14', 'MA15+': 'TV-MA', 'AV15+': 'TV-MA', 'R18+': 'TV-MA' },
+  DE: { '0': 'TV-G', '6': 'TV-PG', '12': 'TV-14', '16': 'TV-MA', '18': 'TV-MA' }
+};
+const COUNTRY = { GB: 'UK', CA: 'Canada', AU: 'Australia', DE: 'Germany' };
+// A show's US TV rating ({ r, from }: r is '' when it has none; from is the country it came from, '' for the US), from TMDB.
+// Kept on the device for a month.
 async function ratingOf(id) {
-  const c = tm.rate[id]; if (c && now() - c.t < 30 * DAY) return c.r;
+  const c = tm.rate[id]; if (c && c.v === 2 && now() - c.t < 30 * DAY) return c.r;
   if (!config.tmdbKey) return '';
   const s = cache[id]?.show || (await fetchShow(id))?.show; if (!s) return '';
   if (tm.map[id] === undefined) tm.map[id] = await tmdbId(s);
-  const j = tm.map[id] ? await tmdb(`/tv/${tm.map[id]}/content_ratings`) : null;
-  const r = String(j?.results?.find(x => x.iso_3166_1 === 'US')?.rating || '').toUpperCase().replace(/-FV$/, '');
-  tm.rate[id] = { r: RATINGS.includes(r) ? r : '', t: now() }; save(K_TMDB, tm);
-  return tm.rate[id].r;
+  const list = (tm.map[id] && (await tmdb(`/tv/${tm.map[id]}/content_ratings`))?.results) || [];
+  const of = cc => String(list.find(x => x.iso_3166_1 === cc)?.rating || '').toUpperCase().trim();
+  let r = of('US').replace(/-FV$/, ''), from = '';
+  if (!RATINGS.includes(r)) {   // the strictest of the other countries' ratings
+    r = ''; for (const cc in ABROAD) { const x = ABROAD[cc][of(cc)]; if (x && RATINGS.indexOf(x) > RATINGS.indexOf(r)) { r = x; from = cc; } }
+  }
+  tm.rate[id] = { r, from, t: now(), v: 2 }; save(K_TMDB, tm);
+  return r;
 }
-// The copy a kid login reads: the open list's shows, minus hidden ones and any over the highest rating.
-async function kidCopyFor({ maxRating = '', hide = {} }) {
+// The copy a kid login reads: the open list's shows, minus hidden ones and any over the highest rating that aren't allowed anyway.
+async function kidCopyFor({ maxRating = '', hide = {}, allow = {} }) {
   const list = followed().filter(s => !hide[s.id]);
-  if (maxRating) await inFours(list, s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
+  if (maxRating) await inFours(list.filter(s => !allow[s.id]), s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
   const shows = {};
-  for (const s of list) if (ratingOk(tm.rate[s.id]?.r, maxRating)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
+  for (const s of list) if (allow[s.id] || ratingOk(tm.rate[s.id]?.r, maxRating)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
   return { ownerName: sharedOpen()?.name || user.name, maxRating, shows, updated: now() };
 }
 let kidLogins = {}, kidSent = {}, kidTimer = null, kidSyncing = false;   // kidSent: what each kid's copy was last written with
@@ -758,30 +771,38 @@ async function syncKids() {
 // A kid's device keeps no copy of the owner's full list (e.g. saved before the login was changed to Kid).
 function forgetFullList() { if (isKid()) try { localStorage.removeItem(`${K.state}.${user.linked.uid}`); } catch { } }
 
-// The owner picks the highest rating and any shows to hide for a kid login. Resolves the settings, or null if cancelled.
+// The owner picks the highest rating, any shows to allow anyway (ones the limit would hide) and any shows to hide for a kid
+// login. Resolves the settings, or null if cancelled.
 function kidSettingsDialog(name, settings) {
-  const d = $('#appDialog'), hide = { ...(settings.hide || {}) };
+  const d = $('#appDialog'), hide = { ...(settings.hide || {}) }, allow = { ...(settings.allow || {}) };
   const list = followed().map(f => showInfo(f.id) || f).sort((a, b) => a.name.localeCompare(b.name));
-  const label = id => { const r = tm.rate[id]; return !config.tmdbKey ? '' : !r ? 'Checking rating…' : r.r || 'No rating'; };
+  const label = id => { const r = tm.rate[id]; return !config.tmdbKey ? '' : !r || r.v !== 2 ? 'Checking rating…' : r.r ? r.r + (r.from ? ` (${COUNTRY[r.from]})` : '') : 'No rating'; };
   d.innerHTML = `<form class="stack kidform" id="kidForm"><h2>What ${esc(name)} can see</h2>
     ${config.tmdbKey ? `<div class="field"><label for="kidMax">Highest rating</label><select id="kidMax" name="max" class="rolesel">
       <option value="">Any rating — no limit</option>${RATINGS.slice(0, -1).map(r => `<option value="${r}">${r} · ${RATING_NAMES[r]}</option>`).join('')}</select>
-      <p class="sub">US TV ratings, from TMDB. While a limit is set, shows without a rating are hidden too.</p></div>` : ''}
+      <p class="sub">US TV ratings, from TMDB; when a show has no US rating, the UK's, Canada's, Australia's or Germany's is used
+        instead. While a limit is set, shows it hides — and any still without a rating — can be let through with <b>Allow</b>.</p></div>` : ''}
     <div><div class="kidhead">Hide these shows</div>
-      ${list.length ? `<div class="kidshows">${list.map(s => `<label class="checkrow"><input type="checkbox" value="${s.id}"${hide[s.id] ? ' checked' : ''}>
-        <span class="grow">${esc(s.name)}</span><span class="sub kidrate" data-id="${s.id}"></span></label>`).join('')}</div>`
+      ${list.length ? `<div class="kidshows">${list.map(s => `<div class="kidrow" data-id="${s.id}">
+        <label class="checkrow"><input type="checkbox" class="hidebox" value="${s.id}"${hide[s.id] ? ' checked' : ''}><span class="kidname">${esc(s.name)}</span></label>
+        <span class="kidmeta"><span class="sub kidrate"></span>
+        <label class="allowbtn" hidden><input type="checkbox" class="allowbox" value="${s.id}"${allow[s.id] ? ' checked' : ''}>Allow</label></span></div>`).join('')}</div>`
         : '<p class="sub">Shows you add to your list will appear here.</p>'}</div>
-    <p class="sub">${esc(name)} sees only the shows that pass both, can't add or remove shows, and keeps their own checkmarks.</p>
+    <p class="sub">${esc(name)} sees only the shows within the rating or allowed, minus any you hide. They can't add or remove shows, and keep their own checkmarks.</p>
     <div class="actions"><button class="btn primary">Save</button><button type="button" class="btn" id="kidCancel">Cancel</button></div></form>`;
   const max = $('#kidMax', d);
   if (max) max.value = settings.maxRating || '';
-  // Each show's rating, dimmed when the chosen limit hides it anyway.
-  const marks = () => d.querySelectorAll('.kidrate').forEach(el => {
-    const id = +el.dataset.id, r = tm.rate[id];
-    el.textContent = label(id);
-    el.closest('.checkrow').classList.toggle('overlimit', !!(max?.value && r && !ratingOk(r.r, max.value)));
+  // Each show's rating. One the chosen limit hides is crossed out, with an Allow tick to let it through anyway.
+  const marks = () => d.querySelectorAll('.kidrow').forEach(row => {
+    const id = +row.dataset.id, r = tm.rate[id], over = !!(max?.value && r && r.v === 2 && !ratingOk(r.r, max.value));
+    const allowed = row.querySelector('.allowbox').checked;
+    row.querySelector('.kidrate').textContent = label(id);
+    row.querySelector('.allowbtn').hidden = !over;
+    row.classList.toggle('overlimit', over && !allowed);
+    row.classList.toggle('allowed', over && allowed);
   });
   marks(); max?.addEventListener('change', marks);
+  d.querySelectorAll('.allowbox').forEach(b => b.addEventListener('change', marks));
   if (config.tmdbKey) inFours(list, async s => { await ratingOf(s.id); if (d.open) marks(); });
   d.showModal();
   return new Promise(done => {
@@ -790,8 +811,10 @@ function kidSettingsDialog(name, settings) {
     d.addEventListener('close', () => done(null), { once: true });
     $('#kidForm', d).onsubmit = e => {
       e.preventDefault();
-      const h = {}; d.querySelectorAll('.kidshows input:checked').forEach(i => { h[i.value] = true; });
-      finish({ maxRating: max?.value || '', hide: h });
+      const h = {}, a = {};
+      d.querySelectorAll('.hidebox:checked').forEach(i => { h[i.value] = true; });
+      d.querySelectorAll('.allowbtn:not([hidden]) .allowbox:checked').forEach(i => { a[i.value] = true; });   // only for shows the limit hides
+      finish({ maxRating: max?.value || '', hide: h, allow: a });
     };
   });
 }
@@ -1046,7 +1069,7 @@ async function drawLogins() {
     const list = await cloud.logins(), byUid = Object.fromEntries(list.map(l => [l.uid, l]));
     const opt = (l, v, t) => `<option value="${v}"${l.role === v ? ' selected' : ''}>${t}</option>`;
     box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}${l.role === 'kid'
-        ? ` · ${l.maxRating ? 'up to ' + esc(l.maxRating) : 'any rating'}${Object.keys(l.hide).length ? ` · ${Object.keys(l.hide).length} hidden` : ''}` : ''}</span></span>
+        ? ` · ${l.maxRating ? 'up to ' + esc(l.maxRating) : 'any rating'}${l.maxRating && Object.keys(l.allow).length ? ` · ${Object.keys(l.allow).length} allowed` : ''}${Object.keys(l.hide).length ? ` · ${Object.keys(l.hide).length} hidden` : ''}` : ''}</span></span>
       <span class="actions">${l.role === 'kid' ? `<button class="btn sm" data-act="kid-settings" data-uid="${esc(l.uid)}">What they see</button>` : ''}
       <select class="rolesel" data-uid="${esc(l.uid)}" aria-label="Access for ${esc(l.name)}">${opt(l, 'view', 'Can view')}${opt(l, 'edit', 'Can edit')}${opt(l, 'kid', 'Kid')}</select>
       <button class="btn sm" data-act="remove-login" data-uid="${esc(l.uid)}" data-name="${esc(l.name)}">Remove</button></span></div>`).join('') : '';
@@ -1054,7 +1077,7 @@ async function drawLogins() {
       const l = byUid[sel.dataset.uid], role = sel.value;
       try {
         // Switching to Kid: choose what they'll see first, so the login never sees more than it should.
-        const settings = role === 'kid' ? await kidSettingsDialog(l.name, { maxRating: config.tmdbKey ? KID_DEFAULT_RATING : '', hide: {} }) : null;
+        const settings = role === 'kid' ? await kidSettingsDialog(l.name, { maxRating: config.tmdbKey ? KID_DEFAULT_RATING : '', hide: {}, allow: {} }) : null;
         if (role === 'kid' && !settings) { sel.value = l.role; return; }
         await saveLogin(l.uid, role, settings);
         toast(`Access changed to ${role === 'view' ? 'view only' : role === 'kid' ? 'kid' : 'can edit'}`); drawLogins();

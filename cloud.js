@@ -99,7 +99,7 @@ export function openAccount(uid, asKid = false) {
    made-up email <username>@members.tvtracker.us. Its own document says which list it belongs to (listOf),
    and the owner's document lists it under logins with a role: 'view' (look only), 'edit', or 'kid'.
    A kid login can't read the owner's document; it reads users/{owner}/kids/{kidUid} instead, which holds only the
-   shows allowed for it (the owner's maxRating and hide settings, applied by the owner's or an editor's app). */
+   shows allowed for it (the owner's maxRating, hide and allow settings, applied by the owner's or an editor's app). */
 const LOGIN_DOMAIN = 'members.tvtracker.us';
 export const loginEmail = s => (s = String(s || '').trim(), s.includes('@') ? s : `${s.toLowerCase()}@${LOGIN_DOMAIN}`);
 export const isLogin = email => String(email || '').toLowerCase().endsWith('@' + LOGIN_DOMAIN);
@@ -122,12 +122,12 @@ async function linkedList(uid) {
   } catch (e) { console.warn('linked list', e); return null; }   // removed, or offline before it was ever loaded
 }
 export const relink = () => linkedList(auth.currentUser.uid);   // re-reads it, e.g. after the owner changed this login's access
-// [{ uid, name, username, role, maxRating, hide }] for the logins the signed-in user has made.
+// [{ uid, name, username, role, maxRating, hide, allow }] for the logins the signed-in user has made.
 export async function logins() {
   const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
   const m = (snap.exists() && snap.data().logins) || {};
   return Object.entries(m).map(([uid, l]) => ({ uid, name: l.name || l.username, username: l.username, role: ['view', 'kid'].includes(l.role) ? l.role : 'edit',
-    maxRating: l.maxRating || '', hide: l.hide || {} }))
+    maxRating: l.maxRating || '', hide: l.hide || {}, allow: l.allow || {} }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 export async function addLogin(name, username, password, role, kidCopy) {
@@ -143,17 +143,18 @@ export async function addLogin(name, username, password, role, kidCopy) {
     });
     const b = F.writeBatch(db);
     b.set(F.doc(db, 'users', owner.uid), { logins: { [cred.user.uid]: { name, username: username.toLowerCase(), role, t: Date.now(),
-      ...(role === 'kid' ? { maxRating: kidCopy.maxRating, hide: {} } : {}) } } }, { merge: true });
+      ...(role === 'kid' ? { maxRating: kidCopy.maxRating, hide: {}, allow: {} } : {}) } } }, { merge: true });
     if (role === 'kid') b.set(F.doc(db, 'users', owner.uid, 'kids', cred.user.uid), kidCopy);
     await b.commit();
   } finally { appMod.deleteApp(helper).catch(() => {}); }
 }
-// Changes a login's access. A kid login also gets its settings ({ maxRating, hide }) and its filtered copy (kidCopy) in the
+// Changes a login's access. A kid login also gets its settings ({ maxRating, hide, allow }) and its filtered copy (kidCopy) in the
 // same write, so it never sees more than it should; any other role has the copy removed.
 export function setLogin(uid, role, settings, kidCopy) {
   const me = auth.currentUser.uid, b = F.writeBatch(db);
   b.update(F.doc(db, 'users', me), new F.FieldPath('logins', uid, 'role'), role,
-    ...(role === 'kid' ? [new F.FieldPath('logins', uid, 'maxRating'), settings.maxRating, new F.FieldPath('logins', uid, 'hide'), settings.hide] : []));
+    ...(role === 'kid' ? [new F.FieldPath('logins', uid, 'maxRating'), settings.maxRating, new F.FieldPath('logins', uid, 'hide'), settings.hide,
+      new F.FieldPath('logins', uid, 'allow'), settings.allow || {}] : []));
   if (role === 'kid') b.set(F.doc(db, 'users', me, 'kids', uid), kidCopy); else b.delete(F.doc(db, 'users', me, 'kids', uid));
   return b.commit();
 }
