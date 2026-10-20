@@ -12,6 +12,7 @@ const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
 
 let A, F, appMod, auth, db, unsubs = [];
 let active = null, handlers = null;   // active: uid of the account whose list is open (yours, or the owner's for a login they made)
+let kid = false;                      // a kid login: the owner's shows come from its filtered copy, checkmarks from its own account
 export const activeUid = () => active;
 
 export async function start({ onUser, onData, onError }) {
@@ -36,6 +37,7 @@ export async function start({ onUser, onData, onError }) {
     if (u) u.linked = await linkedList(user.uid);   // a login made by a list's owner opens that list
     if ((auth.currentUser?.uid || null) !== (user?.uid || null)) return;   // signed in/out again meanwhile
     active = u ? u.linked?.uid || u.uid : null;
+    kid = u?.linked?.role === 'kid';
     onUser(u);
     if (u) { listen(active, onData, onError); noteLogin(user); }
   });
@@ -62,11 +64,11 @@ function listen(uid, onData, onError) {
     // One-time move of checkmarks out of the old single big document.
     if (!migrating && mainSrv && wSrv && main && main.watched) { migrating = true; migrate(uid, legacy, watched).catch(e => { migrating = false; onError(e); }); }
   };
-  const opts = { includeMetadataChanges: true };
-  unsubs.push(F.onSnapshot(F.doc(db, 'users', uid), opts, snap => {
+  const opts = { includeMetadataChanges: true }, me = auth.currentUser.uid;
+  unsubs.push(F.onSnapshot(kid ? F.doc(db, 'users', uid, 'kids', me) : F.doc(db, 'users', uid), opts, snap => {
     main = snap.exists() ? snap.data() : null; mainSrv = !snap.metadata.fromCache; mainPend = snap.metadata.hasPendingWrites; emit();
   }, onError));
-  unsubs.push(F.onSnapshot(F.collection(db, 'users', uid, 'watched'), opts, snap => {
+  unsubs.push(F.onSnapshot(F.collection(db, 'users', kid ? me : uid, 'watched'), opts, snap => {
     const w = {}; snap.forEach(d => Object.assign(w, d.data().e || {}));
     watched = w; wSrv = !snap.metadata.fromCache; wPend = snap.metadata.hasPendingWrites; emit();
   }, onError));
@@ -86,16 +88,18 @@ async function migrate(uid, legacy, current) {
 
 const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] });
 
-// Switches the open list (yours, or the owner's for a login they made).
-export function openAccount(uid) {
+// Switches the open list (yours, or the owner's for a login they made; asKid: through that login's filtered copy).
+export function openAccount(uid, asKid = false) {
   unsubs.forEach(u => u()); unsubs = [];
-  active = uid;
+  active = uid; kid = asKid;
   listen(uid, handlers.onData, handlers.onError);
 }
 /* ---------- logins for other people ----------
    An owner can create a login (name, username, password) for someone else. It's a normal account with the
    made-up email <username>@members.tvtracker.us. Its own document says which list it belongs to (listOf),
-   and the owner's document lists it under logins with a role: 'view' (look only) or 'edit'. */
+   and the owner's document lists it under logins with a role: 'view' (look only), 'edit', or 'kid'.
+   A kid login can't read the owner's document; it reads users/{owner}/kids/{kidUid} instead, which holds only the
+   shows allowed for it (the owner's maxRating and hide settings, applied by the owner's or an editor's app). */
 const LOGIN_DOMAIN = 'members.tvtracker.us';
 export const loginEmail = s => (s = String(s || '').trim(), s.includes('@') ? s : `${s.toLowerCase()}@${LOGIN_DOMAIN}`);
 export const isLogin = email => String(email || '').toLowerCase().endsWith('@' + LOGIN_DOMAIN);
@@ -106,20 +110,27 @@ async function linkedList(uid) {
   try {
     const me = await F.getDoc(F.doc(db, 'users', uid));
     const owner = me.exists() && me.data().listOf; if (!owner) return null;
-    const o = await F.getDoc(F.doc(db, 'users', owner));
+    let o;
+    try { o = await F.getDoc(F.doc(db, 'users', owner)); }
+    catch (e) {   // a kid login isn't allowed to read the owner's list, only its own filtered copy
+      if (e?.code !== 'permission-denied') throw e;
+      const k = await F.getDoc(F.doc(db, 'users', owner, 'kids', uid));
+      return k.exists() ? { uid: owner, name: k.data().ownerName || me.data().ownerName || 'Shared', role: 'kid' } : null;
+    }
     const l = o.exists() && (o.data().logins || {})[uid]; if (!l) return null;
-    return { uid: owner, name: o.data().profile?.name || me.data().ownerName || 'Shared', role: l.role === 'view' ? 'view' : 'edit' };
+    return { uid: owner, name: o.data().profile?.name || me.data().ownerName || 'Shared', role: ['view', 'kid'].includes(l.role) ? l.role : 'edit' };
   } catch (e) { console.warn('linked list', e); return null; }   // removed, or offline before it was ever loaded
 }
 export const relink = () => linkedList(auth.currentUser.uid);   // re-reads it, e.g. after the owner changed this login's access
-// [{ uid, name, username, role }] for the logins the signed-in user has made.
+// [{ uid, name, username, role, maxRating, hide }] for the logins the signed-in user has made.
 export async function logins() {
   const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
   const m = (snap.exists() && snap.data().logins) || {};
-  return Object.entries(m).map(([uid, l]) => ({ uid, name: l.name || l.username, username: l.username, role: l.role === 'view' ? 'view' : 'edit' }))
+  return Object.entries(m).map(([uid, l]) => ({ uid, name: l.name || l.username, username: l.username, role: ['view', 'kid'].includes(l.role) ? l.role : 'edit',
+    maxRating: l.maxRating || '', hide: l.hide || {} }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
-export async function addLogin(name, username, password, role) {
+export async function addLogin(name, username, password, role, kidCopy) {
   const owner = auth.currentUser;
   // Created in a separate, throwaway Firebase instance so the owner stays signed in here.
   const helper = appMod.initializeApp(firebaseConfig, 'login-' + Date.now());
@@ -130,11 +141,30 @@ export async function addLogin(name, username, password, role) {
     await F.setDoc(F.doc(F.getFirestore(helper), 'users', cred.user.uid), {
       profile: { name, email: cred.user.email }, listOf: owner.uid, ownerName: owner.displayName || (owner.email || '').split('@')[0], updated: Date.now()
     });
-    await F.setDoc(F.doc(db, 'users', owner.uid), { logins: { [cred.user.uid]: { name, username: username.toLowerCase(), role, t: Date.now() } } }, { merge: true });
+    const b = F.writeBatch(db);
+    b.set(F.doc(db, 'users', owner.uid), { logins: { [cred.user.uid]: { name, username: username.toLowerCase(), role, t: Date.now(),
+      ...(role === 'kid' ? { maxRating: kidCopy.maxRating, hide: {} } : {}) } } }, { merge: true });
+    if (role === 'kid') b.set(F.doc(db, 'users', owner.uid, 'kids', cred.user.uid), kidCopy);
+    await b.commit();
   } finally { appMod.deleteApp(helper).catch(() => {}); }
 }
-export const setLoginRole = (uid, role) => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid, 'role'), role);
-export const removeLogin = uid => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid), F.deleteField());
+// Changes a login's access. A kid login also gets its settings ({ maxRating, hide }) and its filtered copy (kidCopy) in the
+// same write, so it never sees more than it should; any other role has the copy removed.
+export function setLogin(uid, role, settings, kidCopy) {
+  const me = auth.currentUser.uid, b = F.writeBatch(db);
+  b.update(F.doc(db, 'users', me), new F.FieldPath('logins', uid, 'role'), role,
+    ...(role === 'kid' ? [new F.FieldPath('logins', uid, 'maxRating'), settings.maxRating, new F.FieldPath('logins', uid, 'hide'), settings.hide] : []));
+  if (role === 'kid') b.set(F.doc(db, 'users', me, 'kids', uid), kidCopy); else b.delete(F.doc(db, 'users', me, 'kids', uid));
+  return b.commit();
+}
+// Rewrites a kid login's filtered copy of the open list (the owner's or an editor's app does this whenever the list changes).
+export const writeKidCopy = (uid, kidCopy) => F.setDoc(F.doc(db, 'users', active, 'kids', uid), kidCopy);
+export function removeLogin(uid) {
+  const me = auth.currentUser.uid, b = F.writeBatch(db);
+  b.update(F.doc(db, 'users', me), new F.FieldPath('logins', uid), F.deleteField());
+  b.delete(F.doc(db, 'users', me, 'kids', uid));
+  return b.commit();
+}
 
 /* ---------- contact form ---------- */
 // Saves a Contact us message (anyone can send one; only the admin can read them), and emails a copy if set up.
@@ -243,7 +273,9 @@ export async function deleteAccount(password) {
   if (usesPassword()) await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, password));
   else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
   unsubs.forEach(x => x()); unsubs = [];        // stop listening, or the empty document would be recreated
+  const mine = await F.getDoc(F.doc(db, 'users', u.uid)).catch(() => null);
   const b = F.writeBatch(db);
+  for (const k of Object.keys((mine?.exists() && mine.data().logins) || {})) b.delete(F.doc(db, 'users', u.uid, 'kids', k));
   for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
   b.delete(F.doc(db, 'users', u.uid));
   b.delete(F.doc(db, 'emailPrefs', u.uid));
@@ -263,12 +295,13 @@ export const setWeeklyEmail = on => F.setDoc(F.doc(db, 'emailPrefs', auth.curren
 // Saves only what changed, in one batch: shows/profile go to the main document,
 // checkmarks go to their bucket documents. Stored on the device immediately;
 // the returned promise resolves once the server confirms it.
+// A kid login only saves its own checkmarks, to its own account.
 export function save(partial) {
   const u = auth?.currentUser; if (!u || !active) return Promise.resolve();
-  const uid = active;
+  const uid = kid ? u.uid : active;
   const { watched, ...rest } = partial;
   const b = F.writeBatch(db);
-  if (Object.keys(rest).length && !(Object.keys(rest).length === 1 && rest.shows && !Object.keys(rest.shows).length))
+  if (!kid && Object.keys(rest).length && !(Object.keys(rest).length === 1 && rest.shows && !Object.keys(rest.shows).length))
     b.set(F.doc(db, 'users', uid), rest, { merge: true });
   const groups = {};
   for (const [k, v] of Object.entries(watched || {})) (groups[bucketOf(k)] ||= {})[k] = v;
