@@ -225,6 +225,15 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .appdlg p { margin: 0 0 12px; line-height: 1.5; }
 .appdlg .actions { justify-content: flex-end; }
 .appdlg .stack p { margin: 0; }
+/* Kid login settings: highest rating, then a scrolling list of shows to hide */
+.kidform { width: min(376px, calc(100vw - 76px)); }   /* the dialog's width, less its padding */
+.kidhead { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }   /* same look as a field label */
+.kidshows { max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px; }
+.kidshows .checkrow { font-weight: 500; padding: 9px 0; border-top: 1px solid var(--line); }
+.kidshows .checkrow:first-child { border-top: 0; }
+.kidshows .grow { flex: 1; min-width: 0; }
+.kidshows .kidrate { white-space: nowrap; }
+.kidshows .overlimit .grow { color: var(--muted); text-decoration: line-through; }   /* hidden by the rating limit anyway */
 .appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }

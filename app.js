@@ -33,9 +33,11 @@ let user = null;                        // { uid, email, name } when signed in
 // Same logo + text as the splash in index.html, shown while the sign-in check finishes.
 const SPLASH = '<div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div>';
 let authReady = !cloud.configured;       // false until Firebase reports who's signed in
-const stateKey = () => user ? `${K.state}.${cloud.activeUid() || user.uid}` : K.state;
+const stateKey = () => user ? `${K.state}.${cloud.activeUid() || user.uid}${isKid() ? '.kid.' + user.uid : ''}` : K.state;
 // For a login someone made for you: their list ({ uid, name, role }) while it's the one open.
 const sharedOpen = () => user?.linked && cloud.activeUid() === user.linked.uid ? user.linked : null;
+// A kid login: sees only the shows the list's owner allows for it, can't add or remove shows, and keeps its own checkmarks.
+const isKid = () => sharedOpen()?.role === 'kid';
 let state = norm(load(K.state, null));
 let cache = load(K.cache, {});           // showId -> { t, show, episodes }  (shared TVmaze data, not per user)
 let meta = load(K.meta, { lastRefresh: 0 });
@@ -62,10 +64,12 @@ function collapseFinished(ids) {
   }
 }
 function follow(s) {
+  if (isKid()) return;
   state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: now() };
   queue('shows', s.id, state.shows[s.id]); persist();
 }
 function unfollow(id) {
+  if (isKid()) return;
   const s = state.shows[id];
   if (s) { s.removed = true; s.t = now(); queue('shows', id, s); persist(); }
 }
@@ -205,11 +209,13 @@ const views = {};
 
 // Adding shows and checking episodes requires an account.
 const needsAccount = () => cloud.configured && !user;
-function requireAccount() {
+// changesList: adding or removing shows, which a kid login can't do (it can still check off episodes).
+function requireAccount(changesList) {
   if (!needsAccount()) {
-    if (sharedOpen()?.role !== 'view') return true;
-    toast(`You can view ${sharedOpen().name}'s list but not change it`);
-    return false;
+    const sh = sharedOpen();
+    if (sh?.role === 'view') { toast(`You can view ${sh.name}'s list but not change it`); return false; }
+    if (changesList && sh?.role === 'kid') { toast(`${sh.name} chooses the shows on your list`); return false; }
+    return true;
   }
   if (!authReady) { toast('One moment — checking your sign-in…'); return false; }
   try { sessionStorage.setItem('tvt.return', location.hash || '#/'); } catch { }
@@ -394,6 +400,10 @@ views.shows = () => {
       : SPLASH;
     return;
   }
+  if (!list.length && isKid()) {
+    app.innerHTML = `<div class="empty"><h1>No shows yet</h1><p>${esc(sharedOpen().name)} hasn't added any shows for you yet.</p></div>`;
+    return;
+  }
   if (!list.length) {
     app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
@@ -472,6 +482,11 @@ function card(s, p) {
 
 views.show = arg => {
   const id = +arg, c = cache[id];
+  if (isKid() && !isFollowed(id)) {   // a kid only sees the shows allowed for it
+    app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
+      <div class="empty"><h1>Not on your list</h1><p>${esc(sharedOpen().name)} hasn't added this show for you.</p><a class="btn primary" href="#/">Back to my shows</a></div>`;
+    return;
+  }
   if (!c) {
     app.innerHTML = '<p class="loading">Loading show…</p>';
     fetchShow(id).then(r => { if (route().arg == id) r ? render() : (app.innerHTML = '<p class="loading">Show not found.</p>'); })
@@ -519,7 +534,7 @@ views.show = arg => {
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
       </div>
-      ${f ? `<div class="actions"><button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
+      ${f && !isKid() ? `<div class="actions"><button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
     <p class="sub">Tip: tap <b>Watched Up To Here</b> on an episode to mark it and everything before it as watched.</p>`;
@@ -561,7 +576,8 @@ views.upcoming = () => {
     days += row(it, airsToday(it.e));   // an episode out today can be checked off
   }
   app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
-    ${!list.length ? `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>` : ''}
+    ${!list.length ? (isKid() ? `<div class="empty"><p>${esc(sharedOpen().name)} hasn't added any shows for you yet.</p></div>`
+      : `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>`) : ''}
     ${recent.length ? `<h2>Airing this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
     ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows urows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
   if (list.some(f => !cache[f.id])) refreshAll(false);
@@ -593,7 +609,7 @@ views.discover = () => {
    ranks shows that come up for several of your shows, and near the top of those lists. A pick is matched to
    TVmaze only when it's opened or added. Kept on the device: show matches for good, recommendation lists for a week. */
 const TMDB = 'https://api.themoviedb.org/3', TMDB_IMG = 'https://image.tmdb.org/t/p/w342', K_TMDB = 'tvt.tmdb.v2';
-const tm = Object.assign({ map: {}, recs: {}, tvm: {} }, load(K_TMDB, {}));   // map: TVmaze id -> TMDB id; recs: TMDB id -> { t, list }; tvm: TMDB id -> TVmaze show (0 = none)
+const tm = Object.assign({ map: {}, recs: {}, tvm: {}, rate: {} }, load(K_TMDB, {}));   // map: TVmaze id -> TMDB id; recs: TMDB id -> { t, list }; tvm: TMDB id -> TVmaze show (0 = none); rate: TVmaze id -> { r: US TV rating ('' = none), t }
 let recsLoading = null, recsError = '', recsAt = 0;   // recsAt: last load, so lookups that failed aren't retried in a loop
 async function tmdb(path) {
   for (let i = 0; i < 4; i++) {
@@ -694,6 +710,96 @@ async function recShow(b) {
   try { return await tvmazeFor(id) || (toast('Couldn\'t find that show\'s details'), null); }
   catch (e) { toast(e.message); return null; }
   finally { busy(false); b.disabled = false; }
+}
+
+/* ---------- kid logins ----------
+   An owner can make a login with Kid access: it sees only the shows the owner allows (up to a highest US TV rating, from
+   TMDB, minus any shows they pick to hide), can't add or remove shows, and keeps its own checkmarks. The allowed shows are
+   written to a separate copy (users/{owner}/kids/{kid}) that's all the kid's login can read, so hidden shows never reach
+   its device. The owner's app — or an editor's — rewrites the copy whenever the list or the settings change. */
+const RATINGS = ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'];
+const RATING_NAMES = { 'TV-Y': 'All children', 'TV-Y7': 'Age 7 and up', 'TV-G': 'General audience', 'TV-PG': 'Parental guidance', 'TV-14': 'Age 14 and up', 'TV-MA': 'Mature audience' };
+const KID_DEFAULT_RATING = 'TV-PG';
+const ratingOk = (r, max) => !max || (RATINGS.includes(r) && RATINGS.indexOf(r) <= RATINGS.indexOf(max));   // no rating: hidden while there's a limit
+// A show's US TV rating ('' when it has none), from TMDB; kept on the device for a month.
+async function ratingOf(id) {
+  const c = tm.rate[id]; if (c && now() - c.t < 30 * DAY) return c.r;
+  if (!config.tmdbKey) return '';
+  const s = cache[id]?.show || (await fetchShow(id))?.show; if (!s) return '';
+  if (tm.map[id] === undefined) tm.map[id] = await tmdbId(s);
+  const j = tm.map[id] ? await tmdb(`/tv/${tm.map[id]}/content_ratings`) : null;
+  const r = String(j?.results?.find(x => x.iso_3166_1 === 'US')?.rating || '').toUpperCase().replace(/-FV$/, '');
+  tm.rate[id] = { r: RATINGS.includes(r) ? r : '', t: now() }; save(K_TMDB, tm);
+  return tm.rate[id].r;
+}
+// The copy a kid login reads: the open list's shows, minus hidden ones and any over the highest rating.
+async function kidCopyFor({ maxRating = '', hide = {} }) {
+  const list = followed().filter(s => !hide[s.id]);
+  if (maxRating) await inFours(list, s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
+  const shows = {};
+  for (const s of list) if (ratingOk(tm.rate[s.id]?.r, maxRating)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
+  return { ownerName: sharedOpen()?.name || user.name, maxRating, shows, updated: now() };
+}
+let kidLogins = {}, kidSent = {}, kidTimer = null, kidSyncing = false;   // kidSent: what each kid's copy was last written with
+const kidSig = c => JSON.stringify([c.ownerName, c.maxRating, c.shows]);
+function syncKidsSoon() { clearTimeout(kidTimer); kidTimer = setTimeout(syncKids, 1500); }
+async function syncKids() {
+  if (kidSyncing) return syncKidsSoon();
+  kidSyncing = true;
+  try {
+    for (const [uid, l] of Object.entries(kidLogins)) {
+      if (l.role !== 'kid' || !user || (sharedOpen() && sharedOpen().role !== 'edit')) continue;
+      const copy = await kidCopyFor(l), sig = kidSig(copy);
+      if (kidSent[uid] === sig) continue;
+      try { await cloud.writeKidCopy(uid, copy); kidSent[uid] = sig; } catch (e) { console.warn('kid copy', e); }
+    }
+  } finally { kidSyncing = false; }
+}
+// A kid's device keeps no copy of the owner's full list (e.g. saved before the login was changed to Kid).
+function forgetFullList() { if (isKid()) try { localStorage.removeItem(`${K.state}.${user.linked.uid}`); } catch { } }
+
+// The owner picks the highest rating and any shows to hide for a kid login. Resolves the settings, or null if cancelled.
+function kidSettingsDialog(name, settings) {
+  const d = $('#appDialog'), hide = { ...(settings.hide || {}) };
+  const list = followed().map(f => showInfo(f.id) || f).sort((a, b) => a.name.localeCompare(b.name));
+  const label = id => { const r = tm.rate[id]; return !config.tmdbKey ? '' : !r ? 'Checking rating…' : r.r || 'No rating'; };
+  d.innerHTML = `<form class="stack kidform" id="kidForm"><h2>What ${esc(name)} can see</h2>
+    ${config.tmdbKey ? `<div class="field"><label for="kidMax">Highest rating</label><select id="kidMax" name="max" class="rolesel">
+      <option value="">Any rating — no limit</option>${RATINGS.slice(0, -1).map(r => `<option value="${r}">${r} · ${RATING_NAMES[r]}</option>`).join('')}</select>
+      <p class="sub">US TV ratings, from TMDB. While a limit is set, shows without a rating are hidden too.</p></div>` : ''}
+    <div><div class="kidhead">Hide these shows</div>
+      ${list.length ? `<div class="kidshows">${list.map(s => `<label class="checkrow"><input type="checkbox" value="${s.id}"${hide[s.id] ? ' checked' : ''}>
+        <span class="grow">${esc(s.name)}</span><span class="sub kidrate" data-id="${s.id}"></span></label>`).join('')}</div>`
+        : '<p class="sub">Shows you add to your list will appear here.</p>'}</div>
+    <p class="sub">${esc(name)} sees only the shows that pass both, can't add or remove shows, and keeps their own checkmarks.</p>
+    <div class="actions"><button class="btn primary">Save</button><button type="button" class="btn" id="kidCancel">Cancel</button></div></form>`;
+  const max = $('#kidMax', d);
+  if (max) max.value = settings.maxRating || '';
+  // Each show's rating, dimmed when the chosen limit hides it anyway.
+  const marks = () => d.querySelectorAll('.kidrate').forEach(el => {
+    const id = +el.dataset.id, r = tm.rate[id];
+    el.textContent = label(id);
+    el.closest('.checkrow').classList.toggle('overlimit', !!(max?.value && r && !ratingOk(r.r, max.value)));
+  });
+  marks(); max?.addEventListener('change', marks);
+  if (config.tmdbKey) inFours(list, async s => { await ratingOf(s.id); if (d.open) marks(); });
+  d.showModal();
+  return new Promise(done => {
+    const finish = v => { d.close(); done(v); };
+    $('#kidCancel', d).onclick = () => finish(null);
+    d.addEventListener('close', () => done(null), { once: true });
+    $('#kidForm', d).onsubmit = e => {
+      e.preventDefault();
+      const h = {}; d.querySelectorAll('.kidshows input:checked').forEach(i => { h[i.value] = true; });
+      finish({ maxRating: max?.value || '', hide: h });
+    };
+  });
+}
+// Saves a login's access, with its settings and filtered copy when it's a kid.
+async function saveLogin(uid, role, settings) {
+  const copy = role === 'kid' ? await kidCopyFor(settings) : null;
+  await cloud.setLogin(uid, role, settings, copy);
+  if (copy) kidSent[uid] = kidSig(copy);
 }
 
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -881,7 +987,8 @@ views.account = () => {
   if (cloud.isLogin(user.email)) {   // a login someone made: it only opens their list
     app.innerHTML = `<h1>Account</h1>
     <div class="panel"><h3>${esc(user.name)}</h3><p>Username: <b>${esc(cloud.loginName(user.email))}</b></p>
-      <p>${sh ? `You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : ' and can make changes'}. ${esc(sh.name)} made this login and can change or remove it.`
+      <p>${sh ? `You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : sh.role === 'kid' ? `. ${esc(sh.name)} chooses which shows you see, and your checkmarks are your own`
+        : ' and can make changes'}. ${esc(sh.name)} made this login and can change or remove it.`
         : 'This login no longer has access to a list. Ask the person who made it to add you again.'}</p>
       <div class="actions">${pwBtn}<button class="btn" data-act="signout">Sign out</button></div></div>`;
     return;
@@ -891,13 +998,13 @@ views.account = () => {
     <p>Your shows and checkmarks are private to you (and anyone you make a login for) and sync automatically to every device you sign in on.</p>
     <div class="actions">${pwBtn}<button class="btn" data-act="signout">Sign out</button></div></div>
   <div class="panel"><h3>Share your list</h3>
-    <p>Make a login for someone so they can use your list. They sign in with the username and password you choose here. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you.</p>
+    <p>Make a login for someone so they can use your list. They sign in with the username and password you choose here. <b>Can view</b> lets them see what you're watching and where you're up to. <b>Can edit</b> also lets them add and remove shows and check off episodes, just like you. <b>Kid</b> shows only the shows you allow — up to a rating you pick, minus any you hide — and they keep their own checkmarks but can't add or remove shows.</p>
     <form class="stack" id="loginForm" autocomplete="off">
       <div class="lgrid">
         <div class="field"><label>Their name</label><input name="name" required></div>
         <div class="field"><label>Username</label><input name="username" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" title="3–30 letters, numbers, dots, dashes or underscores" autocapitalize="none" spellcheck="false"></div>
         <div class="field"><label>Password (6+ characters)</label><input name="password" type="text" minlength="6" required autocomplete="new-password"></div>
-        <div class="field"><label>Access</label><select name="role" class="rolesel"><option value="edit">Can edit</option><option value="view">Can view</option></select></div>
+        <div class="field"><label>Access</label><select name="role" class="rolesel"><option value="edit">Can edit</option><option value="view">Can view</option><option value="kid">Kid</option></select></div>
       </div>
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
@@ -925,9 +1032,10 @@ views.account = () => {
     const name = f.name.value.trim(), username = f.username.value.trim(), password = f.password.value, role = f.role.value;
     err.hidden = true; btn.disabled = true; btn.textContent = 'Creating…';
     try {
-      await cloud.addLogin(name, username, password, role);
+      const copy = role === 'kid' ? await kidCopyFor({ maxRating: config.tmdbKey ? KID_DEFAULT_RATING : '', hide: {} }) : null;
+      await cloud.addLogin(name, username, password, role, copy);
       f.reset(); drawLogins();
-      toast(`Login created — ${name} can sign in with username ${username.toLowerCase()}`);
+      toast(`Login created — ${name} can sign in with username ${username.toLowerCase()}${role === 'kid' ? '. Tap What they see to choose their shows' : ''}`);
     } catch (x) { err.textContent = cloud.friendlyError(x); err.hidden = false; }
     btn.disabled = false; btn.textContent = 'Create login';
   });
@@ -935,13 +1043,28 @@ views.account = () => {
 async function drawLogins() {
   const box = $('#loginList'); if (!box) return;
   try {
-    const list = await cloud.logins();
-    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}</span></span>
-      <span class="actions"><select class="rolesel" data-uid="${esc(l.uid)}" aria-label="Access for ${esc(l.name)}"><option value="view"${l.role === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${l.role === 'edit' ? ' selected' : ''}>Can edit</option></select>
+    const list = await cloud.logins(), byUid = Object.fromEntries(list.map(l => [l.uid, l]));
+    const opt = (l, v, t) => `<option value="${v}"${l.role === v ? ' selected' : ''}>${t}</option>`;
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}${l.role === 'kid'
+        ? ` · ${l.maxRating ? 'up to ' + esc(l.maxRating) : 'any rating'}${Object.keys(l.hide).length ? ` · ${Object.keys(l.hide).length} hidden` : ''}` : ''}</span></span>
+      <span class="actions">${l.role === 'kid' ? `<button class="btn sm" data-act="kid-settings" data-uid="${esc(l.uid)}">What they see</button>` : ''}
+      <select class="rolesel" data-uid="${esc(l.uid)}" aria-label="Access for ${esc(l.name)}">${opt(l, 'view', 'Can view')}${opt(l, 'edit', 'Can edit')}${opt(l, 'kid', 'Kid')}</select>
       <button class="btn sm" data-act="remove-login" data-uid="${esc(l.uid)}" data-name="${esc(l.name)}">Remove</button></span></div>`).join('') : '';
     box.querySelectorAll('select.rolesel').forEach(sel => sel.onchange = async () => {
-      try { await cloud.setLoginRole(sel.dataset.uid, sel.value); toast(`Access changed to ${sel.value === 'view' ? 'view only' : 'can edit'}`); }
-      catch (x) { toast(cloud.friendlyError(x)); drawLogins(); }
+      const l = byUid[sel.dataset.uid], role = sel.value;
+      try {
+        // Switching to Kid: choose what they'll see first, so the login never sees more than it should.
+        const settings = role === 'kid' ? await kidSettingsDialog(l.name, { maxRating: config.tmdbKey ? KID_DEFAULT_RATING : '', hide: {} }) : null;
+        if (role === 'kid' && !settings) { sel.value = l.role; return; }
+        await saveLogin(l.uid, role, settings);
+        toast(`Access changed to ${role === 'view' ? 'view only' : role === 'kid' ? 'kid' : 'can edit'}`); drawLogins();
+      } catch (x) { toast(cloud.friendlyError(x)); drawLogins(); }
+    });
+    box.querySelectorAll('[data-act="kid-settings"]').forEach(b => b.onclick = async () => {
+      const l = byUid[b.dataset.uid], settings = await kidSettingsDialog(l.name, l);
+      if (!settings) return;
+      try { await saveLogin(l.uid, 'kid', settings); toast(`Saved what ${l.name} can see`); drawLogins(); }
+      catch (x) { toast(cloud.friendlyError(x)); }
     });
   } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
 }
@@ -1060,7 +1183,7 @@ function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched:
 let pending = null, flushTimer = null, inFlight = 0;
 const saving = () => inFlight > 0;
 function queue(kind, id, val) {
-  if (!user || sharedOpen()?.role === 'view') return;
+  if (!user || sharedOpen()?.role === 'view' || (kind === 'shows' && isKid())) return;
   pending = pending || { shows: {}, watched: {} };
   pending[kind][id] = val;
   syncStatus('Syncing…');
@@ -1097,11 +1220,15 @@ function waitForServer() {
 }
 function onUser(u) {
   if (!u && user) {
-    try { localStorage.removeItem(`${K.state}.${user.uid}`); if (user.linked) localStorage.removeItem(`${K.state}.${user.linked.uid}`); } catch { }
+    try {
+      localStorage.removeItem(`${K.state}.${user.uid}`);
+      if (user.linked) { localStorage.removeItem(`${K.state}.${user.linked.uid}`); localStorage.removeItem(`${K.state}.${user.linked.uid}.kid.${user.uid}`); }
+    } catch { }
   }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
-  user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null;
+  user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {};
   if (u) waitForServer();
+  forgetFullList();
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus();
   const r = route().name;
@@ -1117,7 +1244,7 @@ function onUser(u) {
 // A show someone tapped Add on before they had an account (e.g. from a recommendation) is added once they're in.
 function addAfterSignIn() {
   let id = 0; try { id = +sessionStorage.getItem('tvt.addAfter') || 0; sessionStorage.removeItem('tvt.addAfter'); } catch { }
-  if (!id || isFollowed(id) || !requireAccount()) return;
+  if (!id || isFollowed(id) || !requireAccount(true)) return;
   (cache[id] ? Promise.resolve(cache[id]) : fetchShow(id)).then(c => {
     if (!c || !user || isFollowed(id)) return;
     follow(c.show); render(); toast(`Added ${c.show.name} to your shows`);
@@ -1132,6 +1259,7 @@ function onData(data, fromServer) {
   }
   const first = firstSnapshot;
   const remote = norm(data);
+  if (isKid()) state.shows = remote.shows;   // exactly the shows allowed for this kid, never ones left on this device
   // Anything this device changed that the server hasn't seen yet (e.g. edits made offline) gets uploaded.
   for (const kind of ['shows', 'watched'])
     for (const [k, v] of Object.entries(state[kind])) { const r = remote[kind][k]; if (!r || (v.t || 0) > (r.t || 0)) queue(kind, k, v); }
@@ -1140,13 +1268,16 @@ function onData(data, fromServer) {
   state = merged; persist();
   firstSnapshot = false;
   if (changed || first || confirmed) { render(); refreshMissing(); }
+  if (serverSynced && (!sharedOpen() || sharedOpen().role === 'edit')) { kidLogins = data?.logins || {}; syncKidsSoon(); }
 }
 function onCloudError(e) {
   console.warn(e);
   if (e?.code === 'auth/account-exists-with-different-credential') { linkGoogleDialog(); return; }   // after a Google redirect sign-in
   if (e?.code === 'permission-denied' && sharedOpen()) {   // the owner changed or removed this login
     const name = sharedOpen().name;
+    const wasKid = isKid();
     cloud.relink().then(l => {
+      if (l && (l.role === 'kid') !== wasKid) { user.linked = l; openList(); toast(`${name} changed what you can see`); return; }   // kid ↔ adult: reopen the list the other way
       if (l) { user.linked = l; accountChip(); toast(l.role === 'view' ? `${name} changed your access to view only` : 'Couldn\'t save that change — try again'); return; }
       user.linked = null; openList(); toast(`You no longer have access to ${name}'s list`);
     });
@@ -1154,11 +1285,13 @@ function onCloudError(e) {
   }
   syncStatus(cloud.friendlyError(e), true);
 }
-// Re-opens the signed-in user's own list (after the owner of a shared list removed their login).
+// Re-opens the list after the owner of a shared list changed this login: the shared list again (user.linked, as a kid or
+// not), or the signed-in user's own list if the login was removed.
 function openList() {
   flush();
-  cloud.openAccount(user.uid);
+  cloud.openAccount(user.linked?.uid || user.uid, user.linked?.role === 'kid');
   firstSnapshot = true; serverSynced = false; pending = null; waitForServer();
+  forgetFullList();
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus(); render(true); refreshMissing();
 }
@@ -1238,14 +1371,14 @@ const actions = {
   async follow(b) {
     const id = +b.dataset.show;
     if (needsAccount() && authReady) try { sessionStorage.setItem('tvt.addAfter', id); } catch { }   // added once they've signed up
-    if (!requireAccount()) return;
+    if (!requireAccount(true)) return;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
     follow(s); render(); toast(`Added ${s.name}`);   // search results stay put so you can add more
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
-    if (!requireAccount()) return;
+    if (!requireAccount(true)) return;
     const id = +b.dataset.show, name = showInfo(id)?.name || 'show';
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
@@ -1271,7 +1404,7 @@ const actions = {
   'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; render(); },
   async 'rec-open'(b) { const s = await recShow(b); if (s) { showLookup[s.id] = s; location.hash = '#/show/' + s.id; } },
   async 'rec-add'(b) {
-    if (!requireAccount()) return;
+    if (!requireAccount(true)) return;
     const s = await recShow(b); if (!s) return;
     showLookup[s.id] = s; tm.map[s.id] = +b.dataset.tmdb; save(K_TMDB, tm);
     follow(s); render(); toast(`Added ${s.name}`);
@@ -1323,7 +1456,7 @@ document.addEventListener('change', e => {
   if (!t.matches('input[data-act="toggle"]')) return;
   if (!requireAccount()) { t.checked = !t.checked; return; }
   const sid = +t.dataset.show, id = +t.dataset.ep;
-  if (t.checked && !isFollowed(sid) && cache[sid]) follow(cache[sid].show);
+  if (t.checked && !isFollowed(sid) && cache[sid] && !isKid()) follow(cache[sid].show);
   setWatched([id], t.checked);
   render();
 });
@@ -1386,6 +1519,9 @@ document.addEventListener('toggle', e => {
 function route() { const [name, arg, extra] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'shows', arg, extra }; }
 function render(fromRoute) {
   const r = route();
+  // A kid can't add shows, so Discover and Add Show aren't offered.
+  document.querySelectorAll('#tabs a[data-tab="discover"], #tabs a[data-tab="search"]').forEach(a => { a.style.display = isKid() ? 'none' : ''; });
+  if (isKid() && (r.name === 'discover' || r.name === 'search')) { location.hash = '#/'; return; }
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
