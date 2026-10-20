@@ -233,7 +233,8 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .kidshows .checkrow:first-child { border-top: 0; }
 .kidshows .grow { flex: 1; min-width: 0; }
 .kidshows .kidrate { white-space: nowrap; }
-.kidshows .overlimit .grow { color: var(--muted); text-decoration: line-through; }   /* hidden by the rating limit anyway */
+.kidshows .overlimit .grow { color: var(--muted); text-decoration: line-through 2px var(--danger); }   /* hidden by the rating limit anyway */
+.kidshows .overlimit .kidrate { color: var(--danger); font-weight: 700; }
 .appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
