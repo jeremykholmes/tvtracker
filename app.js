@@ -553,7 +553,7 @@ views.upcoming = () => {
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub"><span class="code">${code(e)}</span> ${esc(e.name)}</div></div>
     <div class="when">${fmtDate(e, true)}<br>${esc(channel(s.network, s.name))}</div>
-    ${check ? `<label class="chk"><input type="checkbox" data-act="toggle" data-show="${s.id}" data-ep="${e.id}" ${isWatched(e.id) ? 'checked' : ''}><span></span></label>` : ''}</div>`;
+    ${check ? `<button class="btn primary sm watchbtn${isWatched(e.id) ? ' on' : ''}" data-act="watch" data-ep="${e.id}"><span class="wbox"></span>Watched</button>` : ''}</div>`;
   let days = '', cur = '';
   for (const it of soon) {
     const d = new Date(it.t).toDateString();
