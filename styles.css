@@ -229,12 +229,20 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .kidform { width: min(376px, calc(100vw - 76px)); }   /* the dialog's width, less its padding */
 .kidhead { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }   /* same look as a field label */
 .kidshows { max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px; }
-.kidshows .checkrow { font-weight: 500; padding: 9px 0; border-top: 1px solid var(--line); }
-.kidshows .checkrow:first-child { border-top: 0; }
-.kidshows .grow { flex: 1; min-width: 0; }
-.kidshows .kidrate { white-space: nowrap; }
-.kidshows .overlimit .grow { color: var(--muted); text-decoration: line-through 2px var(--danger); }   /* hidden by the rating limit anyway */
-.kidshows .overlimit .kidrate { color: var(--danger); font-weight: 700; }
+.kidrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 9px 0; border-top: 1px solid var(--line); }   /* rating + Allow drop under a long name */
+.kidrow:first-child { border-top: 0; }
+.kidrow .checkrow { flex: 1 1 150px; min-width: 0; font-weight: 500; }
+.kidrow .kidmeta { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.kidrow .kidname { min-width: 0; overflow-wrap: anywhere; }
+.kidrow .kidrate { white-space: nowrap; text-align: right; }
+.kidrow.overlimit .kidname { color: var(--muted); text-decoration: line-through 2px var(--danger); }   /* hidden by the rating limit */
+.kidrow.overlimit .kidrate { color: var(--danger); font-weight: 700; }
+.kidrow.allowed .kidrate { color: var(--ok); font-weight: 700; }   /* over the limit, but allowed anyway */
+/* Allow: a small pill with its own tick, shown only for shows the limit hides */
+.allowbtn { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 4px 9px 4px 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.allowbtn[hidden] { display: none; }
+.allowbtn input { width: 15px; height: 15px; margin: 0; accent-color: var(--ok); }
+.allowbtn:has(input:checked) { border-color: var(--ok); color: var(--ok); }
 .appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
