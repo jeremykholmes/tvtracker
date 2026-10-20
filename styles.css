@@ -151,6 +151,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .row .info a { text-decoration: none; font-weight: 650; }
 .row .info a:hover { text-decoration: underline; }
 .row .when { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+.row .watchbtn { flex: 0 0 auto; }
 .dhead { margin-top: 30px; }
 .dsub { font-size: 14px; margin: 18px 0 10px; color: var(--text); }
 .rrow { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 10px; scrollbar-width: thin; }
