@@ -4,5 +4,11 @@
       "Bash(gh pr merge *)",
       "Bash(gh api -X PUT repos/jeremykholmes/*/pulls/*/merge*)"
     ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Merging a pull request into main in jeremykholmes/tvtracker without review is allowed: the repo owner's CLAUDE.md says to open a PR and merge it right away with no review step."
+    ]
   }
 }
