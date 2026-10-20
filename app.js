@@ -482,10 +482,18 @@ function card(s, p) {
 
 views.show = arg => {
   const id = +arg, c = cache[id];
-  if (isKid() && !isFollowed(id)) {   // a kid only sees the shows allowed for it
-    app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
-      <div class="empty"><h1>Not on your list</h1><p>${esc(sharedOpen().name)} hasn't added this show for you.</p><a class="btn primary" href="#/">Back to my shows</a></div>`;
-    return;
+  if (isKid()) {   // a kid only sees shows on its list, or within its rating limit
+    const ok = kidCanSee(id);
+    if (ok === null && !kidTried.has(id)) {
+      kidTried.add(id); app.innerHTML = '<p class="loading">Checking rating…</p>';
+      ratingOf(id).catch(() => {}).finally(() => { if (route().name === 'show' && route().arg == id) render(); });
+      return;
+    }
+    if (!ok) {
+      app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
+        <div class="empty"><h1>Not available</h1><p>${esc(sharedOpen().name)} hasn't allowed this show.</p><a class="btn primary" href="#/">Back to my shows</a></div>`;
+      return;
+    }
   }
   if (!c) {
     app.innerHTML = '<p class="loading">Loading show…</p>';
@@ -530,7 +538,7 @@ views.show = arg => {
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
       ${s.summary ? `<p class="summary">${esc(s.summary)}</p>` : ''}
       <div class="actions">
-        ${f ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
+        ${f || isKid() ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
       </div>
@@ -716,7 +724,9 @@ async function recShow(b) {
    An owner can make a login with Kid access: it sees only the shows the owner allows (up to a highest US TV rating, from
    TMDB, plus any they allow anyway, minus any they pick to hide), can't add or remove shows, and keeps its own checkmarks. The allowed shows are
    written to a separate copy (users/{owner}/kids/{kid}) that's all the kid's login can read, so hidden shows never reach
-   its device. The owner's app — or an editor's — rewrites the copy whenever the list or the settings change. */
+   its device. The owner's app — or an editor's — rewrites the copy whenever the list or the settings change.
+   A kid can also search for shows and open their pages, but only ones within its rating limit that the owner hasn't
+   hidden (the copy carries the limit, and the ids of hidden shows the limit would otherwise let through). */
 const RATINGS = ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'];
 const RATING_NAMES = { 'TV-Y': 'All children', 'TV-Y7': 'Age 7 and up', 'TV-G': 'General audience', 'TV-PG': 'Parental guidance', 'TV-14': 'Age 14 and up', 'TV-MA': 'Mature audience' };
 const KID_DEFAULT_RATING = 'TV-PG';
@@ -730,11 +740,12 @@ const ABROAD = {
 };
 const COUNTRY = { GB: 'UK', CA: 'Canada', AU: 'Australia', DE: 'Germany' };
 // A show's US TV rating ({ r, from }: r is '' when it has none; from is the country it came from, '' for the US), from TMDB.
-// Kept on the device for a month.
-async function ratingOf(id) {
-  const c = tm.rate[id]; if (c && c.v === 2 && now() - c.t < 30 * DAY) return c.r;
+// Kept on the device for a month. show: the show's details, if already at hand (e.g. a search result).
+const rated = id => { const c = tm.rate[id]; return !!(c && c.v === 2 && now() - c.t < 30 * DAY); };
+async function ratingOf(id, show) {
+  if (rated(id)) return tm.rate[id].r;
   if (!config.tmdbKey) return '';
-  const s = cache[id]?.show || (await fetchShow(id))?.show; if (!s) return '';
+  const s = show || cache[id]?.show || (await fetchShow(id))?.show; if (!s) return '';
   if (tm.map[id] === undefined) tm.map[id] = await tmdbId(s);
   const list = (tm.map[id] && (await tmdb(`/tv/${tm.map[id]}/content_ratings`))?.results) || [];
   const of = cc => String(list.find(x => x.iso_3166_1 === cc)?.rating || '').toUpperCase().trim();
@@ -746,15 +757,28 @@ async function ratingOf(id) {
   return r;
 }
 // The copy a kid login reads: the open list's shows, minus hidden ones and any over the highest rating that aren't allowed anyway.
+// block: hidden shows the limit would let through, so the kid's search leaves them out too.
 async function kidCopyFor({ maxRating = '', hide = {}, allow = {} }) {
-  const list = followed().filter(s => !hide[s.id]);
-  if (maxRating) await inFours(list.filter(s => !allow[s.id]), s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
+  const all = followed(), passes = s => allow[s.id] || ratingOk(tm.rate[s.id]?.r, maxRating);
+  if (maxRating) await inFours(all.filter(s => !allow[s.id]), s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
   const shows = {};
-  for (const s of list) if (allow[s.id] || ratingOk(tm.rate[s.id]?.r, maxRating)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
-  return { ownerName: sharedOpen()?.name || user.name, maxRating, shows, updated: now() };
+  for (const s of all) if (!hide[s.id] && passes(s)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
+  const block = all.filter(s => hide[s.id] && passes(s)).map(s => s.id).sort((a, b) => a - b);
+  return { ownerName: sharedOpen()?.name || user.name, maxRating, shows, block, updated: now() };
 }
 let kidLogins = {}, kidSent = {}, kidTimer = null, kidSyncing = false;   // kidSent: what each kid's copy was last written with
-const kidSig = c => JSON.stringify([c.ownerName, c.maxRating, c.shows]);
+const kidSig = c => JSON.stringify([c.ownerName, c.maxRating, c.shows, c.block]);
+// On a kid's device: the limit from its copy, for search and show pages. kidTried: shows whose rating was already looked
+// up (so a failed lookup isn't retried in a loop); kidPending: ones still being looked up.
+let kidLimit = { maxRating: '', block: [] };
+const kidTried = new Set(), kidPending = new Set();
+// Whether a kid may see a show: on its list, or within its rating limit and not hidden. null while the rating isn't known.
+function kidCanSee(id) {
+  if (isFollowed(id)) return true;
+  if (kidLimit.block.includes(id)) return false;
+  if (!kidLimit.maxRating) return true;
+  return rated(id) ? ratingOk(tm.rate[id].r, kidLimit.maxRating) : null;
+}
 function syncKidsSoon() { clearTimeout(kidTimer); kidTimer = setTimeout(syncKids, 1500); }
 async function syncKids() {
   if (kidSyncing) return syncKidsSoon();
@@ -850,6 +874,7 @@ async function loadDiscover() {
 }
 
 function followBtn(s) {
+  if (isKid()) return isFollowed(s.id) ? '<span class="btn sm">✓ On your list</span>' : '';   // a kid can look, not add
   return isFollowed(s.id)
     ? `<button class="btn sm" data-act="unfollow" data-show="${s.id}">✓ Added</button>`
     : `<button class="btn primary sm" data-act="follow" data-show="${s.id}">＋ Add</button>`;
@@ -858,8 +883,9 @@ function followBtn(s) {
 let lastResults = [], lastQuery = '', searchTimer = null, searchSeq = 0;
 const showLookup = {};   // id -> trimmed show from search/discover, used when following
 views.search = () => {
-  app.innerHTML = `<h1>Add a show</h1>
-    <form class="search" id="searchForm"><input id="q" type="search" placeholder="Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…" autocomplete="off" autofocus>
+  const kid = isKid();
+  app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : '<h1>Add a show</h1>'}
+    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
     <button class="btn primary">Search</button></form><div id="results" class="rows"></div>`;
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
@@ -888,8 +914,20 @@ async function doSearch(q) {
 }
 function drawResults() {
   const box = $('#results'); if (!box) return;
-  if (!lastResults.length) { box.innerHTML = `<p class="muted">${lastQuery ? `No matches for “${esc(lastQuery)}”.` : 'Type a show name to search across every network and streaming service.'}</p>`; return; }
-  box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”</p>` + lastResults.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
+  let list = lastResults, checking = false;
+  if (isKid()) {   // only shows within the kid's limit; ratings are looked up once, then the results redraw
+    const todo = list.filter(s => kidCanSee(s.id) === null && !kidTried.has(s.id));
+    todo.forEach(s => { kidTried.add(s.id); kidPending.add(s.id); });
+    if (todo.length) inFours(todo, s => ratingOf(s.id, s).finally(() => kidPending.delete(s.id))).finally(drawResults);
+    checking = list.some(s => kidPending.has(s.id));
+    list = list.filter(s => kidCanSee(s.id) === true);
+  }
+  if (!list.length) {
+    box.innerHTML = `<p class="muted">${checking ? 'Checking ratings…' : !lastQuery ? 'Type a show name to search across every network and streaming service.'
+      : isKid() && lastResults.length ? `No matches for “${esc(lastQuery)}” that ${esc(sharedOpen().name)} allows.` : `No matches for “${esc(lastQuery)}”.`}</p>`;
+    return;
+  }
+  box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”${checking ? ' · checking ratings…' : ''}</p>` + list.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
@@ -1249,7 +1287,7 @@ function onUser(u) {
     } catch { }
   }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
-  user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {};
+  user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {}; kidLimit = { maxRating: '', block: [] };
   if (u) waitForServer();
   forgetFullList();
   state = norm(load(stateKey(), null));
@@ -1282,7 +1320,10 @@ function onData(data, fromServer) {
   }
   const first = firstSnapshot;
   const remote = norm(data);
-  if (isKid()) state.shows = remote.shows;   // exactly the shows allowed for this kid, never ones left on this device
+  if (isKid()) {   // exactly the shows allowed for this kid, never ones left on this device
+    state.shows = remote.shows;
+    kidLimit = { maxRating: data?.maxRating || '', block: data?.block || [] };
+  }
   // Anything this device changed that the server hasn't seen yet (e.g. edits made offline) gets uploaded.
   for (const kind of ['shows', 'watched'])
     for (const [k, v] of Object.entries(state[kind])) { const r = remote[kind][k]; if (!r || (v.t || 0) > (r.t || 0)) queue(kind, k, v); }
@@ -1542,9 +1583,12 @@ document.addEventListener('toggle', e => {
 function route() { const [name, arg, extra] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'shows', arg, extra }; }
 function render(fromRoute) {
   const r = route();
-  // A kid can't add shows, so Discover and Add Show aren't offered.
-  document.querySelectorAll('#tabs a[data-tab="discover"], #tabs a[data-tab="search"]').forEach(a => { a.style.display = isKid() ? 'none' : ''; });
-  if (isKid() && (r.name === 'discover' || r.name === 'search')) { location.hash = '#/'; return; }
+  // A kid can't add shows: no Discover, and Add Show becomes Search (within the kid's rating limit).
+  $('#tabs a[data-tab="discover"]').style.display = isKid() ? 'none' : '';
+  const st = $('#tabs a[data-tab="search"]'); st.dataset.label ||= st.innerHTML;
+  const label = isKid() ? '<span class="ico">⌕</span>Search' : st.dataset.label;
+  if (st.innerHTML !== label) st.innerHTML = label;
+  if (isKid() && r.name === 'discover') { location.hash = '#/'; return; }
   const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
