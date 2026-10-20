@@ -551,9 +551,9 @@ views.upcoming = () => {
   recent.sort((a, b) => b.t - a.t); soon.sort((a, b) => a.t - b.t);
   const row = ({ s, e }, check) => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
-      <div class="sub"><span class="code">${code(e)}</span> ${esc(e.name)}</div></div>
-    <div class="when">${fmtDate(e, true)}<br>${esc(channel(s.network, s.name))}</div>
-    ${check ? `<button class="btn primary sm watchbtn${isWatched(e.id) ? ' on' : ''}" data-act="watch" data-ep="${e.id}"><span class="wbox"></span>Watched</button>` : ''}</div>`;
+      <div class="sub"><span class="code">${code(e)}</span> ${esc(e.name)}</div>
+      <div class="when">${fmtDate(e, true)} · ${esc(channel(s.network, s.name))}</div>
+      ${check ? `<button class="btn primary sm watchbtn${isWatched(e.id) ? ' on' : ''}" data-act="watch" data-ep="${e.id}"><span class="wbox"></span>Watched</button>` : ''}</div></div>`;
   let days = '', cur = '';
   for (const it of soon) {
     const d = new Date(it.t).toDateString();
@@ -562,8 +562,8 @@ views.upcoming = () => {
   }
   app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
     ${!list.length ? `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>` : ''}
-    ${recent.length ? `<h2>Aired this week</h2><div class="rows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
-    ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
+    ${recent.length ? `<h2>Aired this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
+    ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows urows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
   if (list.some(f => !cache[f.id])) refreshAll(false);
 };
 
