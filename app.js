@@ -562,7 +562,7 @@ views.upcoming = () => {
   }
   app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
     ${!list.length ? `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>` : ''}
-    ${recent.length ? `<h2>Aired this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
+    ${recent.length ? `<h2>Airing this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
     ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows urows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
   if (list.some(f => !cache[f.id])) refreshAll(false);
 };
