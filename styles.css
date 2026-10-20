@@ -152,7 +152,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .row .info a:hover { text-decoration: underline; }
 .row .when { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
 /* Upcoming: bigger rows, with the air date and Watched button under the episode */
-.urows { gap: 10px; }
+.urows { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }   /* tiles, like My Shows */
 .urows .row { gap: 14px; padding: 12px; align-items: flex-start; }
 .urows .row .poster { width: 84px; border-radius: 8px; }
 .urows .row .poster .noimg { font-size: 16px; }
@@ -160,7 +160,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .urows .row .info .sub { font-size: 15px; margin-top: 3px; }
 .urows .row .when { font-size: 14px; white-space: normal; text-align: left; margin-top: 6px; }
 .urows .row .watchbtn { margin-top: 10px; font-size: 14px; padding: 7px 13px; }
-.urows .dayhead { font-size: 15px; }
+.urows .dayhead { font-size: 15px; grid-column: 1 / -1; margin-bottom: 0; }   /* each day starts a new line of tiles */
 .dhead { margin-top: 30px; }
 .dsub { font-size: 14px; margin: 18px 0 10px; color: var(--text); }
 .rrow { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 10px; scrollbar-width: thin; }
