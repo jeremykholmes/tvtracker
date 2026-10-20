@@ -548,7 +548,7 @@ views.upcoming = () => {
       else if (t > now() && t - now() < 45 * DAY) soon.push({ s: c.show, e, t });
     }
   }
-  recent.sort((a, b) => b.t - a.t); soon.sort((a, b) => a.t - b.t);
+  recent.sort((a, b) => a.t - b.t); soon.sort((a, b) => a.t - b.t);   // both oldest first
   const row = ({ s, e }, check) => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub"><span class="code">${code(e)}</span> ${esc(e.name)}</div>
