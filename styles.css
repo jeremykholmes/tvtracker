@@ -369,6 +369,11 @@ body.landing .foot { padding-bottom: 28px; }
 .admeta > span { white-space: nowrap; }
 .rolesel { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
 .memrow .actions { flex-wrap: nowrap; align-items: center; }
+/* login rows: buttons never squeeze to one letter per line — on narrow screens the controls drop under the name */
+.memrow:has(> .actions) { flex-wrap: wrap; row-gap: 8px; }
+.memrow:has(> .actions) > span:first-child { flex: 1 1 160px; }
+.memrow > .actions { flex: 0 1 auto; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; overflow-wrap: normal; }
+.memrow > .actions .btn { white-space: nowrap; flex-shrink: 0; }
 .lgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 12px; }
 .lgrid .rolesel { width: 100%; padding: 11px 10px; }
 
