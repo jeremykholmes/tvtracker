@@ -26,7 +26,7 @@ function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.p
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn('storage', e); } }
 
 /* ---------- state ---------- */
-// state.shows[id]   = { id, name, image, network, removed, t }
+// state.shows[id]   = { id, name, image, network, removed, later, t }   later: on the Future watch list (not started yet)
 // state.watched[ep] = { w: bool, t }      (last-write-wins per key, so devices merge cleanly)
 function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {} }; }
 let user = null;                        // { uid, email, name } when signed in
@@ -47,13 +47,31 @@ const showOldSeasons = new Set();        // showIds whose earlier fully-watched 
 const followed = () => Object.values(state.shows).filter(s => !s.removed);
 const isFollowed = id => !!(state.shows[id] && !state.shows[id].removed);
 const isWatched = id => !!(state.watched[id] && state.watched[id].w);
+// Future watch list: shows added to watch later. They stay out of Up next and Upcoming until an episode is checked off,
+// which moves them onto the main list for good.
+const started = id => !!cache[id]?.episodes.some(e => isWatched(e.id));
+const isLater = id => isFollowed(id) && !!state.shows[id].later && !started(id);
+const current = () => followed().filter(s => !isLater(s.id));   // the shows being watched: everything but the Future watch list
 
 function persist() { save(stateKey(), state); }
 function setWatched(ids, w) {
   const t = now();
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
+  const moved = w ? startShows(ids) : [];
   persist();
   if (w) collapseFinished(ids);
+  return moved;   // ids of shows that just left the Future watch list
+}
+const movedNote = moved => moved.length ? ` — ${moved.map(id => showInfo(id)?.name || 'show').join(', ')} moved to Up next` : '';
+// Checking off an episode of a show on the Future watch list moves it onto the main list (Up next, Upcoming).
+function startShows(ids) {
+  const moved = new Set();
+  for (const id of ids) {
+    const sid = findEp(id)?.sid, s = state.shows[sid];
+    if (!s || !s.later || s.removed || moved.has(sid)) continue;
+    s.later = false; s.t = now(); queue('shows', sid, s); moved.add(sid);
+  }
+  return [...moved];
 }
 // A season whose aired episodes are now all watched folds shut on the show page.
 function collapseFinished(ids) {
@@ -63,9 +81,9 @@ function collapseFinished(ids) {
     if (f.c.episodes.filter(e => e.s === f.e.s && aired(e)).every(e => isWatched(e.id))) open.delete(f.e.s);
   }
 }
-function follow(s) {
+function follow(s, later) {
   if (isKid()) return;
-  state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: now() };
+  state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, later: !!later, t: now() };
   queue('shows', s.id, state.shows[s.id]); persist();
 }
 function unfollow(id) {
@@ -425,7 +443,10 @@ views.shows = () => {
   for (const r of byNet) { const d = airDay(r); if (d != null) dc[d] = (dc[d] || 0) + 1; }
   let day = load(K_DAY, '');
   if (day !== '' && !dc[day]) day = '';
-  const rows = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
+  const shown = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
+  // Future watch list shows get their own section; everything else is sorted into the usual ones.
+  const future = shown.filter(r => isLater(r.s.id)).sort((a, b) => (state.shows[b.s.id]?.t || 0) - (state.shows[a.s.id]?.t || 0));
+  const rows = shown.filter(r => !isLater(r.s.id));
   // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
   const dayChip = (d, label, c, full) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}" aria-label="${full}, ${c} show${c === 1 ? '' : 's'}">${label}<span>${c} show${c === 1 ? '' : 's'}</span></button>`;
   const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[d]; };
@@ -450,12 +471,15 @@ views.shows = () => {
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
   const loading = rows.filter(r => !r.p);
+  const futureSec = future.length ? `<h2>Future watch list · ${future.length}</h2>
+    <p class="sub futurehint">Shows you plan to watch. Check off the first episode and the show moves to Up next.</p>
+    <div class="grid">${future.map(r => futureCard(r.s, r.p)).join('')}</div>` : '';
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${sec('Finished', done)}${sec('Loading', loading)}`;
+    ${futureSec}${sec('Finished', done)}${sec('Loading', loading)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -478,6 +502,23 @@ function card(s, p) {
       ${p ? `<div class="bar"><i style="width:${pct}%"></i></div>
       <div class="sub">${p.watched}/${p.total} watched${p.unwatched ? ` · <b>${p.unwatched} left</b>` : ''}</div>` : '<div class="sub">Loading episodes…</div>'}
       ${foot}</div></article>`;
+}
+
+// A show on the Future watch list: where it starts, and a Watched button for its first episode once that's out.
+function futureCard(s, p) {
+  const id = s.id, seasons = p ? new Set((cache[id]?.episodes || []).filter(aired).map(e => e.s)).size : 0;
+  let info = '<div class="sub">Loading episodes…</div>', foot = '';
+  if (p) {
+    info = `<div class="sub">${p.total ? `${p.total} episode${p.total === 1 ? '' : 's'} out${seasons > 1 ? ` · ${seasons} seasons` : ''}` : 'Not out yet'}</div>`;
+    if (p.next) foot = `<div class="next">Start with: ${twoLines(p.next)}</div>
+      <button class="btn primary sm watchbtn" data-act="watch" data-ep="${p.next.id}"><span class="wbox"></span>Watched</button>`;
+    else if (p.upcoming) foot = `<div class="next">${p.upcoming.s === 1 && p.upcoming.n === 1 ? 'Premieres' : 'Starts'}: ${fmtDate(p.upcoming, true)}</div>`;
+    else foot = '<div class="next muted">No episodes scheduled yet</div>';
+  }
+  return `<article class="card later">
+    <div style="position:relative">${poster(s, '#/show/' + id)}<span class="badge later">Later</span></div>
+    <div class="body"><a class="title" href="#/show/${id}">${esc(s.name)}</a>
+      <div class="sub">${esc(channel(s.network, s.name))}</div>${info}${foot}</div></article>`;
 }
 
 views.show = arg => {
@@ -538,11 +579,15 @@ views.show = arg => {
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
       ${s.summary ? `<p class="summary">${esc(s.summary)}</p>` : ''}
       <div class="actions">
-        ${f || isKid() ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>`}
+        ${f || isKid() ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>
+          <button class="btn" data-act="follow-later" data-show="${id}" title="Save it for later — it moves to Up next when you check off an episode">🕒 Watch later</button>`}
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
       </div>
-      ${f && !isKid() ? `<div class="actions"><button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
+      ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> On your Future watch list — check off an episode and it moves to Up next.</p>` : ''}
+      ${f && !isKid() ? `<div class="actions">${isLater(id) ? `<button class="btn" data-act="later-off" data-show="${id}">▶ Start watching now</button>`
+        : !started(id) && cache[id] ? `<button class="btn" data-act="later-on" data-show="${id}">🕒 Move to Future watch list</button>` : ''}
+        <button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
     <p class="sub">Tip: tap <b>Watched Up To Here</b> on an episode to mark it and everything before it as watched.</p>`;
@@ -561,7 +606,7 @@ function epRow(sid, e) {
 
 views.upcoming = () => {
   if (needsAccount()) return signInWall('See when your shows air');
-  const list = followed();
+  const list = current(), later = followed().length - list.length;   // Future watch list shows join once started
   const recent = [], soon = [];
   for (const f of list) {
     const c = cache[f.id]; if (!c) continue;
@@ -585,10 +630,11 @@ views.upcoming = () => {
   }
   app.innerHTML = `<div class="toolbar"><h1>Upcoming</h1><span class="sub">Your shows · next 45 days</span></div>
     ${!list.length ? (isKid() ? `<div class="empty"><p>${esc(sharedOpen().name)} hasn't added any shows for you yet.</p></div>`
+      : later ? `<div class="empty"><p>Shows on your Future watch list appear here once you check off their first episode.</p><a class="btn primary" href="#/">See My Shows</a></div>`
       : `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>`) : ''}
     ${recent.length ? `<h2>Airing this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
     ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows urows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
-  if (list.some(f => !cache[f.id])) refreshAll(false);
+  if (followed().some(f => !cache[f.id])) refreshAll(false);
 };
 
 // Discover: rows of recommendations from what you watch, then this week's premieres.
@@ -762,7 +808,7 @@ async function kidCopyFor({ maxRating = '', hide = {}, allow = {} }) {
   const all = followed(), passes = s => allow[s.id] || ratingOk(tm.rate[s.id]?.r, maxRating);
   if (maxRating) await inFours(all.filter(s => !allow[s.id]), s => ratingOf(s.id));   // one that can't be looked up stays hidden until it can
   const shows = {};
-  for (const s of all) if (!hide[s.id] && passes(s)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, t: s.t || 0 };
+  for (const s of all) if (!hide[s.id] && passes(s)) shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, later: !!s.later, t: s.t || 0 };
   const block = all.filter(s => hide[s.id] && passes(s)).map(s => s.id).sort((a, b) => a - b);
   return { ownerName: sharedOpen()?.name || user.name, maxRating, shows, block, updated: now() };
 }
@@ -875,9 +921,11 @@ async function loadDiscover() {
 
 function followBtn(s) {
   if (isKid()) return isFollowed(s.id) ? '<span class="btn sm">✓ On your list</span>' : '';   // a kid can look, not add
-  return isFollowed(s.id)
-    ? `<button class="btn sm" data-act="unfollow" data-show="${s.id}">✓ Added</button>`
-    : `<button class="btn primary sm" data-act="follow" data-show="${s.id}">＋ Add</button>`;
+  if (isFollowed(s.id)) return isLater(s.id)
+    ? `<button class="btn sm" data-act="unfollow" data-show="${s.id}" title="On your Future watch list — tap to remove">✓ Later</button>`
+    : `<button class="btn sm" data-act="unfollow" data-show="${s.id}">✓ Added</button>`;
+  return `<span class="addbtns"><button class="btn primary sm" data-act="follow" data-show="${s.id}">＋ Add</button>
+    <button class="btn sm" data-act="follow-later" data-show="${s.id}" title="Add to your Future watch list">🕒 Later</button></span>`;
 }
 
 let lastResults = [], lastQuery = '', searchTimer = null, searchSeq = 0;
@@ -1390,13 +1438,21 @@ function toast(msg, undo) {
 /* ---------- actions ---------- */
 function markWithUndo(ids, w, label) {
   const prev = ids.map(id => [id, state.watched[id]]);
-  setWatched(ids, w);
+  const moved = setWatched(ids, w);
   render();
-  toast(label, () => {
+  toast(label + movedNote(moved), () => {
     const t = now();
-    prev.forEach(([id, old]) => { state.watched[id] = { w: !!(old && old.w), t }; });
+    prev.forEach(([id, old]) => { state.watched[id] = { w: !!(old && old.w), t }; queue('watched', id, state.watched[id]); });
+    moved.forEach(sid => { const s = state.shows[sid]; if (s) { s.later = true; s.t = t; queue('shows', sid, s); } });   // back to the Future watch list
     persist();
   });
+}
+// Moves a followed show onto (true) or off (false) the Future watch list.
+function setLater(id, later) {
+  if (!requireAccount(true)) return;
+  const s = state.shows[id]; if (!s || s.removed) return;
+  s.later = later; s.t = now(); queue('shows', id, s); persist(); render();
+  toast(later ? `${s.name} moved to your Future watch list` : `${s.name} moved to Up next`, () => { s.later = !later; s.t = now(); queue('shows', id, s); persist(); });
 }
 const actions = {
   getapp() { getApp(); },
@@ -1432,13 +1488,16 @@ const actions = {
     if (!isFollowed(sid)) follow(cache[sid].show);
     markWithUndo(ids, true, `Marked ${ids.length} episode${ids.length === 1 ? '' : 's'} watched`);
   },
-  async follow(b) {
+  'follow-later'(b) { return actions.follow(b, null, true); },
+  'later-on'(b) { setLater(+b.dataset.show, true); },
+  'later-off'(b) { setLater(+b.dataset.show, false); },
+  async follow(b, e, later) {
     const id = +b.dataset.show;
     if (needsAccount() && authReady) try { sessionStorage.setItem('tvt.addAfter', id); } catch { }   // added once they've signed up
     if (!requireAccount(true)) return;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
-    follow(s); render(); toast(`Added ${s.name}`);   // search results stay put so you can add more
+    follow(s, later); render(); toast(later ? `${s.name} added to your Future watch list` : `Added ${s.name}`);   // search results stay put so you can add more
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
@@ -1521,8 +1580,9 @@ document.addEventListener('change', e => {
   if (!requireAccount()) { t.checked = !t.checked; return; }
   const sid = +t.dataset.show, id = +t.dataset.ep;
   if (t.checked && !isFollowed(sid) && cache[sid] && !isKid()) follow(cache[sid].show);
-  setWatched([id], t.checked);
+  const moved = setWatched([id], t.checked);
   render();
+  if (moved.length) toast(movedNote(moved).slice(3).replace(/^./, c => c.toUpperCase()));
 });
 // A filter logo that won't load falls back to the network's name.
 document.addEventListener('error', e => {

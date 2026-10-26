@@ -414,3 +414,10 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .backbtn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px -6px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
 .backbtn span { font-size: 20px; line-height: 1; }
 .backbtn:hover, .backbtn:focus-visible { color: var(--text); background: var(--panel2); }
+
+/* Future watch list: shows saved for later, which move to Up next once an episode is checked off */
+.futurehint { margin: -6px 0 12px; }
+.badge.later { background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+.card.later { border-style: dashed; }
+.laternote { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+.addbtns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
