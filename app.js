@@ -390,6 +390,14 @@ function airDay(r) {
   const d = DAYS.findIndex(x => (r.s?.schedule?.days || [])[0]?.startsWith(x));   // TVmaze's schedule, while episodes load
   return d < 0 ? null : d;
 }
+// Mid-season: the show's next episode is listed and airs within the coming week, so it isn't waiting for a new season.
+const inSeason = r => !!(r.p?.upcoming && airTime(r.p.upcoming) < new Date().setHours(0, 0, 0, 0) + 8 * DAY);
+// The day a show is filed under on the "Airs on" filter. Today only lists shows that are mid-season; one between
+// seasons (or that has finished) whose last or next episode falls on today's weekday is left out of it.
+function filterDay(r) {
+  const d = airDay(r);
+  return d === new Date().getDay() && !inSeason(r) ? null : d;
+}
 // Website of each network/streamer, used to show its app icon on the My Shows filter (or our own icon file). Others show their name.
 const NET_SITES = {
   'netflix': 'icons/netflix.svg', 'hbo max': 'icons/hbomax.svg', 'hulu': 'icons/hulu.svg', 'disney+': 'disneyplus.com', 'apple tv+': 'icons/appletv.svg',
@@ -440,10 +448,10 @@ views.shows = () => {
   const byNet = net ? all.filter(r => services(r.s).includes(net)) : all;
   // Day filter: the weekday (your time) the show's next episode airs, or its latest one did. Remembered on this device.
   const dc = {};
-  for (const r of byNet) { const d = airDay(r); if (d != null) dc[d] = (dc[d] || 0) + 1; }
+  for (const r of byNet) { const d = filterDay(r); if (d != null) dc[d] = (dc[d] || 0) + 1; }
   let day = load(K_DAY, '');
   if (day !== '' && !dc[day]) day = '';
-  const shown = day !== '' ? byNet.filter(r => airDay(r) === +day) : byNet;
+  const shown = day !== '' ? byNet.filter(r => filterDay(r) === +day) : byNet;
   // Future watch list shows get their own section; everything else is sorted into the usual ones.
   const future = shown.filter(r => isLater(r.s.id)).sort((a, b) => (state.shows[b.s.id]?.t || 0) - (state.shows[a.s.id]?.t || 0));
   const rows = shown.filter(r => !isLater(r.s.id));
