@@ -76,7 +76,7 @@ for (const u of users) {
 
     const doc = (await db.doc(`users/${u.uid}`).get()).data();
     if (!doc || doc.listOf) continue;
-    const shows = Object.entries(doc.shows || {}).filter(([, s]) => !s.removed).map(([id, s]) => ({ id: +id, name: s.name || 'Untitled' }));
+    const shows = Object.entries(doc.shows || {}).filter(([, s]) => !s.removed && !s.later).map(([id, s]) => ({ id: +id, name: s.name || 'Untitled' }));
     if (!shows.length) { nothingNew++; continue; }
     const buckets = (await db.collection(`users/${u.uid}/watched`).get()).docs.map(d => d.data());
     const watched = mergeWatched(doc.watched, buckets);
