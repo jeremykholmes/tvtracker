@@ -96,7 +96,7 @@ function collapseFinished(ids) {
     if (f.c.episodes.filter(e => e.s === f.e.s && aired(e)).every(e => isWatched(e.id))) open.delete(f.e.s);
   }
 }
-// rec: name of the friend who recommended it; with later, it waits under From friends until an episode is checked off.
+// rec: name of the friend who recommended it; with later, it waits under Recommended by friends until an episode is checked off.
 function follow(s, later, rec) {
   if (isKid()) return;
   state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, later: !!later, t: now(),
@@ -471,7 +471,7 @@ views.shows = () => {
   const shown = day !== '' ? byNet.filter(r => filterDay(r) === +day) : byNet;
   // Future watch list shows get their own section; everything else is sorted into the usual ones.
   const later = shown.filter(r => isLater(r.s.id)).sort((a, b) => (state.shows[b.s.id]?.t || 0) - (state.shows[a.s.id]?.t || 0));
-  // Recommendations you added wait in their own section (From friends) until an episode is checked off.
+  // Recommendations you added wait in their own section (Recommended by friends) until an episode is checked off.
   const fromFriends = later.filter(r => state.shows[r.s.id]?.rec), future = later.filter(r => !state.shows[r.s.id]?.rec);
   const rows = shown.filter(r => !isLater(r.s.id));
   // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
@@ -501,15 +501,15 @@ views.shows = () => {
   const futureSec = future.length ? `<h2>Future watch list · ${future.length}</h2>
     <p class="sub futurehint">Shows you plan to watch. Check off the first episode and the show moves to Up next.</p>
     <div class="grid">${future.map(r => futureCard(r.s, r.p)).join('')}</div>` : '';
-  const friendsSec = fromFriends.length ? `<h2>From friends · ${fromFriends.length}</h2>
+  const friendsSec = fromFriends.length ? `<h2>Recommended by friends · ${fromFriends.length}</h2>
     <p class="sub futurehint">Recommendations you added. Check off the first episode and the show moves to Up next.</p>
     <div class="grid">${fromFriends.map(r => futureCard(r.s, r.p, (state.shows[r.s.id].rec || '').trim().split(/\s+/)[0] || 'Friend')).join('')}</div>` : '';
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
-    ${sec('Up next', watching)}${friendsSec}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${sec('Finished', done)}${sec('Loading', loading)}`;
+    ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
+    ${futureSec}${sec('Finished', done)}${sec('Loading', loading)}${friendsSec}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -527,7 +527,7 @@ function inboxSection() {
         <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
         <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
   return `<section class="inbox"><h2>Shows recommended by friends · ${inbox.length}</h2>
-    <p class="sub futurehint">Add one and it waits under From friends until you watch the first episode, then moves to Up next.</p>${inbox.map(row).join('')}</section>`;
+    <p class="sub futurehint">Add one and it waits under Recommended by friends until you watch the first episode, then moves to Up next.</p>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
   inbox = items.filter(m => {   // already on your list and started: nothing to recommend
@@ -628,7 +628,7 @@ function card(s, p) {
 }
 
 // A show on the Future watch list: where it starts, and a Watched button for its first episode once that's out.
-function futureCard(s, p, from) {   // from: the friend who recommended it (From friends section)
+function futureCard(s, p, from) {   // from: the friend who recommended it (Recommended by friends section)
   const id = s.id, seasons = p ? new Set((cache[id]?.episodes || []).filter(aired).map(e => e.s)).size : 0;
   let info = '<div class="sub">Loading episodes…</div>', foot = '';
   if (p) {
@@ -707,10 +707,10 @@ views.show = arg => {
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
       </div>
-      ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> ${state.shows[id]?.rec ? `Recommended by ${esc(state.shows[id].rec)} — waiting under From friends` : 'On your Future watch list'} — check off an episode and it moves to Up next.</p>` : ''}
+      ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> ${state.shows[id]?.rec ? `Recommended by ${esc(state.shows[id].rec)} — waiting under Recommended by friends` : 'On your Future watch list'} — check off an episode and it moves to Up next.</p>` : ''}
       ${f && !isKid() ? `<div class="actions">${isLater(id) ? `<button class="btn" data-act="later-off" data-show="${id}">▶ Start watching now</button>`
         : !started(id) && cache[id] ? `<button class="btn" data-act="later-on" data-show="${id}">🕒 Move to Future watch list</button>` : ''}
-        ${!started(id) && cache[id] && !state.shows[id]?.rec ? `<button class="btn" data-act="to-friends" data-show="${id}">👥 Move to From friends</button>` : ''}
+        ${!started(id) && cache[id] && !state.shows[id]?.rec ? `<button class="btn" data-act="to-friends" data-show="${id}">👥 Move to Recommended by friends</button>` : ''}
         <button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
@@ -1499,7 +1499,7 @@ function addAfterSignIn() {
   if (!id || isFollowed(id) || !requireAccount(true)) return;
   (cache[id] ? Promise.resolve(cache[id]) : fetchShow(id)).then(c => {
     if (!c || !user || isFollowed(id)) return;
-    follow(c.show, !!from, from); render(); toast(from ? `Added ${c.show.name} — it's under From friends until you start it` : `Added ${c.show.name} to your shows`);
+    follow(c.show, !!from, from); render(); toast(from ? `Added ${c.show.name} — it's under Recommended by friends until you start it` : `Added ${c.show.name} to your shows`);
   }).catch(() => {});
 }
 function onData(data, fromServer) {
@@ -1639,13 +1639,13 @@ const actions = {
   },
   'follow-later'(b) { return actions.follow(b, null, true); },
   'later-on'(b) { setLater(+b.dataset.show, true); },
-  // A show a friend recommended outside the app (or before From friends existed): waits there until it's started.
+  // A show a friend recommended outside the app (or before Recommended by friends existed): waits there until it's started.
   'to-friends'(b) {
     if (!requireAccount(true)) return;
     const id = +b.dataset.show, s = state.shows[id]; if (!s || s.removed) return;
     const who = (prompt(`Who recommended ${s.name}?`) || '').trim().slice(0, 100); if (!who) return;
     s.rec = who; s.later = true; s.t = now(); queue('shows', id, s); persist(); render();
-    toast(`${s.name} moved to From friends`);
+    toast(`${s.name} moved to Recommended by friends`);
   },
   'later-off'(b) { setLater(+b.dataset.show, false); },
   async follow(b, e, later) {
@@ -1656,7 +1656,7 @@ const actions = {
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
     follow(s, later || !!from, from); render();   // search results stay put so you can add more
-    toast(from ? `${s.name} added — it's under From friends until you start it` : later ? `${s.name} added to your Future watch list` : `Added ${s.name}`);
+    toast(from ? `${s.name} added — it's under Recommended by friends until you start it` : later ? `${s.name} added to your Future watch list` : `Added ${s.name}`);
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
@@ -1675,7 +1675,7 @@ const actions = {
   async 'inbox-accept'(b) {
     const m = inbox.find(x => x.id === b.dataset.id); if (!m || !requireAccount(true)) return;
     follow(m.show, true, m.fromName); cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
-    render(); toast(`${m.show.name} added — it's under From friends until you start it`);
+    render(); toast(`${m.show.name} added — it's under Recommended by friends until you start it`);
     if (!cache[m.show.id]) { try { await fetchShow(m.show.id); render(); } catch { } }
   },
   'inbox-dismiss'(b) { cloud.dismissShow(b.dataset.id).catch(x => toast(cloud.friendlyError(x))); },
