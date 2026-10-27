@@ -421,3 +421,22 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .card.later { border-style: dashed; }
 .laternote { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
 .addbtns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+
+/* Shows sent to you (top of My Shows), and the Recommend dialog */
+.tabs a { position: relative; }
+.tabcount { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
+.tabs a.on .tabcount { background: var(--text); color: var(--panel); }
+.inbox { margin-bottom: 8px; }
+.inboxrow { display: flex; gap: 14px; align-items: flex-start; background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; }
+.inboxrow .poster { width: 64px; flex: none; }
+.inboxrow .grow { min-width: 0; flex: 1; }
+.inboxrow p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.inboxrow .inboxnote { font-style: italic; }
+.inboxrow .actions { margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.picklist { display: flex; flex-direction: column; gap: 6px; }
+.picklist:empty { display: none; }
+.pickrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--text); font: inherit; cursor: pointer; }
+.pickrow:hover { border-color: var(--accent); }
+.pickrow .sub { font-size: 12px; overflow-wrap: anywhere; }
+.picked { padding: 9px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+.appdlg .actions { flex-wrap: wrap; }
