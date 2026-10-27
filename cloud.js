@@ -10,13 +10,13 @@ export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebase
 const BUCKETS = 32;
 const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
 
-let A, F, appMod, auth, db, unsubs = [];
+let A, F, appMod, auth, db, unsubs = [], inboxUnsub = null;
 let active = null, handlers = null;   // active: uid of the account whose list is open (yours, or the owner's for a login they made)
 let kid = false;                      // a kid login: the owner's shows come from its filtered copy, checkmarks from its own account
 export const activeUid = () => active;
 
-export async function start({ onUser, onData, onError }) {
-  handlers = { onData, onError };
+export async function start({ onUser, onData, onError, onInbox }) {
+  handlers = { onData, onError, onInbox };
   if (!configured) { onUser(null); return; }
   let authMod, fsMod;
   [appMod, authMod, fsMod] = await Promise.all([
@@ -33,6 +33,7 @@ export async function start({ onUser, onData, onError }) {
   A.getRedirectResult(auth).catch(e => onError(rememberPending(e)));
   A.onAuthStateChanged(auth, async user => {
     unsubs.forEach(u => u()); unsubs = [];
+    inboxUnsub?.(); inboxUnsub = null; handlers.onInbox?.([]);
     const u = user ? toUser(user) : null;
     if (u) u.linked = await linkedList(user.uid);   // a login made by a list's owner opens that list
     if ((auth.currentUser?.uid || null) !== (user?.uid || null)) return;   // signed in/out again meanwhile
@@ -40,6 +41,7 @@ export async function start({ onUser, onData, onError }) {
     kid = u?.linked?.role === 'kid';
     onUser(u);
     if (u) { listen(active, onData, onError); noteLogin(user); }
+    if (u && !u.linked && !isLogin(u.email)) watchInbox(user.uid);   // logins use someone else's list, so they don't get shows sent to them
   });
 }
 
@@ -167,6 +169,74 @@ export function removeLogin(uid) {
   return b.commit();
 }
 
+/* ---------- sending a show to another account ----------
+   directory/{email}: { uid, name, key } — finds an account from the exact email it signs in with (no listing).
+   byName/{key}/people/{uid}: { name, hint } — finds accounts by their exact full name (key: the name in lower case,
+   spaces tidied). Only someone who types the whole name reaches it; nothing can be listed or searched by part of a name.
+   hint is a masked email to tell people with the same name apart. Leaving name search (users/{uid}.findable false)
+   removes the entry. users/{uid}/inbox/{id}: a show someone sent; only the recipient can read or delete it, and anyone
+   they block (users/{uid}.blocked) can't send. Logins made for others aren't listed and can't receive. */
+const dirId = email => String(email || '').trim().toLowerCase();
+const maskEmail = email => { const [a, d] = dirId(email).split('@'); return a && d ? `${a[0]}•••@${d}` : ''; };
+// Must match nameKey() in firestore.rules.
+export const nameKey = name => String(name || '').toLowerCase().replace(/\//g, ' ').replace(/[ \t\n\f\r]+/g, ' ').replace(/^ | $/g, '').slice(0, 100);
+// Keeps the signed-in account findable (its own list only). At most once a day per device unless forced.
+export async function listInDirectory(name, findable, force) {
+  const u = auth?.currentUser; if (!u?.email || isLogin(u.email)) return;
+  name = String(name || '').trim().slice(0, 100);
+  const store = 'tvt-dir-' + u.uid, now = Date.now(), mark = `${findable ? 1 : 0}|${name}`;
+  try { const v = JSON.parse(localStorage.getItem(store) || 'null'); if (!force && v && v.m === mark && now - v.t < 864e5) return; } catch (e) {}
+  const dir = F.doc(db, 'directory', dirId(u.email)), key = nameKey(name);
+  const old = await F.getDoc(dir).then(d => d.exists() ? d.data().key || '' : '', () => '');
+  await F.setDoc(dir, { uid: u.uid, name, key: findable ? key : '' });   // on its own, so email lookup works whatever happens to the name entry
+  const b = F.writeBatch(db);
+  if (old && old !== key) b.delete(F.doc(db, 'byName', old, 'people', u.uid));   // renamed: the old name no longer finds them
+  if (key) findable ? b.set(F.doc(db, 'byName', key, 'people', u.uid), { name, hint: maskEmail(u.email) }) : b.delete(F.doc(db, 'byName', key, 'people', u.uid));
+  await b.commit();
+  try { localStorage.setItem(store, JSON.stringify({ t: now, m: mark })); } catch (e) {}
+}
+// Switches name search on or off for the signed-in account.
+export async function setFindable(on, name) {
+  await F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), { findable: on });
+  await listInDirectory(name, on, true);
+}
+// [{ uid, name, hint }] for accounts whose full name is exactly this (ignoring capitals and extra spaces).
+export async function findPeople(name) {
+  const key = nameKey(name); if (!key) return [];
+  const snap = await F.getDocs(F.query(F.collection(db, 'byName', key, 'people'), F.limit(10)));
+  return snap.docs.filter(d => d.id !== auth.currentUser.uid).map(d => ({ uid: d.id, name: d.data().name, hint: d.data().hint || '' }));
+}
+// { uid, name, hint } for the account with this exact email; errors with a code the app explains.
+export async function findByEmail(email) {
+  const fail = c => Object.assign(new Error(c), { code: c });
+  if (isLogin(email) || !dirId(email).includes('@')) throw fail('tvt/no-account');
+  const d = await F.getDoc(F.doc(db, 'directory', dirId(email)));
+  if (!d.exists()) throw fail('tvt/no-account');
+  if (d.data().uid === auth.currentUser.uid) throw fail('tvt/self');
+  return { uid: d.data().uid, name: d.data().name || email, hint: maskEmail(email) };
+}
+export async function sendShow(to, show, note, fromName) {
+  const u = auth.currentUser;
+  if (to === u.uid) throw Object.assign(new Error('tvt/self'), { code: 'tvt/self' });
+  await F.addDoc(F.collection(db, 'users', to, 'inbox'), {
+    from: u.uid, fromName: String(fromName || '').trim().slice(0, 100) || loginName(u.email), fromEmail: u.email,
+    show: { id: +show.id, name: String(show.name).slice(0, 200), image: String(show.image || '').slice(0, 500), network: String(show.network || '').slice(0, 100) },
+    note: String(note || '').trim().slice(0, 300), t: Date.now() });
+}
+function watchInbox(uid) {
+  inboxUnsub = F.onSnapshot(F.query(F.collection(db, 'users', uid, 'inbox'), F.orderBy('t', 'desc'), F.limit(50)),
+    snap => handlers.onInbox?.(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => console.warn('inbox', e));
+}
+export const dismissShow = id => F.deleteDoc(F.doc(db, 'users', auth.currentUser.uid, 'inbox', id));
+// Blocks the sender of an inbox item: they can't send any more, and everything they sent is removed.
+export async function blockSender(m, all) {
+  const me = auth.currentUser.uid, b = F.writeBatch(db);
+  b.update(F.doc(db, 'users', me), new F.FieldPath('blocked', m.from), { name: m.fromName || '', email: m.fromEmail || '', t: Date.now() });
+  for (const x of all) if (x.from === m.from) b.delete(F.doc(db, 'users', me, 'inbox', x.id));
+  await b.commit();
+}
+export const unblock = uid => F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('blocked', uid), F.deleteField());
+
 /* ---------- contact form ---------- */
 // Saves a Contact us message (anyone can send one; only the admin can read them), and emails a copy if set up.
 export async function sendMessage({ name, email, message }) {
@@ -187,12 +257,25 @@ export const deleteMessage = id => F.deleteDoc(F.doc(db, 'messages', id));
 // Verified email only: Google confirms it on Google sign-in, so nobody can claim the address with a password sign-up.
 export const isAdmin = () => !!adminEmail && !!auth?.currentUser?.emailVerified && (auth.currentUser.email || '').toLowerCase() === adminEmail.toLowerCase();
 // Every account's stored profile and list size (only the admin's account is allowed to read these).
+// Lists accounts that haven't opened the site since sending shows arrived, so people can find them.
+export async function backfillDirectory(accounts) {
+  const b = F.writeBatch(db); let n = 0;
+  for (const a of accounts) {
+    if (a.listOf || !a.email || isLogin(a.email)) continue;
+    const name = String(a.name || a.email.split('@')[0]).trim().slice(0, 100), key = a.findable ? nameKey(name) : '';
+    b.set(F.doc(db, 'directory', dirId(a.email)), { uid: a.uid, name, key }, { merge: true });
+    if (key) b.set(F.doc(db, 'byName', key, 'people', a.uid), { name, hint: maskEmail(a.email) });
+    if (++n >= 200) break;
+  }
+  if (n) await b.commit();
+  return n;
+}
 export async function allAccounts() {
   const snap = await F.getDocs(F.collection(db, 'users'));
   return snap.docs.map(d => {
     const x = d.data();
     return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
-      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0 };
+      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0, findable: x.findable !== false };
   });
 }
 
@@ -274,8 +357,16 @@ export async function deleteAccount(password) {
   if (usesPassword()) await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, password));
   else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
   unsubs.forEach(x => x()); unsubs = [];        // stop listening, or the empty document would be recreated
+  inboxUnsub?.(); inboxUnsub = null;
   const mine = await F.getDoc(F.doc(db, 'users', u.uid)).catch(() => null);
+  const inbox = await F.getDocs(F.collection(db, 'users', u.uid, 'inbox')).catch(() => null);
+  const dir = u.email ? await F.getDoc(F.doc(db, 'directory', dirId(u.email))).catch(() => null) : null;
   const b = F.writeBatch(db);
+  inbox?.forEach(d => b.delete(d.ref));
+  if (dir?.exists() && dir.data().uid === u.uid) {
+    b.delete(dir.ref);
+    if (dir.data().key) b.delete(F.doc(db, 'byName', dir.data().key, 'people', u.uid));
+  }
   for (const k of Object.keys((mine?.exists() && mine.data().logins) || {})) b.delete(F.doc(db, 'users', u.uid, 'kids', k));
   for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
   b.delete(F.doc(db, 'users', u.uid));

@@ -30,6 +30,9 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 // state.watched[ep] = { w: bool, t }      (last-write-wins per key, so devices merge cleanly)
 function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {} }; }
 let user = null;                        // { uid, email, name } when signed in
+let inbox = [];                         // shows other accounts sent you, newest first: { id, from, fromName, fromEmail, show, note, t }
+let blocked = {};                       // accounts you blocked from sending you shows: uid -> { name, email }
+let findable = true;                    // others can find you by name when sending a show
 // Same logo + text as the splash in index.html, shown while the sign-in check finishes.
 const SPLASH = '<div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div>';
 let authReady = !cloud.configured;       // false until Firebase reports who's signed in
@@ -431,7 +434,7 @@ views.shows = () => {
     return;
   }
   if (!list.length) {
-    app.innerHTML = `<div class="empty"><h1>Start your watchlist</h1>
+    app.innerHTML = `${inboxSection()}<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
       ${user ? `<p class="sub" style="margin-top:18px">Signed in as ${esc(cloud.loginName(user.email))}${sharedOpen() ? ` · viewing ${esc(sharedOpen().name)}'s list` : ''}</p>` : ''}
@@ -485,11 +488,105 @@ views.shows = () => {
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
-    ${filterBar}${dayBar}
+    ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${futureSec}${sec('Finished', done)}${sec('Loading', loading)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
+
+// Shows other people sent to this account, at the top of My Shows until added or dismissed.
+function inboxSection() {
+  if (!inbox.length || sharedOpen()) return '';
+  const row = m => { const on = isFollowed(m.show.id), first = (m.fromName || '').trim().split(/\s+/)[0];
+    const href = `#/show/${m.show.id}${first ? '/' + encodeURIComponent(first) : ''}`;
+    return `<div class="inboxrow">${poster(m.show, href)}<div class="grow">
+      <p><b>${esc(m.fromName)}</b> recommends <a href="${href}">${esc(m.show.name)}</a></p>
+      ${m.note ? `<p class="inboxnote">“${esc(m.note)}”</p>` : ''}
+      <p class="sub">${esc(cloud.loginName(m.fromEmail))} · ${ago(m.t)}</p>
+      <div class="actions">${on ? '<span class="sub">Already on your list</span>'
+        : `<button class="btn primary sm" data-act="inbox-add" data-id="${esc(m.id)}">＋ Add to my shows</button>
+           <button class="btn sm" data-act="inbox-later" data-id="${esc(m.id)}">🕒 Watch later</button>`}
+        <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
+        <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
+  return `<section class="inbox"><h2>Sent to you · ${inbox.length}</h2>${inbox.map(row).join('')}</section>`;
+}
+function onInbox(items) {
+  inbox = items;
+  const tab = $('#tabs a[data-tab="shows"]'); let dot = tab.querySelector('.tabcount');
+  if (!inbox.length) dot?.remove();
+  else { if (!dot) { dot = document.createElement('span'); dot.className = 'tabcount'; tab.append(dot); } dot.textContent = inbox.length; dot.title = `${inbox.length} show${inbox.length === 1 ? '' : 's'} sent to you`; }
+  if (route().name === 'shows') render();
+}
+
+// Recommend: send the show to someone's TV Tracker account (find them by name or email), or share a link by text or email.
+const K_SENT = 'tvt.sentTo';   // people you sent shows to recently, on this device: [{ uid, name, hint }]
+function sendShowDialog(s) {
+  const d = $('#appDialog'), recent = load(K_SENT, []);
+  let pick = null;
+  const person = p => `<button type="button" class="pickrow" data-uid="${esc(p.uid)}"><b>${esc(p.name)}</b>${p.hint ? `<span class="sub">${esc(p.hint)}</span>` : ''}</button>`;
+  d.innerHTML = `<form class="stack" id="sendForm" autocomplete="off"><h2>Recommend ${esc(s.name)}</h2>
+    <p class="sub">Send it to someone's TV Tracker account — it shows up at the top of their My Shows, ready to add.</p>
+    ${recent.length ? `<div><div class="flabel">Recent</div><div class="picklist" id="recent">${recent.map(person).join('')}</div></div>` : ''}
+    <div class="field"><label for="sendTo">Their full name or email</label><input id="sendTo" name="to" autocapitalize="none" spellcheck="false" placeholder="Exactly as on their account, e.g. Jane Smith"></div>
+    <div class="picklist" id="found"></div>
+    <div class="field"><label for="sendNote">Note (optional)</label><input id="sendNote" name="note" maxlength="300" placeholder="You'd love this one"></div>
+    <p class="formerr" id="sendErr" hidden></p>
+    <div class="actions"><button type="button" class="btn" data-share>Text or email a link instead</button><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Send</button></div></form>`;
+  const f = $('#sendForm'), input = f.to, found = $('#found'), err = $('#sendErr'), btn = f.querySelector('.primary');
+  const showErr = t => { err.textContent = t; err.hidden = !t; };
+  const choose = p => { pick = p; input.value = p.name; btn.textContent = `Send to ${p.name.split(/\s+/)[0]}`;
+    found.innerHTML = `<div class="picked">Sending to <b>${esc(p.name)}</b>${p.hint ? ` <span class="sub">${esc(p.hint)}</span>` : ''}</div>`; showErr(''); };
+  const people = {}; for (const p of recent) people[p.uid] = p;
+  f.addEventListener('click', e => { const b = e.target.closest('.pickrow'); if (b && people[b.dataset.uid]) choose(people[b.dataset.uid]); });
+  input.oninput = () => { if (pick) { pick = null; found.innerHTML = ''; btn.textContent = 'Send'; } showErr(''); };
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.querySelector('[data-share]').onclick = () => { d.close(); shareLink(s); };
+  f.onsubmit = async e => {
+    e.preventDefault(); showErr('');
+    const q = input.value.trim();
+    if (!q) return showErr('Type their full name or email.');
+    btn.disabled = true; btn.textContent = pick ? 'Sending…' : 'Looking…';
+    try {
+      // A name is looked up first and shown, so you can check it's the right person before it's sent.
+      if (!pick && !q.includes('@')) {
+        const r = await cloud.findPeople(q);
+        for (const p of r) people[p.uid] = p;
+        btn.disabled = false; btn.textContent = 'Send';
+        if (r.length === 1) return choose(r[0]);
+        found.innerHTML = r.length ? `<p class="sub">${r.length} people have that name — tap the one you mean:</p>${r.map(person).join('')}` : '';
+        return showErr(r.length ? '' : `No one goes by exactly “${q}”. Check the spelling (it needs their full name), or use their email.`);
+      }
+      const to = pick || await cloud.findByEmail(q);
+      await cloud.sendShow(to.uid, s, f.note.value, user.name);
+      save(K_SENT, [to, ...recent.filter(p => p.uid !== to.uid)].slice(0, 6));
+      d.close(); toast(`Sent ${s.name} to ${to.name}`);
+    } catch (x) {
+      showErr(({ 'tvt/no-account': 'No TV Tracker account uses that email. Check it, or text them a link instead.',
+        'tvt/self': 'That\'s you! Pick someone else.',
+        'permission-denied': 'Couldn\'t send to them — they may not be accepting shows from you.' })[x?.code] || cloud.friendlyError(x));
+      btn.disabled = false; btn.textContent = pick ? `Send to ${pick.name.split(/\s+/)[0]}` : 'Send';
+    }
+  };
+  d.showModal(); input.focus();
+}
+// Shares a link to the show page that greets the friend with "<your name> recommends this show".
+async function shareLink(s) {
+  const name = (user?.name || '').trim().split(/\s+/)[0];
+  const url = `${location.origin}${location.pathname}#/show/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
+  const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
+  if (navigator.share) {
+    try { await navigator.share({ title: s.name, text, url }); } catch (e) { if (e?.name !== 'AbortError') toast('Couldn\'t open sharing'); }
+    return;
+  }
+  try { await navigator.clipboard.writeText(`${text}: ${url}`); toast('Link copied — paste it in a message to your friend'); }
+  catch { prompt('Copy this and send it to your friend:', `${text}: ${url}`); }
+}
+async function addFromInbox(b, later) {
+  const m = inbox.find(x => x.id === b.dataset.id); if (!m || !requireAccount(true)) return;
+  follow(m.show, later); cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
+  render(); toast(later ? `${m.show.name} added to your Future watch list` : `Added ${m.show.name}`);
+  if (!cache[m.show.id]) { try { await fetchShow(m.show.id); render(); } catch { } }
+}
 
 // Caught up, with the next episode airing today or within the next 7 days.
 const airingSoon = p => !!(p && !p.next && p.upcoming && airTime(p.upcoming) < new Date().setHours(0, 0, 0, 0) + 8 * DAY);
@@ -1076,6 +1173,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   try { [list, msgs] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; })]); }
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (route().name !== 'admin') return;
+  try { if (now() - (+localStorage.getItem('tvt.dirfill') || 0) > DAY) cloud.backfillDirectory(list).then(() => localStorage.setItem('tvt.dirfill', now())).catch(x => console.warn('directory backfill', x)); } catch { }
   const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
   const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf);
   const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -1126,6 +1224,11 @@ views.account = () => {
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
+  <div class="panel"><h3>Recommending shows</h3>
+    <label class="checkrow"><input type="checkbox" id="findable" ${findable ? 'checked' : ''}> Let people find me by my exact full name when they send a show</label>
+    <p class="sub">Only someone who types your whole name (${esc(user.name)}) finds you — there's no browsing or partial search. Anyone with your email can still send you a show. Shows people send appear at the top of My Shows.</p>
+    ${Object.keys(blocked).length ? `<p>Blocked from sending you shows:</p>${Object.entries(blocked).map(([uid, b]) => `<div class="memrow"><span><b>${esc(b.name || '(no name)')}</b><br><span class="sub">${esc(cloud.loginName(b.email))}</span></span>
+      <button class="btn xs" data-act="unblock" data-uid="${esc(uid)}" data-name="${esc(b.name || 'them')}">Unblock</button></div>`).join('')}` : ''}</div>
   ${cloud.weeklyEmailEnabled ? `<div class="panel"><h3>Weekly email</h3>
     <label class="checkrow"><input type="checkbox" id="weeklyEmail" disabled> Email me once a week when new episodes of my shows are out</label>
     <p class="sub">Sent on Sundays to ${esc(user.email)}, only when there's something new you haven't checked off.</p></div>` : ''}
@@ -1135,6 +1238,12 @@ views.account = () => {
     <div class="actions"><button class="btn danger" data-act="delete-account">Delete account</button></div></div>
   ${cloud.isAdmin() ? '<div class="panel"><h3>Site admin</h3><p>See every account on the site.</p><div class="actions"><a class="btn" href="#/admin">Open admin page</a></div></div>' : ''}`;
   drawLogins();
+  $('#findable').onchange = async e => {
+    const on = e.target.checked; e.target.disabled = true;
+    try { await cloud.setFindable(on, user.name); findable = on; toast(on ? 'People can find you by name' : 'You\'re hidden from name search'); }
+    catch (x) { e.target.checked = !on; toast(cloud.friendlyError(x)); }
+    e.target.disabled = false;
+  };
   const we = $('#weeklyEmail');
   if (we) cloud.weeklyEmailOn().then(on => { we.checked = on; we.disabled = false; }).catch(x => console.warn('weekly email setting', x));
   if (we) we.onchange = async () => {
@@ -1389,6 +1498,12 @@ function onData(data, fromServer) {
   firstSnapshot = false;
   if (changed || first || confirmed) { render(); refreshMissing(); }
   if (serverSynced && (!sharedOpen() || sharedOpen().role === 'edit')) { kidLogins = data?.logins || {}; syncKidsSoon(); }
+  if (serverSynced && !sharedOpen() && cloud.activeUid() === user.uid) {   // your own list: who you blocked, and keep you findable
+    const was = canon(blocked) + findable;
+    blocked = data?.blocked || {}; findable = data?.findable !== false;
+    if (was !== canon(blocked) + findable && route().name === 'account') render();
+    if (data && !cloud.isLogin(user.email)) cloud.listInDirectory(user.name, findable).catch(x => console.warn('directory', x));
+  }
 }
 function onCloudError(e) {
   console.warn(e);
@@ -1516,18 +1631,21 @@ const actions = {
   },
   net(b) { save(K_NET, b.dataset.net); render(); },
   day(b) { save(K_DAY, b.dataset.day); render(); },
-  // Shares a link to the show page that greets the friend with "<your name> recommends this show".
-  async recommend(b) {
+  // Signed in (not a kid): send it to someone's account or share a link; otherwise just share a link.
+  recommend(b) {
     const id = +b.dataset.show, s = showInfo(id) || cache[id]?.show; if (!s) return;
-    const name = (user?.name || '').trim().split(/\s+/)[0];
-    const url = `${location.origin}${location.pathname}#/show/${id}${name ? '/' + encodeURIComponent(name) : ''}`;
-    const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
-    if (navigator.share) {
-      try { await navigator.share({ title: s.name, text, url }); } catch (e) { if (e?.name !== 'AbortError') toast('Couldn\'t open sharing'); }
-      return;
-    }
-    try { await navigator.clipboard.writeText(`${text}: ${url}`); toast('Link copied — paste it in a message to your friend'); }
-    catch { prompt('Copy this and send it to your friend:', `${text}: ${url}`); }
+    user && !isKid() ? sendShowDialog(s) : shareLink(s);
+  },
+  'inbox-add'(b) { addFromInbox(b, false); },
+  'inbox-later'(b) { addFromInbox(b, true); },
+  'inbox-dismiss'(b) { cloud.dismissShow(b.dataset.id).catch(x => toast(cloud.friendlyError(x))); },
+  async 'inbox-block'(b) {
+    const m = inbox.find(x => x.id === b.dataset.id); if (!m) return;
+    if (!confirm(`Block ${m.fromName}? They won't be able to send you shows any more. You can unblock them on the Account page.`)) return;
+    try { await cloud.blockSender(m, inbox); toast(`Blocked ${m.fromName}`); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
+  async unblock(b) {
+    try { await cloud.unblock(b.dataset.uid); toast(`Unblocked ${b.dataset.name}`); } catch (x) { toast(cloud.friendlyError(x)); }
   },
   // Back to the page this show was opened from; opened straight from a link, go to My Shows.
   back() { if (navDepth > 0) { restoreScroll = true; history.back(); } else location.hash = '#/'; },
@@ -1748,6 +1866,6 @@ $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contac
   <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
-cloud.start({ onUser, onData, onError: onCloudError })
+cloud.start({ onUser, onData, onError: onCloudError, onInbox })
   .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
 openRefresh();

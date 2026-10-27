@@ -10,6 +10,11 @@ rules_version = '2';
 // emailPrefs/{uid}: the weekly email's settings. The email job (which bypasses these rules) stores an unsubscribe
 // token and when it last emailed. The owner can switch the email on or off; anyone holding the token (from the
 // unsubscribe link in an email) can switch it off, without signing in.
+// Sending a show to another account: directory/{email} finds an account by its exact sign-in email (no listing);
+// byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
+// only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
+// users/{uid}/inbox/{id} holds shows sent to that account: anyone signed in can add one as themselves (unless blocked
+// in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. Logins made for others aren't listed.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -19,13 +24,24 @@ service cloud.firestore {
     function isAdmin() { return signedIn() && request.auth.token.email == 'jeremykholmes@gmail.com' && request.auth.token.email_verified == true; }
     function isEditor(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'edit'; }
     function isKid(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'kid'; }
+    function userDoc(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function madeLogin() { return request.auth.token.get('email', '').lower().matches('.*@members[.]tvtracker[.]us'); }
+    // The signed-in account is a kid login (its own document says whose list it uses; that owner's logins say kid).
+    function kidLogin(me) { return me.get('listOf', '') != '' && exists(userDoc(me.listOf))
+      && get(userDoc(me.listOf)).data.get('logins', {}).get(request.auth.uid, {}).get('role', 'edit') == 'kid'; }
+    function canSend(to) { return signedIn() && request.auth.uid != to
+      && exists(userDoc(request.auth.uid)) && !kidLogin(get(userDoc(request.auth.uid)).data)
+      && exists(userDoc(to)) && !(request.auth.uid in get(userDoc(to)).data.get('blocked', {})); }
+    function str(v, max) { return v is string && v.size() <= max; }
+    // Same as nameKey() in cloud.js.
+    function nameKey(name) { return name.lower().replace('/', ' ').replace('\\s+', ' ').trim(); }
 
     match /users/{uid} {
       allow get: if isOwner(uid) || (isMember(uid) && !isKid(uid)) || isAdmin();
       allow list: if isAdmin();
       allow create, delete: if isOwner(uid);
       allow update: if isOwner(uid)
-        || (isEditor(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['logins', 'members', 'profile']));
+        || (isEditor(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['logins', 'members', 'profile', 'blocked', 'findable']));
       match /watched/{bucket} {
         allow read: if isOwner(uid) || (isMember(uid) && !isKid(uid));
         allow write: if isOwner(uid) || isEditor(uid);
@@ -33,6 +49,17 @@ service cloud.firestore {
       match /kids/{kid} {
         allow get: if isOwner(uid) || isEditor(uid) || (request.auth.uid == kid && isKid(uid));
         allow write: if isOwner(uid) || isEditor(uid);
+      }
+      match /inbox/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if canSend(uid)
+          && request.resource.data.keys().hasOnly(['from', 'fromName', 'fromEmail', 'show', 'note', 't'])
+          && request.resource.data.keys().hasAll(['from', 'fromName', 'fromEmail', 'show', 'note', 't'])
+          && request.resource.data.from == request.auth.uid && request.resource.data.fromEmail == request.auth.token.email
+          && str(request.resource.data.fromName, 100) && str(request.resource.data.note, 300) && request.resource.data.t is int
+          && request.resource.data.show is map && request.resource.data.show.keys().hasOnly(['id', 'name', 'image', 'network'])
+          && request.resource.data.show.id is int && str(request.resource.data.show.name, 200)
+          && str(request.resource.data.show.image, 500) && str(request.resource.data.show.network, 100);
       }
     }
 
@@ -43,6 +70,24 @@ service cloud.firestore {
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'unsubToken']) && request.resource.data.off == true
             && 'token' in resource.data && request.resource.data.unsubToken == resource.data.token);
       allow delete: if isOwner(uid);
+    }
+
+    match /directory/{email} {
+      allow get: if signedIn();
+      allow create, update: if request.resource.data.keys().hasOnly(['uid', 'name', 'key']) && str(request.resource.data.name, 100)
+        && str(request.resource.data.get('key', ''), 100)
+        && ((signedIn() && !madeLogin() && request.auth.token.get('email', '').lower() == email && request.resource.data.uid == request.auth.uid)
+          || isAdmin());
+      allow delete: if signedIn() && (resource == null || resource.data.uid == request.auth.uid);
+    }
+
+    match /byName/{key}/people/{uid} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 10;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'hint']) && str(request.resource.data.name, 100)
+        && str(request.resource.data.hint, 120) && key == nameKey(request.resource.data.name)
+        && ((isOwner(uid) && !madeLogin()) || isAdmin());
+      allow delete: if isOwner(uid) || isAdmin();
     }
 
     match /messages/{id} {
