@@ -1177,19 +1177,20 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   if (route().name !== 'admin') return;
   try { if (now() - (+localStorage.getItem('tvt.dirfill') || 0) > DAY) cloud.backfillDirectory(list).then(() => localStorage.setItem('tvt.dirfill', now())).catch(x => console.warn('directory backfill', x)); } catch { }
   const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
-  const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf);
+  const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf && !a.removed), removed = list.filter(a => a.removed);
   const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
-      <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + ' · login for ' + (names[a.listOf] || 'unknown') : a.email || 'no email saved')}</span></span>
+      <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + (a.removed ? ' · was a login for ' : ' · login for ') + (names[a.listOf] || 'a deleted account') : a.email || 'no email saved')}</span></span>
     <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${when(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span></span></div>`;
   const byRecent = (a, b) => b.updated - a.updated;
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
       <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
       <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
-  app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others</span></div>
+  app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others${removed.length ? ` · ${removed.length} removed` : ''}</span></div>
     <div class="panel"><h3>Contact us messages · ${msgs.length}</h3>${msgErr ? `<p class="formerr">${esc(msgErr)}</p>` : msgs.map(msgRow).join('') || '<p>No messages yet.</p>'}</div>
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
+    ${removed.length ? `<div class="panel"><h3>Removed logins · ${removed.length}</h3><p>Their owner took away their access, so they can't see any list. The sign-in itself still exists — delete it in the Firebase console under Authentication → Users if it isn't needed.</p>${removed.sort(byRecent).map(row).join('')}</div>` : ''}
     <p class="sub">Counts accounts that have saved anything. Last login is the last time someone opened the site signed in; it shows — until their next visit. Every sign-up is in the Firebase console under Authentication → Users.</p>`;
 };
 
