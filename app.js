@@ -61,6 +61,7 @@ function setWatched(ids, w) {
   const t = now();
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
   const moved = w ? startShows(ids) : [];
+  if (w) startRecommended(ids);
   persist();
   if (w) collapseFinished(ids);
   return moved;   // ids of shows that just left the Future watch list
@@ -75,6 +76,17 @@ function startShows(ids) {
     s.later = false; s.t = now(); queue('shows', sid, s); moved.add(sid);
   }
   return [...moved];
+}
+// Checking off an episode of a show a friend recommended puts it on My Shows (Up next) and takes it out of
+// Shows recommended by friends.
+function startRecommended(epIds) {
+  if (!inbox.length) return;
+  const sids = new Set(epIds.map(id => findEp(id)?.sid).filter(Boolean));
+  for (const m of inbox) {
+    if (!sids.has(m.show.id)) continue;
+    if (!isFollowed(m.show.id)) follow(cache[m.show.id]?.show || m.show);
+    cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
+  }
 }
 // A season whose aired episodes are now all watched folds shut on the show page.
 function collapseFinished(ids) {
@@ -504,17 +516,20 @@ function inboxSection() {
       ${m.note ? `<p class="inboxnote">“${esc(m.note)}”</p>` : ''}
       <p class="sub">${esc(cloud.loginName(m.fromEmail))} · ${ago(m.t)}</p>
       <div class="actions">${on ? '<span class="sub">Already on your list</span>'
-        : `<button class="btn primary sm" data-act="inbox-add" data-id="${esc(m.id)}">＋ Add to my shows</button>
-           <button class="btn sm" data-act="inbox-later" data-id="${esc(m.id)}">🕒 Watch later</button>`}
+        : `<a class="btn primary sm" href="${href}">▶ Start watching</a>`}
         <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
         <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
-  return `<section class="inbox"><h2>Shows recommended by friends · ${inbox.length}</h2>${inbox.map(row).join('')}</section>`;
+  return `<section class="inbox"><h2>Shows recommended by friends · ${inbox.length}</h2>
+    <p class="sub futurehint">They stay here until you check off an episode, then move to Up next.</p>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
-  inbox = items;
+  inbox = items.filter(m => {   // already on your list and started: nothing to recommend
+    if (!(isFollowed(m.show.id) && started(m.show.id))) return true;
+    cloud.dismissShow(m.id).catch(x => console.warn('inbox', x)); return false;
+  });
   const tab = $('#tabs a[data-tab="shows"]'); let dot = tab.querySelector('.tabcount');
   if (!inbox.length) dot?.remove();
-  else { if (!dot) { dot = document.createElement('span'); dot.className = 'tabcount'; tab.append(dot); } dot.textContent = inbox.length; dot.title = `${inbox.length} show${inbox.length === 1 ? '' : 's'} sent to you`; }
+  else { if (!dot) { dot = document.createElement('span'); dot.className = 'tabcount'; tab.append(dot); } dot.textContent = inbox.length; dot.title = `${inbox.length} show${inbox.length === 1 ? '' : 's'} recommended by friends`; }
   if (route().name === 'shows') render();
 }
 
@@ -582,12 +597,6 @@ async function shareLink(s) {
   }
   try { await navigator.clipboard.writeText(`${text}: ${url}`); toast('Link copied — paste it in a message to your friend'); }
   catch { prompt('Copy this and send it to your friend:', `${text}: ${url}`); }
-}
-async function addFromInbox(b, later) {
-  const m = inbox.find(x => x.id === b.dataset.id); if (!m || !requireAccount(true)) return;
-  follow(m.show, later); cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
-  render(); toast(later ? `${m.show.name} added to your Future watch list` : `Added ${m.show.name}`);
-  if (!cache[m.show.id]) { try { await fetchShow(m.show.id); render(); } catch { } }
 }
 
 // Caught up, with the next episode airing today or within the next 7 days.
@@ -1639,8 +1648,6 @@ const actions = {
     const id = +b.dataset.show, s = showInfo(id) || cache[id]?.show; if (!s) return;
     user && !isKid() ? sendShowDialog(s) : shareLink(s);
   },
-  'inbox-add'(b) { addFromInbox(b, false); },
-  'inbox-later'(b) { addFromInbox(b, true); },
   'inbox-dismiss'(b) { cloud.dismissShow(b.dataset.id).catch(x => toast(cloud.friendlyError(x))); },
   async 'inbox-block'(b) {
     const m = inbox.find(x => x.id === b.dataset.id); if (!m) return;
