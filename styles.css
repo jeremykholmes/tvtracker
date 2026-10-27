@@ -440,3 +440,4 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .pickrow .sub { font-size: 12px; overflow-wrap: anywhere; }
 .picked { padding: 9px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
 .appdlg .actions { flex-wrap: wrap; }
+.badge.later { max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
