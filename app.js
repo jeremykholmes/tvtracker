@@ -509,7 +509,7 @@ views.shows = () => {
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${sec('Finished', done)}${sec('Loading', loading)}${friendsSec}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
