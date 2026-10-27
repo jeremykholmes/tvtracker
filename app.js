@@ -710,6 +710,7 @@ views.show = arg => {
       ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> ${state.shows[id]?.rec ? `Recommended by ${esc(state.shows[id].rec)} — waiting under From friends` : 'On your Future watch list'} — check off an episode and it moves to Up next.</p>` : ''}
       ${f && !isKid() ? `<div class="actions">${isLater(id) ? `<button class="btn" data-act="later-off" data-show="${id}">▶ Start watching now</button>`
         : !started(id) && cache[id] ? `<button class="btn" data-act="later-on" data-show="${id}">🕒 Move to Future watch list</button>` : ''}
+        ${!started(id) && cache[id] && !state.shows[id]?.rec ? `<button class="btn" data-act="to-friends" data-show="${id}">👥 Move to From friends</button>` : ''}
         <button class="btn danger" data-act="unfollow" data-show="${id}"><span aria-hidden="true">🗑️</span> Remove from my shows</button></div>` : ''}</div></section>
     <h2>Episodes</h2>
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
@@ -1632,6 +1633,14 @@ const actions = {
   },
   'follow-later'(b) { return actions.follow(b, null, true); },
   'later-on'(b) { setLater(+b.dataset.show, true); },
+  // A show a friend recommended outside the app (or before From friends existed): waits there until it's started.
+  'to-friends'(b) {
+    if (!requireAccount(true)) return;
+    const id = +b.dataset.show, s = state.shows[id]; if (!s || s.removed) return;
+    const who = (prompt(`Who recommended ${s.name}?`) || '').trim().slice(0, 100); if (!who) return;
+    s.rec = who; s.later = true; s.t = now(); queue('shows', id, s); persist(); render();
+    toast(`${s.name} moved to From friends`);
+  },
   'later-off'(b) { setLater(+b.dataset.show, false); },
   async follow(b, e, later) {
     const id = +b.dataset.show;
