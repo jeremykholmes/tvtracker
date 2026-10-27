@@ -508,7 +508,7 @@ function inboxSection() {
            <button class="btn sm" data-act="inbox-later" data-id="${esc(m.id)}">🕒 Watch later</button>`}
         <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
         <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
-  return `<section class="inbox"><h2>Sent to you · ${inbox.length}</h2>${inbox.map(row).join('')}</section>`;
+  return `<section class="inbox"><h2>Shows recommended by friends · ${inbox.length}</h2>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
   inbox = items;
