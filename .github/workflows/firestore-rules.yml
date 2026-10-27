@@ -1,0 +1,37 @@
+# Publishes firestore.rules to Firebase whenever it changes on main, so the live database rules always match
+# this repo (no copying and pasting into the console). Also runs on demand from the Actions tab ("Run workflow").
+# Uses the same FIREBASE_SERVICE_ACCOUNT secret as the weekly email. If it fails with a permission error, that
+# service account needs the "Firebase Rules Admin" role (Google Cloud console → IAM).
+name: Publish Firestore rules
+
+on:
+  push:
+    branches: [main]
+    paths: ['firestore.rules', '.github/workflows/firestore-rules.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: firestore-rules
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Publish rules
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SA" ]; then echo "::error::The FIREBASE_SERVICE_ACCOUNT secret isn't set (see Weekly email in README.md)."; exit 1; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          project=$(grep -oP "projectId:\s*'\K[^']+" firebase-config.js)
+          echo '{"firestore":{"rules":"firestore.rules"}}' > firebase.json
+          npx --yes firebase-tools@13 deploy --only firestore:rules --project "$project" --non-interactive

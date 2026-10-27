@@ -179,11 +179,12 @@ export function removeLogin(uid) {
 const dirId = email => String(email || '').trim().toLowerCase();
 const maskEmail = email => { const [a, d] = dirId(email).split('@'); return a && d ? `${a[0]}•••@${d}` : ''; };
 // Must match nameKey() in firestore.rules.
-export const nameKey = name => String(name || '').toLowerCase().replace(/\//g, ' ').replace(/[ \t\n\f\r]+/g, ' ').replace(/^ | $/g, '').slice(0, 100);
+export const nameKey = name => String(name || '').toLowerCase().replace(/\//g, ' ').replace(/ +/g, ' ').replace(/^ | $/g, '').slice(0, 100);
+const cleanName = name => String(name || '').replace(/[\t\n\f\r\v]/g, ' ').trim().slice(0, 100);
 // Keeps the signed-in account findable (its own list only). At most once a day per device unless forced.
 export async function listInDirectory(name, findable, force) {
   const u = auth?.currentUser; if (!u?.email || isLogin(u.email)) return;
-  name = String(name || '').trim().slice(0, 100);
+  name = cleanName(name);
   const store = 'tvt-dir-' + u.uid, now = Date.now(), mark = `${findable ? 1 : 0}|${name}`;
   try { const v = JSON.parse(localStorage.getItem(store) || 'null'); if (!force && v && v.m === mark && now - v.t < 864e5) return; } catch (e) {}
   const dir = F.doc(db, 'directory', dirId(u.email)), key = nameKey(name);
@@ -262,7 +263,7 @@ export async function backfillDirectory(accounts) {
   const b = F.writeBatch(db); let n = 0;
   for (const a of accounts) {
     if (a.listOf || !a.email || isLogin(a.email)) continue;
-    const name = String(a.name || a.email.split('@')[0]).trim().slice(0, 100), key = a.findable ? nameKey(name) : '';
+    const name = cleanName(a.name || a.email.split('@')[0]), key = a.findable ? nameKey(name) : '';
     b.set(F.doc(db, 'directory', dirId(a.email)), { uid: a.uid, name, key }, { merge: true });
     if (key) b.set(F.doc(db, 'byName', key, 'people', a.uid), { name, hint: maskEmail(a.email) });
     if (++n >= 200) break;

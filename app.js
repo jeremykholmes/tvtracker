@@ -549,21 +549,23 @@ function sendShowDialog(s) {
     try {
       // A name is looked up first and shown, so you can check it's the right person before it's sent.
       if (!pick && !q.includes('@')) {
-        const r = await cloud.findPeople(q);
+        const r = await cloud.findPeople(q).catch(x => { throw x?.code === 'permission-denied' ? { code: 'tvt/lookup-denied' } : x; });
         for (const p of r) people[p.uid] = p;
         btn.disabled = false; btn.textContent = 'Send';
         if (r.length === 1) return choose(r[0]);
         found.innerHTML = r.length ? `<p class="sub">${r.length} people have that name — tap the one you mean:</p>${r.map(person).join('')}` : '';
         return showErr(r.length ? '' : `No one goes by exactly “${q}”. Check the spelling (it needs their full name), or use their email.`);
       }
-      const to = pick || await cloud.findByEmail(q);
+      const to = pick || await cloud.findByEmail(q).catch(x => { throw x?.code === 'permission-denied' ? { code: 'tvt/lookup-denied' } : x; });
       await cloud.sendShow(to.uid, s, f.note.value, user.name);
       save(K_SENT, [to, ...recent.filter(p => p.uid !== to.uid)].slice(0, 6));
       d.close(); toast(`Sent ${s.name} to ${to.name}`);
     } catch (x) {
-      showErr(({ 'tvt/no-account': 'No TV Tracker account uses that email. Check it, or text them a link instead.',
+      console.warn('send show', x);
+      showErr(({ 'tvt/lookup-denied': 'Couldn\'t look them up — the database refused (step 1: lookup). The latest Firestore rules may not be published.',
+        'tvt/no-account': 'No TV Tracker account uses that email. Check it, or text them a link instead.',
         'tvt/self': 'That\'s you! Pick someone else.',
-        'permission-denied': 'Couldn\'t send to them — they may not be accepting shows from you.' })[x?.code] || cloud.friendlyError(x));
+        'permission-denied': 'Couldn\'t send — the database refused (step 2: sending). They may have blocked you, or the latest Firestore rules aren\'t published.' })[x?.code] || cloud.friendlyError(x));
       btn.disabled = false; btn.textContent = pick ? `Send to ${pick.name.split(/\s+/)[0]}` : 'Send';
     }
   };
