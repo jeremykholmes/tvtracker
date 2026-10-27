@@ -689,7 +689,7 @@ views.show = arg => {
       <ol class="eps">${eps.map(e => epRow(id, e)).join('')}</ol></details>`;
   }).join('');
   // Opened from a friend's recommendation link (#/show/<id>/<their name>).
-  let from = ''; try { from = decodeURIComponent(route().extra || '').trim().slice(0, 40); } catch { }
+  const from = linkFrom(id);
   const banner = from ? `<div class="recbanner"><span aria-hidden="true">★</span><span><b>${esc(from)}</b> recommends this show${f ? ' — it\'s already on your list'
     : needsAccount() ? '. Create a free account to add it to your list and track episodes.' : '.'}</span></div>` : '';
   app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
@@ -1488,12 +1488,18 @@ function onUser(u) {
   refreshMissing();
 }
 // A show someone tapped Add on before they had an account (e.g. from a recommendation) is added once they're in.
+// The friend's name on a recommendation link (#/show/<id>/<name>) while that show's page is open.
+function linkFrom(id) {
+  const r = route(); if (r.name !== 'show' || +r.arg !== id) return '';
+  try { return decodeURIComponent(r.extra || '').trim().slice(0, 40); } catch { return ''; }
+}
 function addAfterSignIn() {
-  let id = 0; try { id = +sessionStorage.getItem('tvt.addAfter') || 0; sessionStorage.removeItem('tvt.addAfter'); } catch { }
+  let id = 0, from = ''; try { id = +sessionStorage.getItem('tvt.addAfter') || 0; from = sessionStorage.getItem('tvt.addFrom') || '';
+    sessionStorage.removeItem('tvt.addAfter'); sessionStorage.removeItem('tvt.addFrom'); } catch { }
   if (!id || isFollowed(id) || !requireAccount(true)) return;
   (cache[id] ? Promise.resolve(cache[id]) : fetchShow(id)).then(c => {
     if (!c || !user || isFollowed(id)) return;
-    follow(c.show); render(); toast(`Added ${c.show.name} to your shows`);
+    follow(c.show, !!from, from); render(); toast(from ? `Added ${c.show.name} — it's under From friends until you start it` : `Added ${c.show.name} to your shows`);
   }).catch(() => {});
 }
 function onData(data, fromServer) {
@@ -1644,11 +1650,13 @@ const actions = {
   'later-off'(b) { setLater(+b.dataset.show, false); },
   async follow(b, e, later) {
     const id = +b.dataset.show;
-    if (needsAccount() && authReady) try { sessionStorage.setItem('tvt.addAfter', id); } catch { }   // added once they've signed up
+    const from = later ? '' : linkFrom(id);   // opened from a friend's recommendation link: remember who
+    if (needsAccount() && authReady) try { sessionStorage.setItem('tvt.addAfter', id); sessionStorage.setItem('tvt.addFrom', from); } catch { }   // added once they've signed up
     if (!requireAccount(true)) return;
     const s = cache[id]?.show || showLookup[id] || lastResults.find(x => x.id === id) || meta.discover?.items.find(x => x.show.id === id)?.show;
     if (!s) return;
-    follow(s, later); render(); toast(later ? `${s.name} added to your Future watch list` : `Added ${s.name}`);   // search results stay put so you can add more
+    follow(s, later || !!from, from); render();   // search results stay put so you can add more
+    toast(from ? `${s.name} added — it's under From friends until you start it` : later ? `${s.name} added to your Future watch list` : `Added ${s.name}`);
     if (!cache[id]) { try { await fetchShow(id); render(); } catch { } }
   },
   unfollow(b) {
