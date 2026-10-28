@@ -1253,6 +1253,7 @@ views.account = () => {
   <div class="panel"><h3>Recommending shows</h3>
     <label class="checkrow"><input type="checkbox" id="findable" ${findable ? 'checked' : ''}> Let people find me by my exact full name when they send a show</label>
     <p class="sub">Only someone who types your whole name (${esc(user.name)}) finds you — there's no browsing or partial search. Anyone with your email can still send you a show. Shows people send appear at the top of My Shows.</p>
+    ${cloud.recEmailEnabled ? `<label class="checkrow"><input type="checkbox" id="recEmail" disabled> Email me when someone recommends a show to me</label>` : ''}
     ${Object.keys(blocked).length ? `<p>Blocked from sending you shows:</p>${Object.entries(blocked).map(([uid, b]) => `<div class="memrow"><span><b>${esc(b.name || '(no name)')}</b><br><span class="sub">${esc(cloud.loginName(b.email))}</span></span>
       <button class="btn xs" data-act="unblock" data-uid="${esc(uid)}" data-name="${esc(b.name || 'them')}">Unblock</button></div>`).join('')}` : ''}</div>
   ${cloud.weeklyEmailEnabled ? `<div class="panel"><h3>Weekly email</h3>
@@ -1277,6 +1278,14 @@ views.account = () => {
     try { await cloud.setWeeklyEmail(we.checked); toast(we.checked ? 'Weekly email switched on' : 'Weekly email switched off'); }
     catch (x) { we.checked = !we.checked; toast(cloud.friendlyError(x)); }
     we.disabled = false;
+  };
+  const re = $('#recEmail');
+  if (re) cloud.recEmailOn().then(on => { re.checked = on; re.disabled = false; }).catch(x => console.warn('recommendation email setting', x));
+  if (re) re.onchange = async () => {
+    re.disabled = true;
+    try { await cloud.setRecEmail(re.checked); toast(re.checked ? 'You\'ll get an email when someone recommends a show' : 'Recommendation emails switched off'); }
+    catch (x) { re.checked = !re.checked; toast(cloud.friendlyError(x)); }
+    re.disabled = false;
   };
   $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();

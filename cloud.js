@@ -2,7 +2,7 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig, adminEmail, contactEmailKey, weeklyEmail } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminEmail, contactEmailKey, weeklyEmail, recEmail } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
@@ -398,6 +398,13 @@ export async function weeklyEmailOn() {
   return !(snap.exists() && snap.data().off);
 }
 export const setWeeklyEmail = on => F.setDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid), { off: !on }, { merge: true });
+// Emails when a friend recommends a show (sent by email/recs.mjs). On unless switched off.
+export const recEmailEnabled = !!recEmail;
+export async function recEmailOn() {
+  const snap = await F.getDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid));
+  return !(snap.exists() && snap.data().recsOff);
+}
+export const setRecEmail = on => F.setDoc(F.doc(db, 'emailPrefs', auth.currentUser.uid), { recsOff: !on }, { merge: true });
 
 // Saves only what changed, in one batch: shows/profile go to the main document,
 // checkmarks go to their bucket documents. Stored on the device immediately;

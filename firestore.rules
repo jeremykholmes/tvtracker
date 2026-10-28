@@ -9,9 +9,9 @@ rules_version = '2';
 // Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
 // removals/{uid}: accounts the admin removed on the Admin page. From that moment the account can't read or change
 // any list; .github/workflows/remove-accounts.yml then deletes the sign-in and its data and marks the entry done.
-// emailPrefs/{uid}: the weekly email's settings. The email job (which bypasses these rules) stores an unsubscribe
-// token and when it last emailed. The owner can switch the email on or off; anyone holding the token (from the
-// unsubscribe link in an email) can switch it off, without signing in.
+// emailPrefs/{uid}: email settings: off (the weekly email) and recsOff (emails when a friend recommends a show). The email
+// jobs (which bypass these rules) store an unsubscribe token and when they last emailed. The owner can switch each email
+// on or off; anyone holding the token (from the unsubscribe link in an email) can switch them off, without signing in.
 // Sending a show to another account: directory/{email} finds an account by its exact sign-in email (no listing);
 // byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
 // only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
@@ -68,9 +68,13 @@ service cloud.firestore {
 
     match /emailPrefs/{uid} {
       allow get: if isOwner(uid);
-      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['off']) && request.resource.data.off is bool;
-      allow update: if (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off']) && request.resource.data.off is bool)
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'unsubToken']) && request.resource.data.off == true
+      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['off', 'recsOff'])
+        && request.resource.data.get('off', false) is bool && request.resource.data.get('recsOff', false) is bool;
+      allow update: if (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'recsOff'])
+            && request.resource.data.get('off', false) is bool && request.resource.data.get('recsOff', false) is bool)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'recsOff', 'unsubToken'])
+            && request.resource.data.get('off', false) in [true, resource.data.get('off', false)]
+            && request.resource.data.get('recsOff', false) in [true, resource.data.get('recsOff', false)]
             && 'token' in resource.data && request.resource.data.unsubToken == resource.data.token);
       allow delete: if isOwner(uid);
     }

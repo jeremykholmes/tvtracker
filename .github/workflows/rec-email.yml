@@ -1,0 +1,33 @@
+# "A friend recommended a show" emails (email/recs.mjs), every 15 minutes and on demand from the Actions tab.
+# Sends nothing until the RESEND_API_KEY secret is set (see "Recommendation emails" in README.md).
+name: Recommendation emails
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: rec-email   # never two runs at once, so nobody gets the same email twice
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node recs.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

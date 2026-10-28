@@ -23,3 +23,7 @@ export const adminEmail = 'jeremykholmes@gmail.com';
 // Weekly "new episodes to watch" email: true shows its on/off switch on the Account page. Leave false until the
 // email is set up (see "Weekly email" in README.md); the Sunday run also waits for the WEEKLY_EMAIL repo variable.
 export const weeklyEmail = false;
+
+// "A friend recommended a show" emails: true shows their on/off switch on the Account page. The emails themselves
+// start once the RESEND_API_KEY repo secret is set (see "Recommendation emails" in README.md).
+export const recEmail = false;
