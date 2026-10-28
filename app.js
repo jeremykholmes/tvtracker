@@ -1199,14 +1199,13 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   const removing = list.filter(a => gone[a.uid]);   // removed on this page; the hourly job finishes deleting them
   list = list.filter(a => !gone[a.uid]);
   const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf && !a.removed), removed = list.filter(a => a.removed);
-  const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   // Last login with its time, always in Arizona time (the site owner's), e.g. "Oct 27, 9:33 PM MST".
   const whenAz = t => t ? new Date(t).toLocaleString('en-US', { timeZone: 'America/Phoenix', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
     ...(new Date(t).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }) : '—';   // year only if not this year, to fit on a phone
   const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
       <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + (a.removed ? ' · was a login for ' : ' · login for ') + (names[a.listOf] || 'a deleted account') : a.email || 'no email saved')}</span></span>
-    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${whenAz(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
-  const byRecent = (a, b) => b.updated - a.updated;
+    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${whenAz(a.lastLogin)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
+  const byRecent = (a, b) => (b.lastLogin || b.updated) - (a.lastLogin || a.updated);   // most recently logged in first
   adminAccounts = Object.fromEntries(list.map(a => [a.uid, a]));
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
       <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
@@ -1217,7 +1216,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
     ${removed.length ? `<div class="panel"><h3>Removed logins · ${removed.length}</h3><p>Their owner took away their access, so they can't see any list. The sign-in itself still exists — delete it in the Firebase console under Authentication → Users if it isn't needed.</p>${removed.sort(byRecent).map(row).join('')}</div>` : ''}
     ${removing.length ? `<div class="panel"><h3>Being removed · ${removing.length}</h3><p>Locked out already. Their sign-in and data are deleted within the hour.</p>${removing.sort(byRecent).map(row).join('')}</div>` : ''}
-    <p class="sub">Counts accounts that have saved anything. Last login is the last time someone opened the site signed in; it shows — until their next visit. Every sign-up is in the Firebase console under Authentication → Users.</p>`;
+    <p class="sub">Counts accounts that have saved anything. Last login is the last time someone opened the site signed in (Arizona time); it shows — until their next visit. Newest logins are listed first. Every sign-up is in the Firebase console under Authentication → Users.</p>`;
 };
 
 views.account = () => {
