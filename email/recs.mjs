@@ -32,6 +32,21 @@ async function send(to, mail, unsubscribeUrl) {
   throw new Error('Resend kept refusing (rate limit)');
 }
 
+// MODE=test (Run workflow → test): emails TEST_TO a sample, built from that account's latest recommendation if it has one.
+if (process.env.MODE === 'test') {
+  const to = (process.env.TEST_TO || '').toLowerCase(), user = await auth.getUserByEmail(to);
+  const latest = (await db.collection(`users/${user.uid}/inbox`).orderBy('t', 'desc').limit(1).get()).docs[0]?.data();
+  const item = latest || { fromName: 'TV Tracker', note: 'This is a test of the recommendation email.', show: { id: 44933, name: 'Severance', image: 'https://static.tvmaze.com/uploads/images/medium_portrait/545/1364564.jpg', network: 'Apple TV+' } };
+  const prefs = (await db.doc(`emailPrefs/${user.uid}`).get()).data() || {};
+  const token = prefs.token || randomBytes(16).toString('hex');
+  if (!prefs.token) await db.doc(`emailPrefs/${user.uid}`).set({ token }, { merge: true });
+  const unsubscribeUrl = `${SITE}/unsubscribe.html?u=${encodeURIComponent(user.uid)}&k=${token}&e=recs`;
+  const mail = buildRecEmail({ name: user.displayName || '', items: [item], unsubscribeUrl });
+  await send(user.email, { ...mail, subject: '[Test] ' + mail.subject }, unsubscribeUrl);
+  console.log('Test email sent to the site owner.');
+  process.exit(0);
+}
+
 const waiting = new Map();   // recipient uid -> inbox docs not emailed yet
 for (const d of (await db.collectionGroup('inbox').get()).docs) {
   if (d.data().emailed || d.ref.parent.parent?.parent.id !== 'users') continue;
