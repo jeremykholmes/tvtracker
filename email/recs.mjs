@@ -18,12 +18,17 @@ if (!process.env.RESEND_API_KEY) { console.log('RESEND_API_KEY is not set yet, s
 initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 const auth = getAuth(), db = getFirestore();
 
+// The inbox shows who it's from: "Sarah via TV Tracker" (one sender), or just "TV Tracker" for several.
+function fromLine(senders = []) {
+  const name = senders.length === 1 ? senders[0].replace(/["<>\\,;:@\r\n]/g, '').trim().slice(0, 60) : '';
+  return name ? `"${name} via TV Tracker" <updates@tvtracker.us>` : FROM;
+}
 async function send(to, mail, unsubscribeUrl) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to, subject: mail.subject, html: mail.html, text: mail.text, headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } })
+      body: JSON.stringify({ from: fromLine(mail.senders), to, subject: mail.subject, html: mail.html, text: mail.text, headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } })
     });
     if (r.ok) return;
     if (r.status === 429) { await sleep(2000); continue; }
@@ -36,7 +41,7 @@ async function send(to, mail, unsubscribeUrl) {
 if (process.env.MODE === 'test') {
   const to = (process.env.TEST_TO || '').toLowerCase(), user = await auth.getUserByEmail(to);
   const latest = (await db.collection(`users/${user.uid}/inbox`).orderBy('t', 'desc').limit(1).get()).docs[0]?.data();
-  const item = latest || { fromName: 'TV Tracker', note: 'This is a test of the recommendation email.', show: { id: 44933, name: 'Severance', image: 'https://static.tvmaze.com/uploads/images/medium_portrait/545/1364564.jpg', network: 'Apple TV+' } };
+  const item = latest || { fromName: 'Sarah', note: 'This is a sample: real ones show the name of whoever recommended the show.', show: { id: 44933, name: 'Severance', image: 'https://static.tvmaze.com/uploads/images/medium_portrait/545/1364564.jpg', network: 'Apple TV+' } };
   const prefs = (await db.doc(`emailPrefs/${user.uid}`).get()).data() || {};
   const token = prefs.token || randomBytes(16).toString('hex');
   if (!prefs.token) await db.doc(`emailPrefs/${user.uid}`).set({ token }, { merge: true });

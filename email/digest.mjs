@@ -73,13 +73,15 @@ export function buildRecEmail({ name, items, unsubscribeUrl }) {
     : senders.length === 1 ? `${senders[0]} recommended ${plural(items.length, 'show')} to you`
     : `${plural(items.length, 'show')} recommended to you by ${senders.slice(0, 2).join(' and ')}${senders.length > 2 ? ' and others' : ''}`;
   const hi = name ? `Hi ${name.split(/\s+/)[0]},` : 'Hi,';
+  const who = senders.length === 1 ? senders[0] : `${senders.slice(0, -1).join(', ')} and ${senders.at(-1)}`;
+  const intro = senders.length === 1 ? `${who} thinks you'd like ${items.length === 1 ? 'this show' : 'these shows'}:` : `${who} think you'd like these shows:`;
   const link = m => `${SITE}/#/show/${m.show.id}/${encodeURIComponent(m.show.name)}`;
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#141821">
 <div style="display:none;max-height:0;overflow:hidden">${esc(subject)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;border:1px solid #dfe3e8">
 <tr><td style="padding:24px 24px 8px"><a href="${SITE}/" style="text-decoration:none"><img src="${SITE}/icons/logo-120.png" width="56" height="56" alt="TV Tracker" style="display:block;border:0"></a></td></tr>
-<tr><td style="padding:8px 24px 4px;font-size:16px;line-height:1.5"><p style="margin:0 0 8px">${esc(hi)}</p><p style="margin:0 0 8px">${items.length === 1 ? 'A friend thinks you\'d like this show:' : 'Friends think you\'d like these shows:'}</p></td></tr>
+<tr><td style="padding:8px 24px 4px;font-size:16px;line-height:1.5"><p style="margin:0 0 8px">${esc(hi)}</p><p style="margin:0 0 8px">${esc(intro)}</p></td></tr>
 ${items.map(m => `<tr><td style="padding:8px 24px">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eef0f3"><tr>
   ${m.show.image ? `<td width="72" valign="top" style="padding:12px 14px 0 0"><a href="${esc(link(m))}"><img src="${esc(m.show.image)}" width="72" alt="" style="display:block;border:0;border-radius:6px"></a></td>` : ''}
@@ -92,8 +94,8 @@ ${items.map(m => `<tr><td style="padding:8px 24px">
 </table>
 <p style="max-width:560px;font-size:12px;line-height:1.5;color:#5b6474;margin:16px auto 0;padding:0 12px">You're getting this because someone recommended a show to your TV Tracker account. <a href="${esc(unsubscribeUrl)}" style="color:#5b6474">Stop these emails</a> · you can also switch them off on your <a href="${SITE}/#/account" style="color:#5b6474">Account page</a>.</p>
 </td></tr></table></body></html>`;
-  const text = [hi, '', items.length === 1 ? 'A friend thinks you\'d like this show:' : 'Friends think you\'d like these shows:', '',
+  const text = [hi, '', intro, '',
     ...items.flatMap(m => [`${m.show.name}${m.show.network ? ` (${m.show.network})` : ''} - from ${m.fromName || 'a friend'}`, ...(m.note ? [`  "${m.note}"`] : []), `  ${link(m)}`, '']),
     `Stop these emails: ${unsubscribeUrl}`].join('\n');
-  return { subject, html, text };
+  return { subject, html, text, senders };
 }
