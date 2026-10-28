@@ -37,11 +37,22 @@ async function send(to, mail, unsubscribeUrl) {
   throw new Error('Resend kept refusing (rate limit)');
 }
 
+// The recommender's full name: the name saved with the recommendation, or their sign-in name (e.g. from Google)
+// when that has more to it, so a recommendation saved as just "Sarah" still shows "Sarah Johnson".
+const fullNames = new Map();
+async function fullName(m) {
+  if (!m.from) return m.fromName;
+  if (!fullNames.has(m.from)) fullNames.set(m.from, (await auth.getUser(m.from).catch(() => null))?.displayName || '');
+  const saved = (m.fromName || '').trim(), signIn = fullNames.get(m.from).trim();
+  return signIn.split(/\s+/).length > saved.split(/\s+/).length && signIn.toLowerCase().startsWith(saved.toLowerCase().split(/\s+/)[0]) ? signIn : saved;
+}
+
 // MODE=test (Run workflow → test): emails TEST_TO a sample, built from that account's latest recommendation if it has one.
 if (process.env.MODE === 'test') {
   const to = (process.env.TEST_TO || '').toLowerCase(), user = await auth.getUserByEmail(to);
   const latest = (await db.collection(`users/${user.uid}/inbox`).orderBy('t', 'desc').limit(1).get()).docs[0]?.data();
-  const item = latest || { fromName: 'Sarah', note: 'This is a sample: real ones show the name of whoever recommended the show.', show: { id: 44933, name: 'Severance', image: 'https://static.tvmaze.com/uploads/images/medium_portrait/545/1364564.jpg', network: 'Apple TV+' } };
+  if (latest) latest.fromName = await fullName(latest);
+  const item = latest || { fromName: 'Sarah Johnson', note: 'This is a sample: real ones show the name of whoever recommended the show.', show: { id: 44933, name: 'Severance', image: 'https://static.tvmaze.com/uploads/images/medium_portrait/545/1364564.jpg', network: 'Apple TV+' } };
   const prefs = (await db.doc(`emailPrefs/${user.uid}`).get()).data() || {};
   const token = prefs.token || randomBytes(16).toString('hex');
   if (!prefs.token) await db.doc(`emailPrefs/${user.uid}`).set({ token }, { merge: true });
@@ -77,7 +88,7 @@ for (const [uid, docs] of waiting) {
     if (!prefs.token) await prefsRef.set({ token }, { merge: true });   // before sending, so the link works
     const unsubscribeUrl = `${SITE}/unsubscribe.html?u=${encodeURIComponent(uid)}&k=${token}&e=recs`;
     const profile = (await db.doc(`users/${uid}`).get()).data()?.profile || {};
-    const mail = buildRecEmail({ name: user.displayName || profile.name || '', items: fresh.map(d => d.data()), unsubscribeUrl });
+    const mail = buildRecEmail({ name: user.displayName || profile.name || '', items: await Promise.all(fresh.map(async d => ({ ...d.data(), fromName: await fullName(d.data()) }))), unsubscribeUrl });
     await markAll();   // marked first: a failed send is never repeated as a duplicate later
     await send(user.email, mail, unsubscribeUrl);
     sent++; console.log(`${who}: emailed ${fresh.length} recommendation(s)`);
