@@ -7,7 +7,7 @@ name: Publish Firestore rules
 on:
   push:
     branches: [main]
-    paths: ['firestore.rules', '.github/workflows/firestore-rules.yml']
+    paths: ['firestore.rules', '.github/workflows/firestore-rules.yml', 'email/publish-rules.mjs']
   workflow_dispatch:
 
 permissions:
@@ -19,19 +19,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
       - name: Publish rules
         env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          set -euo pipefail
-          if [ -z "$SA" ]; then echo "::error::The FIREBASE_SERVICE_ACCOUNT secret isn't set (see Weekly email in README.md)."; exit 1; fi
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          project=$(grep -oP "projectId:\s*'\K[^']+" firebase-config.js)
-          echo '{"firestore":{"rules":"firestore.rules"}}' > firebase.json
-          npx --yes firebase-tools@13 deploy --only firestore:rules --project "$project" --non-interactive
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then echo "::error::The FIREBASE_SERVICE_ACCOUNT secret isn't set (see Weekly email in README.md)."; exit 1; fi
+          node publish-rules.mjs
