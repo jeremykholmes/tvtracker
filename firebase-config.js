@@ -26,4 +26,4 @@ export const weeklyEmail = false;
 
 // "A friend recommended a show" emails: true shows their on/off switch on the Account page. The emails themselves
 // start once the RESEND_API_KEY repo secret is set (see "Recommendation emails" in README.md).
-export const recEmail = false;
+export const recEmail = true;

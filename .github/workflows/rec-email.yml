@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = send the site owner a sample, send = the normal run'
+        type: choice
+        options: [test, send]
+        default: test
 
 permissions:
   contents: read
@@ -31,3 +37,5 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MODE: ${{ inputs.mode || 'send' }}
+          TEST_TO: jeremykholmes@gmail.com

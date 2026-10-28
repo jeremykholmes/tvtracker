@@ -56,7 +56,7 @@ One-time setup:
 The repo is public, so its Actions logs are too: the job never prints anyone's email address.
 
 ## Recommendation emails
-**Status: built, waiting for Resend.** `.github/workflows/rec-email.yml` runs `email/recs.mjs` every 15 minutes. When someone recommends a show to an account with a real email address, it emails them (several waiting at once go in one email) and marks each recommendation `emailed`. Each email has a link to switch these emails off (`unsubscribe.html?…&e=recs`), and there's a switch on the Account page. Recommendations more than 2 days old are never emailed.
+**Status: on.** `.github/workflows/rec-email.yml` runs `email/recs.mjs` every 15 minutes. When someone recommends a show to an account with a real email address, it emails them (several waiting at once go in one email) and marks each recommendation `emailed`. Each email has a link to switch these emails off (`unsubscribe.html?…&e=recs`), and there's a switch on the Account page. Recommendations more than 2 days old are never emailed.
 
 To switch it on: do steps 1–3 of [Weekly email](#weekly-email) (Resend and the two secrets), then set `recEmail = true` in `firebase-config.js` (shows the Account page switch), and add a line about Resend to `privacy.html`. Actions → **Recommendation emails → Run workflow** checks it right away.
 
