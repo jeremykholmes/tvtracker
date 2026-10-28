@@ -1200,9 +1200,12 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   list = list.filter(a => !gone[a.uid]);
   const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf && !a.removed), removed = list.filter(a => a.removed);
   const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  // Last login with its time, always in Arizona time (the site owner's), e.g. "Oct 27, 9:33 PM MST".
+  const whenAz = t => t ? new Date(t).toLocaleString('en-US', { timeZone: 'America/Phoenix', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    ...(new Date(t).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }) : '—';   // year only if not this year, to fit on a phone
   const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
       <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + (a.removed ? ' · was a login for ' : ' · login for ') + (names[a.listOf] || 'a deleted account') : a.email || 'no email saved')}</span></span>
-    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${when(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
+    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${whenAz(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
   const byRecent = (a, b) => b.updated - a.updated;
   adminAccounts = Object.fromEntries(list.map(a => [a.uid, a]));
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
