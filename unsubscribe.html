@@ -19,8 +19,9 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- The link at the bottom of the weekly email (email/weekly.mjs) lands here: ?u=<account id>&k=<token>.
-       It switches the email off without signing in; firestore.rules only allows that with the right token. -->
+  <!-- The link at the bottom of the emails lands here: ?u=<account id>&k=<token>, plus &e=recs from a recommendation
+       email (email/recs.mjs); without it, the weekly email (email/weekly.mjs). It switches that email off without
+       signing in; firestore.rules only allows that with the right token. -->
   <header class="top">
     <a href="./" class="brand"><img src="icons/logo.svg" alt="" class="brandlogo"> TV Tracker</a>
   </header>
@@ -35,11 +36,16 @@
       const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
       const [{ initializeApp }, F] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-firestore.js`)]);
       const db = F.getFirestore(initializeApp(firebaseConfig));
-      await F.updateDoc(F.doc(db, 'emailPrefs', uid), { off: true, unsubToken: token });
-      show('You\'re unsubscribed', 'You won\'t get the weekly new-episodes email any more. You can switch it back on from your <a href="./#/account">Account page</a>.');
+      if (q.get('e') === 'recs') {
+        await F.updateDoc(F.doc(db, 'emailPrefs', uid), { recsOff: true, unsubToken: token });
+        show('You\'re unsubscribed', 'You won\'t get an email when someone recommends a show any more. They still appear at the top of My Shows, and you can switch the emails back on from your <a href="./#/account">Account page</a>.');
+      } else {
+        await F.updateDoc(F.doc(db, 'emailPrefs', uid), { off: true, unsubToken: token });
+        show('You\'re unsubscribed', 'You won\'t get the weekly new-episodes email any more. You can switch it back on from your <a href="./#/account">Account page</a>.');
+      }
     } catch (e) {
       console.warn(e);
-      show('That link didn\'t work', 'It may be incomplete or out of date. You can switch the weekly email off on your <a href="./#/account">Account page</a> instead, or <a href="./#/contact">contact us</a>.');
+      show('That link didn\'t work', 'It may be incomplete or out of date. You can switch emails off on your <a href="./#/account">Account page</a> instead, or <a href="./#/contact">contact us</a>.');
     }
   </script>
 </body>
