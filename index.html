@@ -44,6 +44,14 @@
     @media (prefers-reduced-motion: reduce) { .splash img { animation: none; } }
   </style>
   <script>
+    // Links in emails use ?show=<id>&from=<name> (no #, which some email apps and link redirects drop):
+    // turn them into the app's own address for that show before it starts.
+    (function () {
+      var q = new URLSearchParams(location.search), id = q.get('show');
+      if (!/^\d+$/.test(id || '')) return;
+      var from = (q.get('from') || '').slice(0, 40);
+      history.replaceState(null, '', location.pathname + '#/show/' + id + (from ? '/' + encodeURIComponent(from) : ''));
+    })();
     // Load the newest app files on every visit: a unique address skips any browser or GitHub cache.
     window.TVT_V = '?v=' + Date.now();
     document.write('<link rel="stylesheet" href="styles.css' + TVT_V + '">');

@@ -75,7 +75,8 @@ export function buildRecEmail({ name, items, unsubscribeUrl }) {
   const hi = name ? `Hi ${name.split(/\s+/)[0]},` : 'Hi,';
   const who = senders.length === 1 ? senders[0] : `${senders.slice(0, -1).join(', ')} and ${senders.at(-1)}`;
   const intro = senders.length === 1 ? `${who} thinks you'd like ${items.length === 1 ? 'this show' : 'these shows'}:` : `${who} think you'd like these shows:`;
-  const link = m => `${SITE}/#/show/${m.show.id}/${encodeURIComponent(m.show.name)}`;
+  // Plain ?show= addresses (index.html turns them into #/show/<id>/<who>): survive email apps and link redirects that drop #.
+  const link = m => `${SITE}/?show=${m.show.id}&from=${encodeURIComponent(m.fromName || '')}`;
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#141821">
 <div style="display:none;max-height:0;overflow:hidden">${esc(subject)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px 12px">
@@ -90,7 +91,7 @@ ${items.map(m => `<tr><td style="padding:8px 24px">
     <br><span style="color:#5b6474">From ${esc(m.fromName || 'a friend')}</span>
     ${m.note ? `<div style="margin-top:6px;padding:8px 10px;background:#f4f5f7;border-radius:8px">&ldquo;${esc(m.note)}&rdquo;</div>` : ''}
   </td></tr></table></td></tr>`).join('')}
-<tr><td align="center" style="padding:16px 24px 28px"><a href="${SITE}/#/shows" style="display:inline-block;background:#e89a1c;color:#231500;font-weight:700;font-size:16px;text-decoration:none;padding:12px 24px;border-radius:10px">See it on TV Tracker</a></td></tr>
+<tr><td align="center" style="padding:16px 24px 28px"><a href="${items.length === 1 ? esc(link(items[0])) : `${SITE}/`}" style="display:inline-block;background:#e89a1c;color:#231500;font-weight:700;font-size:16px;text-decoration:none;padding:12px 24px;border-radius:10px">${items.length === 1 ? 'See the show' : 'Open TV Tracker'}</a></td></tr>
 </table>
 <p style="max-width:560px;font-size:12px;line-height:1.5;color:#5b6474;margin:16px auto 0;padding:0 12px">You're getting this because someone recommended a show to your TV Tracker account. <a href="${esc(unsubscribeUrl)}" style="color:#5b6474">Stop these emails</a> · you can also switch them off on your <a href="${SITE}/#/account" style="color:#5b6474">Account page</a>.</p>
 </td></tr></table></body></html>`;
