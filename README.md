@@ -55,6 +55,9 @@ One-time setup:
 
 The repo is public, so its Actions logs are too: the job never prints anyone's email address.
 
+## Removing accounts
+The Admin page has a **Remove** button on every account and every login made for others (not your own). It locks the account out straight away (the database rules refuse any account listed in `removals/{uid}`), and `.github/workflows/remove-accounts.yml` runs `email/remove-accounts.mjs` hourly to delete its sign-in and data, then marks it done. Needs the `FIREBASE_SERVICE_ACCOUNT` secret (see Weekly email) and the latest `firestore.rules` published. To finish a removal right away: Actions → **Remove accounts → Run workflow**.
+
 ## Custom domain
 The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file holds the domain). DNS is on Cloudflare: four `A` records on `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `CNAME` on `www` → `jeremykholmes.github.io`, all set to **DNS only** (grey cloud) so GitHub can issue the HTTPS certificate.
 

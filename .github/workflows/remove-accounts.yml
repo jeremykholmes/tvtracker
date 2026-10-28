@@ -1,0 +1,33 @@
+# Finishes removing accounts removed on the Admin page (email/remove-accounts.mjs): deletes each one's sign-in and
+# data. The Remove button locks the account out straight away; this runs hourly (and on demand from the Actions tab,
+# "Run workflow") to do the part a web page can't. Uses the FIREBASE_SERVICE_ACCOUNT secret, like the weekly email.
+name: Remove accounts
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: remove-accounts
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node remove-accounts.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
