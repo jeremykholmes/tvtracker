@@ -282,6 +282,18 @@ export async function allAccounts() {
   });
 }
 
+// Accounts removed on the Admin page: { uid: { t, name, email, done } }. done is set once the sign-in and data are deleted.
+export async function removals() {
+  const snap = await F.getDocs(F.collection(db, 'removals'));
+  return Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+}
+// Locks the account out right away (the database rules refuse it from now on) and queues the full deletion,
+// which .github/workflows/remove-accounts.yml carries out (a web page can't delete someone else's sign-in).
+export function removeAccount(a) {
+  if (a.uid === auth.currentUser?.uid) throw new Error("You can't remove your own account here.");
+  return F.setDoc(F.doc(db, 'removals', a.uid), { t: Date.now(), name: (a.name || '').slice(0, 100), email: (a.email || '').slice(0, 200) });
+}
+
 export async function signUp(name, email, password) {
   const cred = await A.createUserWithEmailAndPassword(auth, email, password);
   if (name) await A.updateProfile(cred.user, { displayName: name });

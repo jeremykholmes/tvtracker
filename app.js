@@ -1180,6 +1180,7 @@ views.contact = arg => {
   });
 };
 
+let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
 views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = SPLASH; return; } location.hash = '#/login'; return; }
   if (!cloud.isAdmin()) {
@@ -1188,18 +1189,22 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
     return;
   }
   if (!quiet) app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
-  let list, msgs = [], msgErr = '';
-  try { [list, msgs] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; })]); }
+  let list, msgs = [], msgErr = '', gone = {};
+  try { [list, msgs, gone] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; }),
+    cloud.removals().catch(() => ({}))]); }
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (route().name !== 'admin') return;
   try { if (now() - (+localStorage.getItem('tvt.dirfill') || 0) > DAY) cloud.backfillDirectory(list).then(() => localStorage.setItem('tvt.dirfill', now())).catch(x => console.warn('directory backfill', x)); } catch { }
   const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
+  const removing = list.filter(a => gone[a.uid]);   // removed on this page; the hourly job finishes deleting them
+  list = list.filter(a => !gone[a.uid]);
   const owners = list.filter(a => !a.listOf), logins = list.filter(a => a.listOf && !a.removed), removed = list.filter(a => a.removed);
   const when = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const row = a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b>${a.uid === user.uid ? ' <span class="sub">(you)</span>' : ''}<br>
       <span class="sub">${esc(a.listOf ? 'Username: ' + cloud.loginName(a.email) + (a.removed ? ' · was a login for ' : ' · login for ') + (names[a.listOf] || 'a deleted account') : a.email || 'no email saved')}</span></span>
-    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${when(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span></span></div>`;
+    <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${when(a.lastLogin)}</span><br><span>Last change</span> <span>${when(a.updated)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
   const byRecent = (a, b) => b.updated - a.updated;
+  adminAccounts = Object.fromEntries(list.map(a => [a.uid, a]));
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
       <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
       <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
@@ -1208,6 +1213,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
     ${removed.length ? `<div class="panel"><h3>Removed logins · ${removed.length}</h3><p>Their owner took away their access, so they can't see any list. The sign-in itself still exists — delete it in the Firebase console under Authentication → Users if it isn't needed.</p>${removed.sort(byRecent).map(row).join('')}</div>` : ''}
+    ${removing.length ? `<div class="panel"><h3>Being removed · ${removing.length}</h3><p>Locked out already. Their sign-in and data are deleted within the hour.</p>${removing.sort(byRecent).map(row).join('')}</div>` : ''}
     <p class="sub">Counts accounts that have saved anything. Last login is the last time someone opened the site signed in; it shows — until their next visit. Every sign-up is in the Firebase console under Authentication → Users.</p>`;
 };
 
@@ -1610,6 +1616,16 @@ const actions = {
   async 'del-msg'(b) {
     if (!confirm('Delete this message?')) return;
     try { await cloud.deleteMessage(b.dataset.id); b.closest('.msg').remove(); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
+  async 'admin-remove'(b) {
+    const a = adminAccounts[b.dataset.uid]; if (!a) return;
+    const who = a.name || (a.listOf ? cloud.loginName(a.email) : a.email) || 'this account';
+    const extra = a.listOf ? 'This login will stop working right away.'
+      : `They'll be locked out right away, and their list${a.logins ? ` and the ${a.logins} login${a.logins === 1 ? '' : 's'} they made for others` : ''} will stop working.`;
+    if (!confirm(`Remove ${who}?\n\n${extra} Their sign-in and all their data are then permanently deleted within the hour. This can't be undone.`)) return;
+    b.disabled = true;
+    try { await cloud.removeAccount(a); toast(`${who} removed`); views.admin(null, true); }
+    catch (x) { b.disabled = false; toast(cloud.friendlyError(x)); }
   },
   async 'remove-login'(b) {
     if (!confirm(`Remove ${b.dataset.name}'s login? They won't be able to see or change your list any more.`)) return;

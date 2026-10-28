@@ -7,6 +7,8 @@ rules_version = '2';
 // Only the owner can change who has access, their profile, or delete the account's data.
 // The site admin (one verified email address, below) can also read every account, for the Admin page.
 // Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
+// removals/{uid}: accounts the admin removed on the Admin page. From that moment the account can't read or change
+// any list; .github/workflows/remove-accounts.yml then deletes the sign-in and its data and marks the entry done.
 // emailPrefs/{uid}: the weekly email's settings. The email job (which bypasses these rules) stores an unsubscribe
 // token and when it last emailed. The owner can switch the email on or off; anyone holding the token (from the
 // unsubscribe link in an email) can switch it off, without signing in.
@@ -18,9 +20,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function removed() { return exists(/databases/$(database)/documents/removals/$(request.auth.uid)); }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid && !removed(); }
     function logins(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.get('logins', {}); }
-    function isMember(uid) { return signedIn() && request.auth.uid in logins(uid); }
+    function isMember(uid) { return signedIn() && request.auth.uid in logins(uid) && !removed(); }
     function isAdmin() { return signedIn() && request.auth.token.email == 'jeremykholmes@gmail.com' && request.auth.token.email_verified == true; }
     function isEditor(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'edit'; }
     function isKid(uid) { return isMember(uid) && logins(uid)[request.auth.uid].get('role', 'edit') == 'kid'; }
@@ -29,7 +32,7 @@ service cloud.firestore {
     // The signed-in account is a kid login (its own document says whose list it uses; that owner's logins say kid).
     function kidLogin(me) { return me.get('listOf', '') != '' && exists(userDoc(me.listOf))
       && get(userDoc(me.listOf)).data.get('logins', {}).get(request.auth.uid, {}).get('role', 'edit') == 'kid'; }
-    function canSend(to) { return signedIn() && request.auth.uid != to
+    function canSend(to) { return signedIn() && request.auth.uid != to && !removed()
       && exists(userDoc(request.auth.uid)) && !kidLogin(get(userDoc(request.auth.uid)).data)
       && exists(userDoc(to)) && !(request.auth.uid in get(userDoc(to)).data.get('blocked', {})); }
     function str(v, max) { return v is string && v.size() <= max; }
@@ -88,6 +91,13 @@ service cloud.firestore {
         && str(request.resource.data.hint, 120) && key == nameKey(request.resource.data.name)
         && ((isOwner(uid) && !madeLogin()) || isAdmin());
       allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    match /removals/{uid} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && uid != request.auth.uid
+        && request.resource.data.keys().hasOnly(['t', 'name', 'email']) && request.resource.data.t is int
+        && str(request.resource.data.name, 100) && str(request.resource.data.email, 200);
     }
 
     match /messages/{id} {
