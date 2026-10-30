@@ -174,7 +174,7 @@ export function removeLogin(uid) {
    byName/{key}/people/{uid}: { name, hint } — finds accounts by their exact full name (key: the name in lower case,
    spaces tidied). Only someone who types the whole name reaches it; nothing can be listed or searched by part of a name.
    hint is a masked email to tell people with the same name apart. Leaving name search (users/{uid}.findable false)
-   removes the entry. users/{uid}/inbox/{id}: a show someone sent; only the recipient can read or delete it, and anyone
+   removes the entry. users/{uid}/inbox/{id}: a show (or movie, kind: 'movie') someone sent; only the recipient can read or delete it, and anyone
    they block (users/{uid}.blocked) can't send. Logins made for others aren't listed and can't receive. */
 const dirId = email => String(email || '').trim().toLowerCase();
 const maskEmail = email => { const [a, d] = dirId(email).split('@'); return a && d ? `${a[0]}•••@${d}` : ''; };
@@ -216,13 +216,15 @@ export async function findByEmail(email) {
   if (d.data().uid === auth.currentUser.uid) throw fail('tvt/self');
   return { uid: d.data().uid, name: d.data().name || email, hint: maskEmail(email) };
 }
-export async function sendShow(to, show, note, fromName) {
+// movie: it's a movie (show.id is its TMDB id), marked kind: 'movie'; network then says "Movie · <year>".
+export async function sendShow(to, show, note, fromName, movie) {
   const u = auth.currentUser;
   if (to === u.uid) throw Object.assign(new Error('tvt/self'), { code: 'tvt/self' });
+  const network = movie ? ['Movie', show.year].filter(Boolean).join(' · ') : show.network;
   await F.addDoc(F.collection(db, 'users', to, 'inbox'), {
     from: u.uid, fromName: String(fromName || '').trim().slice(0, 100) || loginName(u.email), fromEmail: u.email,
-    show: { id: +show.id, name: String(show.name).slice(0, 200), image: String(show.image || '').slice(0, 500), network: String(show.network || '').slice(0, 100) },
-    note: String(note || '').trim().slice(0, 300), t: Date.now() });
+    show: { id: +show.id, name: String(show.name).slice(0, 200), image: String(show.image || '').slice(0, 500), network: String(network || '').slice(0, 100) },
+    note: String(note || '').trim().slice(0, 300), t: Date.now(), ...(movie ? { kind: 'movie' } : {}) });
 }
 function watchInbox(uid) {
   inboxUnsub = F.onSnapshot(F.query(F.collection(db, 'users', uid, 'inbox'), F.orderBy('t', 'desc'), F.limit(50)),
