@@ -448,7 +448,6 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .seg button { text-align: center; padding: 8px; border-radius: 8px; border: 0; background: none; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
 .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .seg.qmode { max-width: 360px; margin: 6px 0 14px; }
-.badge.movie { background: var(--panel); color: var(--text); border: 1px solid var(--line); }
 .card.movie.seen { opacity: .8; }
 details.moviesdone > summary { list-style: none; cursor: pointer; }
 details.moviesdone > summary::-webkit-details-marker { display: none; }

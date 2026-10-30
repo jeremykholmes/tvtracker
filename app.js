@@ -937,7 +937,7 @@ function movieBtn(m) {
 function movieCard(m) {
   const seen = !!m.w;
   return `<article class="card movie${seen ? ' seen' : ''}">
-    <div style="position:relative">${poster(m, '#/movie/' + m.id)}<span class="badge movie">Movie</span></div>
+    <div style="position:relative">${poster(m, '#/movie/' + m.id)}</div>
     <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
       <div class="sub">${esc([m.year || 'Movie', m.rec && 'From ' + m.rec].filter(Boolean).join(' · '))}</div>
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
