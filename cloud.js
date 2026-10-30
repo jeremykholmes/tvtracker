@@ -273,6 +273,18 @@ export async function backfillDirectory(accounts) {
   if (n) await b.commit();
   return n;
 }
+// Removes name-search entries left by accounts that no longer exist (e.g. deleted outside the Admin page), which
+// showed up as a second person with the same name who couldn't be sent anything. Checks the names of current accounts.
+export async function pruneByName(accounts) {
+  const uids = new Set(accounts.map(a => a.uid)), b = F.writeBatch(db); let n = 0;
+  const keys = new Set(accounts.filter(a => a.email && !isLogin(a.email)).map(a => nameKey(cleanName(a.name || a.email.split('@')[0]))).filter(Boolean));
+  for (const key of keys) {
+    const snap = await F.getDocs(F.query(F.collection(db, 'byName', key, 'people'), F.limit(10)));
+    for (const d of snap.docs) if (!uids.has(d.id)) { b.delete(d.ref); n++; }
+  }
+  if (n) await b.commit();
+  return n;
+}
 export async function allAccounts() {
   const snap = await F.getDocs(F.collection(db, 'users'));
   const access = Object.fromEntries(snap.docs.map(d => [d.id, d.data().logins || {}]));   // owner -> logins they still allow

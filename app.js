@@ -548,7 +548,7 @@ function onInbox(items) {
 const K_SENT = 'tvt.sentTo';   // people you sent shows to recently, on this device: [{ uid, name, hint }]
 function sendShowDialog(s, movie) {
   const d = $('#appDialog'), recent = load(K_SENT, []);
-  let pick = null;
+  let pick = null, many = false;   // many: the name search found more than one person
   const person = p => `<button type="button" class="pickrow" data-uid="${esc(p.uid)}"><b>${esc(p.name)}</b>${p.hint ? `<span class="sub">${esc(p.hint)}</span>` : ''}</button>`;
   d.innerHTML = `<form class="stack" id="sendForm" autocomplete="off"><h2>Recommend ${esc(s.name)}</h2>
     <p class="sub">Send it to someone's TV Tracker account — it shows up at the top of their My Shows, ready to add.</p>
@@ -577,6 +577,7 @@ function sendShowDialog(s, movie) {
       if (!pick && !q.includes('@')) {
         const r = await cloud.findPeople(q).catch(x => { throw x?.code === 'permission-denied' ? { code: 'tvt/lookup-denied' } : x; });
         for (const p of r) people[p.uid] = p;
+        many = r.length > 1;
         btn.disabled = false; btn.textContent = 'Send';
         if (r.length === 1) return choose(r[0]);
         found.innerHTML = r.length ? `<p class="sub">${r.length} people have that name — tap the one you mean:</p>${r.map(person).join('')}` : '';
@@ -591,7 +592,7 @@ function sendShowDialog(s, movie) {
       showErr(({ 'tvt/lookup-denied': 'Couldn\'t look them up — the database refused (step 1: lookup). The latest Firestore rules may not be published.',
         'tvt/no-account': 'No TV Tracker account uses that email. Check it, or text them a link instead.',
         'tvt/self': 'That\'s you! Pick someone else.',
-        'permission-denied': 'Couldn\'t send — the database refused (step 2: sending). They may have blocked you, or the latest Firestore rules aren\'t published.' })[x?.code] || cloud.friendlyError(x));
+        'permission-denied': `Couldn't send — the database refused (step 2: sending). ${many ? 'If their name was listed more than once, try the other one. ' : ''}They may have blocked you, or the latest Firestore rules aren't published.` })[x?.code] || cloud.friendlyError(x));
       btn.disabled = false; btn.textContent = pick ? `Send to ${pick.name.split(/\s+/)[0]}` : 'Send';
     }
   };
@@ -1321,6 +1322,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (route().name !== 'admin') return;
   try { if (now() - (+localStorage.getItem('tvt.dirfill') || 0) > DAY) cloud.backfillDirectory(list).then(() => localStorage.setItem('tvt.dirfill', now())).catch(x => console.warn('directory backfill', x)); } catch { }
+  try { if (now() - (+localStorage.getItem('tvt.byNamePrune') || 0) > DAY) cloud.pruneByName(list).then(n => { localStorage.setItem('tvt.byNamePrune', now()); if (n) toast(`Cleared ${n} name-search entr${n === 1 ? 'y' : 'ies'} left by deleted accounts`); }).catch(x => console.warn('name search cleanup', x)); } catch { }
   const names = Object.fromEntries(list.map(a => [a.uid, a.name || a.email]));
   const removing = list.filter(a => gone[a.uid]);   // removed on this page; the hourly job finishes deleting them
   list = list.filter(a => !gone[a.uid]);
