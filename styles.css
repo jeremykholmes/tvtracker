@@ -458,3 +458,4 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 
 /* My Movies: its own part at the bottom of My Shows */
 .mymovies { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); }
+.card .sub.stream { color: var(--text); }

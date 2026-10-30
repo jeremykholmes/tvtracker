@@ -899,8 +899,10 @@ async function recShow(b) {
    Search can switch to Movies. Added movies are listed under My Movies at the bottom of My Shows (To watch) and checked
    off once watched, which moves them to Watched. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
-// Runtime, US rating and genres for the cards on My Movies, kept on this device: TMDB id -> { runtime, rating, genres }.
-const K_MDET = 'tvt.movieDetails', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
+// Runtime, US rating, genres and where it streams, for the cards on My Movies, kept on this device for a week
+// (streaming changes): TMDB id -> { runtime, rating, genres, stream, rent, t }.
+const K_MDET = 'tvt.movieDetails.v2', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
+const detailsFresh = id => movieDetails[id] && now() - movieDetails[id].t < 7 * DAY;
 const runtimeText = min => min ? `${min >= 60 ? Math.floor(min / 60) + 'h ' : ''}${min % 60 ? (min % 60) + 'm' : ''}`.trim() : '';
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
 const hasMovie = id => !isKid() && !!(state.movies[id] && !state.movies[id].removed);
@@ -909,6 +911,8 @@ function trimMovie(m) {
   return { id: m.id, name: m.title || m.name || '', image: m.poster_path ? TMDB_IMG + m.poster_path : '',
     year: (m.release_date || '').slice(0, 4), date: m.release_date || '', summary: (m.overview || '').slice(0, 700), pop: m.popularity || 0 };
 }
+// "Starz Amazon Channel" and "Starz Apple TV channel" are both just Starz.
+const serviceName = n => n.replace(/\s+(amazon|apple tv|roku premium|prime video)?\s*channel$/i, '').trim() || n;
 async function fetchMovie(id) {
   const j = await tmdb(`/movie/${id}?language=en-US&append_to_response=watch/providers,release_dates`);
   if (!j) return null;
@@ -916,7 +920,7 @@ async function fetchMovie(id) {
   const prov = j['watch/providers']?.results?.US || {};
   return movieCache[id] = { ...trimMovie(j), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
     rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '',
-    stream: (prov.flatrate || []).map(x => x.provider_name), rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
+    stream: [...new Set((prov.flatrate || []).map(x => serviceName(x.provider_name)))], rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
 }
 // rec: name of the friend who recommended it, shown on its card.
 function addMovie(m, seen, rec) {
@@ -944,6 +948,7 @@ function movieCard(m) {
     <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
       <div class="sub">${esc(['Movie', m.year, runtimeText(d?.runtime), d?.rating].filter(Boolean).join(' · '))}</div>
       ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
+      ${d?.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
       ${m.rec ? `<div class="sub">From ${esc(m.rec)}</div>` : ''}
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
@@ -953,12 +958,12 @@ function moviesSection() {
   if (isKid() || !config.tmdbKey) return '';
   const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
-  // Cards without runtime, rating and genres yet: look them up once, then redraw.
-  const todo = all.filter(m => !movieDetails[m.id] && !detailsAsked.has(m.id));
+  // Cards without details yet (or a week old): look them up once, then redraw.
+  const todo = all.filter(m => !detailsFresh(m.id) && !detailsAsked.has(m.id));
   if (todo.length) {
     todo.forEach(m => detailsAsked.add(m.id));
     inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
-      if (x) movieDetails[m.id] = { runtime: x.runtime, rating: x.rating, genres: x.genres.slice(0, 3) }; })
+      if (x) movieDetails[m.id] = { runtime: x.runtime, rating: x.rating, genres: x.genres.slice(0, 3), stream: x.stream.slice(0, 3), rent: x.rent.slice(0, 2), t: now() }; })
       .then(() => { save(K_MDET, movieDetails); if (route().name === 'shows') render(); });
   }
   return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
