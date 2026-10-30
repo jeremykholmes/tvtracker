@@ -5,11 +5,9 @@
 .wrangler
 .gitignore
 .assetsignore
-.nojekyll
 node_modules
 email
 wrangler.jsonc
 CLAUDE.md
 README.md
-CNAME
 firestore.rules

@@ -52,7 +52,7 @@
       var from = (q.get('from') || '').slice(0, 40);
       history.replaceState(null, '', location.pathname + '#/' + page + '/' + id + (from ? '/' + encodeURIComponent(from) : ''));
     })();
-    // Load the newest app files on every visit: a unique address skips any browser or GitHub cache.
+    // Load the newest app files on every visit: a unique address skips any browser cache.
     window.TVT_V = '?v=' + Date.now();
     document.write('<link rel="stylesheet" href="styles.css' + TVT_V + '">');
   </script>
