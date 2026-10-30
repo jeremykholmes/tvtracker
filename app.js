@@ -28,7 +28,8 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 /* ---------- state ---------- */
 // state.shows[id]   = { id, name, image, network, removed, later, t }   later: on the Future watch list (not started yet)
 // state.watched[ep] = { w: bool, t }      (last-write-wins per key, so devices merge cleanly)
-function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {} }; }
+// state.movies[id]  = { id, name, image, year, w, removed, t }   id: TMDB movie id; w: watched
+function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {}, movies: s.movies || {} }; }
 let user = null;                        // { uid, email, name } when signed in
 let inbox = [];                         // shows other accounts sent you, newest first: { id, from, fromName, fromEmail, show, note, t }
 let blocked = {};                       // accounts you blocked from sending you shows: uid -> { name, email }
@@ -433,8 +434,8 @@ const NET_SITES = {
 const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d + new URL(import.meta.url).search : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
 views.shows = () => {
   if (needsAccount()) return views.landing();
-  const list = followed();
-  if (!list.length && user && !serverSynced) {
+  const list = followed(), movies = myMovies();
+  if (!list.length && !movies.length && user && !serverSynced) {
     // Nothing on this device yet and the account hasn't answered: don't claim the list is empty.
     app.innerHTML = slowServer
       ? `<div class="empty"><h1>Can't reach your account</h1>
@@ -447,7 +448,7 @@ views.shows = () => {
     app.innerHTML = `<div class="empty"><h1>No shows yet</h1><p>${esc(sharedOpen().name)} hasn't added any shows for you yet.</p></div>`;
     return;
   }
-  if (!list.length) {
+  if (!list.length && !movies.length) {
     app.innerHTML = `${inboxSection()}<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
@@ -509,7 +510,7 @@ views.shows = () => {
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}`;
+    ${futureSec}${friendsSec}${net || day !== '' ? '' : moviesSection()}${sec('Loading', loading)}${sec('Finished', done)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -890,6 +891,93 @@ async function recShow(b) {
   finally { busy(false); b.disabled = false; }
 }
 
+/* ---------- movies (TMDB) ----------
+   Search can switch to Movies. A movie can be added to My Shows (Movies to watch) and checked off once it's watched,
+   which moves it to Watched movies. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
+const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
+const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
+const hasMovie = id => !isKid() && !!(state.movies[id] && !state.movies[id].removed);
+const movieSeen = id => hasMovie(id) && !!state.movies[id].w;
+function trimMovie(m) {
+  return { id: m.id, name: m.title || m.name || '', image: m.poster_path ? TMDB_IMG + m.poster_path : '',
+    year: (m.release_date || '').slice(0, 4), date: m.release_date || '', summary: (m.overview || '').slice(0, 700), pop: m.popularity || 0 };
+}
+async function fetchMovie(id) {
+  const j = await tmdb(`/movie/${id}?language=en-US&append_to_response=watch/providers,release_dates`);
+  if (!j) return null;
+  const us = j.release_dates?.results?.find(r => r.iso_3166_1 === 'US');
+  const prov = j['watch/providers']?.results?.US || {};
+  return movieCache[id] = { ...trimMovie(j), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
+    rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '',
+    stream: (prov.flatrate || []).map(x => x.provider_name), rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
+}
+function addMovie(m, seen) {
+  if (isKid()) return;
+  const t = now();
+  state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t };
+  queue('movies', m.id, state.movies[m.id]); persist();
+}
+function setMovie(id, fields) {
+  const m = state.movies[id]; if (!m) return;
+  Object.assign(m, fields, { t: now() }); queue('movies', id, m); persist();
+}
+function movieBtn(m) {
+  if (isKid()) return '';
+  if (hasMovie(m.id)) return movieSeen(m.id)
+    ? `<button class="btn sm" data-act="movie-remove" data-movie="${m.id}" title="You've watched it — tap to remove">✓ Watched</button>`
+    : `<button class="btn sm" data-act="movie-remove" data-movie="${m.id}" title="On your Movies to watch — tap to remove">✓ Added</button>`;
+  return `<span class="addbtns"><button class="btn primary sm" data-act="movie-add" data-movie="${m.id}">＋ Add</button>
+    <button class="btn sm" data-act="movie-seen" data-movie="${m.id}" title="Already watched it">✓ Seen it</button></span>`;
+}
+function movieCard(m) {
+  const seen = !!m.w;
+  return `<article class="card movie${seen ? ' seen' : ''}">
+    <div style="position:relative">${poster(m, '#/movie/' + m.id)}<span class="badge movie">Movie</span></div>
+    <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
+      <div class="sub">${esc(m.year || 'Movie')}</div>
+      ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
+        : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
+}
+function moviesSection() {
+  const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
+  const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
+  return (toWatch.length ? `<h2>Movies to watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : '')
+    + (seen.length ? `<details class="moviesdone"><summary><h2>Watched movies · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : '');
+}
+views.movie = arg => {
+  const id = +arg;
+  if (isKid()) { location.hash = '#/'; return; }
+  const m = movieCache[id];
+  if (!m) {
+    app.innerHTML = '<p class="loading">Loading movie…</p>';
+    fetchMovie(id).then(r => { if (route().name === 'movie' && +route().arg === id) r ? render() : (app.innerHTML = '<p class="loading">Movie not found.</p>'); })
+      .catch(e => { app.innerHTML = `<p class="loading">Couldn't load: ${esc(e.message)}</p>`; });
+    return;
+  }
+  const on = hasMovie(id), seen = movieSeen(id);
+  const hrs = m.runtime ? `${m.runtime >= 60 ? Math.floor(m.runtime / 60) + 'h ' : ''}${m.runtime % 60 ? (m.runtime % 60) + 'm' : ''}`.trim() : '';
+  const where = m.stream.length ? `<p class="where"><b>Streaming on:</b> ${m.stream.map(esc).join(', ')}</p>`
+    : m.rent.length ? `<p class="where"><b>Rent or buy:</b> ${m.rent.map(esc).join(', ')}</p>` : '';
+  app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
+    <section class="hero">${poster(m)}
+    <div class="meta"><h1>${esc(m.name)}</h1>
+      <div class="sub">${['Movie', m.year, hrs, m.rating].filter(Boolean).map(esc).join(' · ')}</div>
+      ${m.genres.length ? `<div class="chips">${m.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
+      ${m.tagline ? `<p class="sub"><i>${esc(m.tagline)}</i></p>` : ''}
+      ${m.summary ? `<p class="summary">${esc(m.summary)}</p>` : ''}
+      ${where}
+      <div class="actions">
+        ${!on ? `<button class="btn primary" data-act="movie-add" data-movie="${id}">＋ Add to my movies</button>
+          <button class="btn" data-act="movie-seen" data-movie="${id}">✓ I've seen it</button>`
+        : seen ? `<button class="btn" data-act="movie-unwatch" data-movie="${id}">↺ Mark unwatched</button>`
+        : `<button class="btn primary" data-act="movie-watch" data-movie="${id}">✓ Mark watched</button>`}
+        <a class="btn ghost" href="https://www.themoviedb.org/movie/${id}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TMDB in a new tab">ⓘ More info on this movie ↗</a>
+      </div>
+      ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched movies on My Shows.' : 'On your Movies to watch list on My Shows.'}</p>
+        <div class="actions"><button class="btn danger" data-act="movie-remove" data-movie="${id}"><span aria-hidden="true">🗑️</span> Remove from my movies</button></div>` : ''}
+    </div></section>`;
+};
+
 /* ---------- kid logins ----------
    An owner can make a login with Kid access: it sees only the shows the owner allows (up to a highest US TV rating, from
    TMDB, plus any they allow anyway, minus any they pick to hide), can't add or remove shows, and keeps its own checkmarks. The allowed shows are
@@ -1053,11 +1141,16 @@ function followBtn(s) {
 }
 
 let lastResults = [], lastQuery = '', searchTimer = null, searchSeq = 0;
+let lastMovies = [], lastMovieQuery = '';
+// Search TV shows or movies (kid logins: shows only). Remembered for this visit.
+const searchMode = () => { if (isKid()) return 'tv'; try { return sessionStorage.getItem('tvt.qmode') === 'movie' ? 'movie' : 'tv'; } catch { return 'tv'; } };
 const showLookup = {};   // id -> trimmed show from search/discover, used when following
 views.search = () => {
   const kid = isKid();
-  app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : '<h1>Add a show</h1>'}
-    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
+  const mv = searchMode() === 'movie';
+  app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : `<h1>${mv ? 'Add a movie' : 'Add a show'}</h1>`}
+    ${kid || !config.tmdbKey ? '' : `<div class="seg qmode" role="group" aria-label="Search for"><button type="button" data-act="qmode" data-mode="tv" class="${mv ? '' : 'on'}" aria-pressed="${!mv}">📺 TV shows</button><button type="button" data-act="qmode" data-mode="movie" class="${mv ? 'on' : ''}" aria-pressed="${mv}">🎬 Movies</button></div>`}
+    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Search any movie…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
     <button class="btn primary">Search</button></form><div id="results" class="rows"></div>`;
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
@@ -1066,7 +1159,7 @@ views.search = () => {
   const finish = async () => {
     clearTimeout(searchTimer);
     const text = q.value.trim(); q.value = '';
-    if (text && text !== lastQuery) await doSearch(text);
+    if (text && text !== (searchMode() === 'movie' ? lastMovieQuery : lastQuery)) await doSearch(text);
     try { sessionStorage.removeItem('tvt.q'); } catch { }
   };
   q.addEventListener('blur', () => { if (document.hasFocus()) finish(); });   // not when switching apps/tabs
@@ -1075,8 +1168,17 @@ views.search = () => {
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
-  if (!q) { lastResults = []; lastQuery = ''; return drawResults(); }
+  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; return drawResults(); }
   const seq = ++searchSeq;
+  if (searchMode() === 'movie') {
+    try {
+      const r = (await tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`))?.results || [];
+      if (seq !== searchSeq) return;
+      lastMovies = r.map(trimMovie).filter(m => m.name); lastMovieQuery = q;
+      drawResults();
+    } catch (e) { toast(e.message); }
+    return;
+  }
   try {
     const r = await api(`/search/shows?q=${encodeURIComponent(q)}`) || [];
     if (seq !== searchSeq) return;
@@ -1086,6 +1188,7 @@ async function doSearch(q) {
 }
 function drawResults() {
   const box = $('#results'); if (!box) return;
+  if (searchMode() === 'movie') return drawMovieResults(box);
   let list = lastResults, checking = false;
   if (isKid()) {   // only shows within the kid's limit; ratings are looked up once, then the results redraw
     const todo = list.filter(s => kidCanSee(s.id) === null && !kidTried.has(s.id));
@@ -1104,6 +1207,18 @@ function drawResults() {
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
     ${followBtn(s)}</div>`).join('');
+}
+
+function drawMovieResults(box) {
+  if (!lastMovies.length) {
+    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title to search.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>`;
+    return;
+  }
+  box.innerHTML = `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>` + lastMovies.map(m => `<div class="row">${poster(m, '#/movie/' + m.id)}
+    <div class="info"><a href="#/movie/${m.id}">${esc(m.name)}</a>
+      <div class="sub">${['Movie', m.year].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="sub">${esc(m.summary.slice(0, 140))}${m.summary.length > 140 ? '…' : ''}</div></div>
+    ${movieBtn(m)}</div>`).join('');
 }
 
 views.login = mode => {
@@ -1441,13 +1556,13 @@ function canon(v) {
 }
 // last-write-wins per show / per episode, so edits from several devices combine cleanly
 function mergeMap(a, b) { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) { const c = o[k]; if (!c || (v.t || 0) > (c.t || 0)) o[k] = v; } return o; }
-function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched: mergeMap(a.watched, b.watched) }); }
+function merge(a, b) { return norm({ shows: mergeMap(a.shows, b.shows), watched: mergeMap(a.watched, b.watched), movies: mergeMap(a.movies, b.movies) }); }
 
 let pending = null, flushTimer = null, inFlight = 0;
 const saving = () => inFlight > 0;
 function queue(kind, id, val) {
-  if (!user || sharedOpen()?.role === 'view' || (kind === 'shows' && isKid())) return;
-  pending = pending || { shows: {}, watched: {} };
+  if (!user || sharedOpen()?.role === 'view' || (kind !== 'watched' && isKid())) return;
+  pending = pending || { shows: {}, watched: {}, movies: {} };
   pending[kind][id] = val;
   syncStatus('Syncing…');
   clearTimeout(flushTimer); flushTimer = setTimeout(flush, 1000);  // pause so quick clicks and "Mark all" go up as one write
@@ -1463,12 +1578,16 @@ function flush() {
     syncStatus('Saved on this device — can\'t reach your account', true);
     toast('Your changes are saved on this device but aren\'t reaching your account. If you use an ad blocker or privacy extension, allow this site and reload.');
   }, 10000);
-  return cloud.save(Object.keys(batch.shows).length ? { ...batch, updated: now() } : batch)
+  // Empty maps are left out: merging an empty map would wipe that field on the server.
+  const out = { watched: batch.watched };
+  for (const k of ['shows', 'movies']) if (Object.keys(batch[k]).length) out[k] = batch[k];
+  if (out.shows || out.movies) out.updated = now();
+  return cloud.save(out)
     .then(() => { if (!--inFlight && !pending) syncStatus(); })
     .catch(e => {
       inFlight--; console.warn(e);
       if (e?.code === 'permission-denied' && sharedOpen()) { syncStatus(); onCloudError(e); return; }   // access changed: drop the change
-      pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) } };
+      pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) }, movies: { ...batch.movies, ...(pending?.movies || {}) } };
       syncStatus(cloud.friendlyError(e), true);
       flushTimer = setTimeout(flush, 5000);
     })
@@ -1529,11 +1648,11 @@ function onData(data, fromServer) {
   const first = firstSnapshot;
   const remote = norm(data);
   if (isKid()) {   // exactly the shows allowed for this kid, never ones left on this device
-    state.shows = remote.shows;
+    state.shows = remote.shows; state.movies = {};
     kidLimit = { maxRating: data?.maxRating || '', block: data?.block || [] };
   }
   // Anything this device changed that the server hasn't seen yet (e.g. edits made offline) gets uploaded.
-  for (const kind of ['shows', 'watched'])
+  for (const kind of ['shows', 'watched', 'movies'])
     for (const [k, v] of Object.entries(state[kind])) { const r = remote[kind][k]; if (!r || (v.t || 0) > (r.t || 0)) queue(kind, k, v); }
   const merged = merge(state, remote);
   const changed = canon(merged) !== canon(state);
@@ -1692,6 +1811,38 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
+  qmode(b) {
+    const q = $('#q')?.value.trim() || (searchMode() === 'movie' ? lastMovieQuery : lastQuery);
+    try { sessionStorage.setItem('tvt.qmode', b.dataset.mode); } catch { }
+    render(true);
+    const done = b.dataset.mode === 'movie' ? lastMovieQuery : lastQuery;
+    if (q && q !== done) doSearch(q);   // same words, now searched in the other mode
+  },
+  'movie-add'(b, e, seen) {
+    if (!requireAccount(true)) return;
+    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || state.movies[id];
+    if (!m) return;
+    if (state.movies[id]) setMovie(id, { removed: false, w: !!seen }); else addMovie(m, seen);
+    render(); toast(seen ? `${m.name} added to Watched movies` : `Added ${m.name} to Movies to watch`);
+  },
+  'movie-seen'(b, e) { return actions['movie-add'](b, e, true); },
+  'movie-watch'(b) {
+    if (!requireAccount() || b.classList.contains('on')) return;
+    const id = +b.dataset.movie, m = state.movies[id]; if (!m) return;
+    b.classList.add('on');
+    setTimeout(() => { setMovie(id, { w: true }); render(); toast(`${m.name} watched`, () => { setMovie(id, { w: false }); render(); }); }, b.classList.contains('watchbtn') ? 550 : 0);
+  },
+  'movie-unwatch'(b) {
+    if (!requireAccount()) return;
+    const id = +b.dataset.movie; if (!state.movies[id]) return;
+    setMovie(id, { w: false }); render(); toast(`${state.movies[id].name} moved back to Movies to watch`);
+  },
+  'movie-remove'(b) {
+    if (!requireAccount(true)) return;
+    const id = +b.dataset.movie, m = state.movies[id]; if (!m) return;
+    setMovie(id, { removed: true }); render();
+    toast(`Removed ${m.name}`, () => { setMovie(id, { removed: false }); render(); });
+  },
   net(b) { save(K_NET, b.dataset.net); render(); },
   day(b) { save(K_DAY, b.dataset.day); render(); },
   // Signed in (not a kid): send it to someone's account or share a link; otherwise just share a link.
@@ -1842,7 +1993,7 @@ function render(fromRoute) {
   const label = isKid() ? '<span class="ico">⌕</span>Search' : st.dataset.label;
   if (st.innerHTML !== label) st.innerHTML = label;
   if (isKid() && r.name === 'discover') { location.hash = '#/'; return; }
-  const tab = r.name === 'show' ? 'shows' : r.name === 'login' ? 'account' : r.name;
+  const tab = r.name === 'show' || r.name === 'movie' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
   document.documentElement.classList.toggle('ptr-on', r.name in PTR_PAGES);   // our pull-to-refresh replaces the browser's here
@@ -1930,7 +2081,7 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 
 // The footer is drawn here (app.js always loads fresh) so changes to it show up even if index.html is cached.
 $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contact us</a>
-  <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
+  <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError, onInbox })
