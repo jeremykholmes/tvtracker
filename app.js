@@ -899,6 +899,9 @@ async function recShow(b) {
    Search can switch to Movies. Added movies are listed under My Movies at the bottom of My Shows (To watch) and checked
    off once watched, which moves them to Watched. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
+// Runtime, US rating and genres for the cards on My Movies, kept on this device: TMDB id -> { runtime, rating, genres }.
+const K_MDET = 'tvt.movieDetails', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
+const runtimeText = min => min ? `${min >= 60 ? Math.floor(min / 60) + 'h ' : ''}${min % 60 ? (min % 60) + 'm' : ''}`.trim() : '';
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
 const hasMovie = id => !isKid() && !!(state.movies[id] && !state.movies[id].removed);
 const movieSeen = id => hasMovie(id) && !!state.movies[id].w;
@@ -935,11 +938,13 @@ function movieBtn(m) {
     <button class="btn sm" data-act="movie-seen" data-movie="${m.id}" title="Already watched it">✓ Seen it</button></span>`;
 }
 function movieCard(m) {
-  const seen = !!m.w;
+  const seen = !!m.w, d = movieDetails[m.id];
   return `<article class="card movie${seen ? ' seen' : ''}">
     <div style="position:relative">${poster(m, '#/movie/' + m.id)}</div>
     <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
-      <div class="sub">${esc([m.year || 'Movie', m.rec && 'From ' + m.rec].filter(Boolean).join(' · '))}</div>
+      <div class="sub">${esc(['Movie', m.year, runtimeText(d?.runtime), d?.rating].filter(Boolean).join(' · '))}</div>
+      ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
+      ${m.rec ? `<div class="sub">From ${esc(m.rec)}</div>` : ''}
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
 }
@@ -948,6 +953,14 @@ function moviesSection() {
   if (isKid() || !config.tmdbKey) return '';
   const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
+  // Cards without runtime, rating and genres yet: look them up once, then redraw.
+  const todo = all.filter(m => !movieDetails[m.id] && !detailsAsked.has(m.id));
+  if (todo.length) {
+    todo.forEach(m => detailsAsked.add(m.id));
+    inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
+      if (x) movieDetails[m.id] = { runtime: x.runtime, rating: x.rating, genres: x.genres.slice(0, 3) }; })
+      .then(() => { save(K_MDET, movieDetails); if (route().name === 'shows') render(); });
+  }
   return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
       <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
       <button type="button" class="btn sm" data-act="add-movie">＋ Add a movie</button></div>
@@ -965,7 +978,7 @@ views.movie = arg => {
     return;
   }
   const on = hasMovie(id), seen = movieSeen(id), from = linkFrom(id, 'movie');
-  const hrs = m.runtime ? `${m.runtime >= 60 ? Math.floor(m.runtime / 60) + 'h ' : ''}${m.runtime % 60 ? (m.runtime % 60) + 'm' : ''}`.trim() : '';
+  const hrs = runtimeText(m.runtime);
   const where = m.stream.length ? `<p class="where"><b>Streaming on:</b> ${m.stream.map(esc).join(', ')}</p>`
     : m.rent.length ? `<p class="where"><b>Rent or buy:</b> ${m.rent.map(esc).join(', ')}</p>` : '';
   app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
