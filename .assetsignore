@@ -1,0 +1,15 @@
+# Repo files that aren't part of the website, so they're not served on tvtracker.us (see wrangler.jsonc)
+.git
+.github
+.claude
+.wrangler
+.gitignore
+.assetsignore
+.nojekyll
+node_modules
+email
+wrangler.jsonc
+CLAUDE.md
+README.md
+CNAME
+firestore.rules

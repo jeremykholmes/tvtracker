@@ -1,6 +1,6 @@
 # TV Tracker
 
-A website for tracking the TV shows you're watching, with accounts so anyone can sign up and keep their own private list. Hosted on GitHub Pages; accounts and data run on a free Firebase project.
+A website for tracking the TV shows you're watching, with accounts so anyone can sign up and keep their own private list. Hosted as a Cloudflare Worker; accounts and data run on a free Firebase project.
 
 Live site: https://tvtracker.us
 
@@ -64,14 +64,16 @@ To switch it on: do steps 1–3 of [Weekly email](#weekly-email) (Resend and the
 ## Removing accounts
 The Admin page has a **Remove** button on every account and every login made for others (not your own). It locks the account out straight away (the database rules refuse any account listed in `removals/{uid}`), and `.github/workflows/remove-accounts.yml` runs `email/remove-accounts.mjs` hourly to delete its sign-in and data, then marks it done. Needs the `FIREBASE_SERVICE_ACCOUNT` secret (see Weekly email) and the latest `firestore.rules` published. To finish a removal right away: Actions → **Remove accounts → Run workflow**.
 
-## Custom domain
-The site is served at **tvtracker.us** through GitHub Pages (the `CNAME` file holds the domain). DNS is on Cloudflare: four `A` records on `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `CNAME` on `www` → `jeremykholmes.github.io`, all set to **DNS only** (grey cloud) so GitHub can issue the HTTPS certificate.
+## Hosting
+The site is a Cloudflare Worker named `tvtracker` that serves the repo's files as a static site, at **tvtracker.us** (and tvtracker.jeremykholmes.workers.dev). `wrangler.jsonc` sets it up; `.assetsignore` lists the repo files that aren't part of the website (workflows, email jobs, docs, `firestore.rules`) so they're never served.
+
+Deploys are automatic: the Worker is connected to this repo (Cloudflare dashboard → **Workers & Pages → tvtracker → Settings → Build**), so every push to `main` runs `npx wrangler deploy` and goes live within a minute or two. Build logs are on the Worker's **Deployments** tab. To deploy by hand instead, run `npx wrangler deploy` in the repo folder.
 
 ## Files
 - `index.html` — page shell
 - `app.js` — the app (shows, episodes, views)
 - `cloud.js` — accounts and per-user storage (Firebase)
-- `CNAME` — the custom domain GitHub Pages serves the site on
+- `wrangler.jsonc`, `.assetsignore` — the Cloudflare Worker that serves the site, and the files it leaves out
 - `firebase-config.js` — your Firebase project's web config
 - `firestore.rules` — database security rules to paste into Firebase
 - `email/` — the weekly email job (`weekly.mjs`; `digest.mjs` picks the episodes and writes the email), run by `.github/workflows/weekly-email.yml`
