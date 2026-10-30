@@ -1720,7 +1720,7 @@ function accountChip() {
   if (!cloud.configured) { el.hidden = true; return; }
   el.hidden = false;
   const sh = sharedOpen();
-  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(sh ? `${sh.name}'s list${sh.role === 'view' ? ' (view only)' : ''}` : user.name)}</span>`; }
+  if (user) { el.href = '#/account'; el.className = 'acct on'; el.innerHTML = `<span class="av">${esc((user.name || user.email || '?')[0].toUpperCase())}</span><span class="nm">${esc(sh ? `${sh.name}'s list${sh.role === 'view' ? ' (view only)' : ''}` : user.name)}<small>My Account</small></span>`; el.title = 'My Account'; }
   else { el.href = '#/login'; el.className = 'acct'; el.textContent = authReady ? 'Sign in' : ''; }
 }
 function busy(text) { const b = $('#busy'); if (text) { b.textContent = text; b.hidden = false; } else b.hidden = true; }
