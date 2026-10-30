@@ -245,7 +245,7 @@ code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-siz
 .allowbtn:has(input:checked) { border-color: var(--ok); color: var(--ok); }
 .appdlg .key { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: .9em; }
 .acct.on { padding: 3px 12px 3px 3px; }
-.acct .nm { display: flex; flex-direction: column; line-height: 1.15; }
+.acct .nm { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
 .acct .nm small { font-size: 11px; font-weight: 500; color: var(--muted); }
 .acct .av { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
 .auth { max-width: 400px; margin: 10px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
