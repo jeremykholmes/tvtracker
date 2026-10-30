@@ -41,3 +41,24 @@ if (todo.length) {
     }
   }
 }
+
+// Name and email search entries (byName/{key}/people/{uid}, directory/{email}) for accounts that have no list any
+// more, e.g. deleted outside the Admin page. They showed up as a second person with the same name who couldn't be
+// sent anything (the rules only deliver to existing accounts). A sign-in newer than a day is left alone: its list
+// may not be saved yet.
+const exists = new Map();
+async function gone(uid) {
+  if (!exists.has(uid)) exists.set(uid, (await db.doc(`users/${uid}`).get()).exists
+    || (await auth.getUser(uid).then(u => Date.now() - Date.parse(u.metadata.creationTime) < 864e5, () => false)));
+  return !exists.get(uid);
+}
+let stale = 0;
+for (const d of (await db.collectionGroup('people').get()).docs) {
+  if (d.ref.parent.parent?.parent.id !== 'byName' || !(await gone(d.id))) continue;
+  await d.ref.delete(); stale++;
+}
+for (const d of (await db.collection('directory').get()).docs) {
+  if (!d.data().uid || !(await gone(d.data().uid))) continue;
+  await d.ref.delete(); stale++;
+}
+console.log(`removed ${stale} search entr${stale === 1 ? 'y' : 'ies'} for accounts that no longer exist`);
