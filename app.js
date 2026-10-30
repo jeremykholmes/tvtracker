@@ -510,7 +510,7 @@ views.shows = () => {
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${net || day !== '' ? '' : moviesSection()}${sec('Loading', loading)}${sec('Finished', done)}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${net || day !== '' ? '' : moviesSection()}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -892,8 +892,8 @@ async function recShow(b) {
 }
 
 /* ---------- movies (TMDB) ----------
-   Search can switch to Movies. A movie can be added to My Shows (Movies to watch) and checked off once it's watched,
-   which moves it to Watched movies. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
+   Search can switch to Movies. Added movies are listed under My Movies at the bottom of My Shows (To watch) and checked
+   off once watched, which moves them to Watched. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
 const hasMovie = id => !isKid() && !!(state.movies[id] && !state.movies[id].removed);
@@ -925,7 +925,7 @@ function movieBtn(m) {
   if (isKid()) return '';
   if (hasMovie(m.id)) return movieSeen(m.id)
     ? `<button class="btn sm" data-act="movie-remove" data-movie="${m.id}" title="You've watched it — tap to remove">✓ Watched</button>`
-    : `<button class="btn sm" data-act="movie-remove" data-movie="${m.id}" title="On your Movies to watch — tap to remove">✓ Added</button>`;
+    : `<button class="btn sm" data-act="movie-remove" data-movie="${m.id}" title="On My Movies — tap to remove">✓ Added</button>`;
   return `<span class="addbtns"><button class="btn primary sm" data-act="movie-add" data-movie="${m.id}">＋ Add</button>
     <button class="btn sm" data-act="movie-seen" data-movie="${m.id}" title="Already watched it">✓ Seen it</button></span>`;
 }
@@ -938,11 +938,16 @@ function movieCard(m) {
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
 }
+// My Movies: its own part at the bottom of My Shows, with a heading like My Shows' and a way to add one.
 function moviesSection() {
+  if (isKid() || !config.tmdbKey) return '';
   const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
-  return (toWatch.length ? `<h2>Movies to watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : '')
-    + (seen.length ? `<details class="moviesdone"><summary><h2>Watched movies · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : '');
+  return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
+      <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
+      <button type="button" class="btn sm" data-act="add-movie">＋ Add a movie</button></div>
+    ${toWatch.length ? `<h2>To watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : ''}
+    ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}</section>`;
 }
 views.movie = arg => {
   const id = +arg;
@@ -973,7 +978,7 @@ views.movie = arg => {
         : `<button class="btn primary" data-act="movie-watch" data-movie="${id}">✓ Mark watched</button>`}
         <a class="btn ghost" href="https://www.themoviedb.org/movie/${id}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TMDB in a new tab">ⓘ More info on this movie ↗</a>
       </div>
-      ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched movies on My Shows.' : 'On your Movies to watch list on My Shows.'}</p>
+      ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched in My Movies.' : 'On your My Movies list, at the bottom of My Shows.'}</p>
         <div class="actions"><button class="btn danger" data-act="movie-remove" data-movie="${id}"><span aria-hidden="true">🗑️</span> Remove from my movies</button></div>` : ''}
     </div></section>`;
 };
@@ -1811,6 +1816,10 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
+  'add-movie'() {   // My Movies' button: Add Show, switched to Movies
+    try { sessionStorage.setItem('tvt.qmode', 'movie'); } catch { }
+    if (location.hash === '#/search') render(true); else location.hash = '#/search';
+  },
   qmode(b) {
     const q = $('#q')?.value.trim() || (searchMode() === 'movie' ? lastMovieQuery : lastQuery);
     try { sessionStorage.setItem('tvt.qmode', b.dataset.mode); } catch { }
@@ -1823,7 +1832,7 @@ const actions = {
     const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || state.movies[id];
     if (!m) return;
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen }); else addMovie(m, seen);
-    render(); toast(seen ? `${m.name} added to Watched movies` : `Added ${m.name} to Movies to watch`);
+    render(); toast(seen ? `${m.name} added to My Movies as watched` : `Added ${m.name} to My Movies`);
   },
   'movie-seen'(b, e) { return actions['movie-add'](b, e, true); },
   'movie-watch'(b) {
@@ -1835,7 +1844,7 @@ const actions = {
   'movie-unwatch'(b) {
     if (!requireAccount()) return;
     const id = +b.dataset.movie; if (!state.movies[id]) return;
-    setMovie(id, { w: false }); render(); toast(`${state.movies[id].name} moved back to Movies to watch`);
+    setMovie(id, { w: false }); render(); toast(`${state.movies[id].name} moved back to To watch`);
   },
   'movie-remove'(b) {
     if (!requireAccount(true)) return;

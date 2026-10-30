@@ -454,3 +454,6 @@ details.moviesdone > summary h2 { display: inline-block; }
 details.moviesdone > summary h2::after { content: ' ▸'; }
 details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .where { margin: 10px 0 0; font-size: 14px; }
+
+/* My Movies: its own part at the bottom of My Shows */
+.mymovies { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); }
