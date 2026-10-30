@@ -1,0 +1,11 @@
+// Cloudflare Worker that serves tvtracker.us. Cloudflare Workers Builds deploys it on every push to main
+// (it runs `npx wrangler deploy`, which reads this file). Files listed in .assetsignore stay off the site.
+{
+  "name": "tvtracker",
+  "compatibility_date": "2026-10-30",
+  "assets": {
+    "directory": ".",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}
