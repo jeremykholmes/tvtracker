@@ -27,7 +27,7 @@ jobs:
           project=$(grep -oP "projectId:\s*'\K[^']+" firebase-config.js)
           base="https://${project}.firebaseapp.com"
           mkdir -p __/auth __/firebase
-          # GitHub Pages serves /__/auth/handler from handler.html (no-extension files would download instead of render)
+          # The site (Cloudflare) serves /__/auth/handler from handler.html (no-extension files would download instead of render)
           get() { # $1 = path on firebaseapp.com, $2 = where to save, $3 = "optional" to skip a 404
             code=$(curl -sSL -w '%{http_code}' -o "$2" "$base/$1")
             echo "$1 -> $code"
