@@ -69,14 +69,18 @@ ${groups.map(g => `<tr><td style="padding:4px 24px 12px">
 // "A friend recommended a show" email (email/recs.mjs). items: [{ fromName, note, show: { id, name, image, network } }], newest first.
 export function buildRecEmail({ name, items, unsubscribeUrl }) {
   const senders = [...new Set(items.map(m => m.fromName || 'A friend'))];
+  // Shows, movies (kind: 'movie'), or a mix of both.
+  const isMovie = m => m.kind === 'movie', what = items.every(isMovie) ? 'movie' : items.some(isMovie) ? 'mix' : 'show';
+  const count = n => what === 'mix' ? `${n} shows and movies` : plural(n, what);
   const subject = items.length === 1 ? `${senders[0]} recommended ${items[0].show.name} to you`
-    : senders.length === 1 ? `${senders[0]} recommended ${plural(items.length, 'show')} to you`
-    : `${plural(items.length, 'show')} recommended to you by ${senders.slice(0, 2).join(' and ')}${senders.length > 2 ? ' and others' : ''}`;
+    : senders.length === 1 ? `${senders[0]} recommended ${count(items.length)} to you`
+    : `${count(items.length)} recommended to you by ${senders.slice(0, 2).join(' and ')}${senders.length > 2 ? ' and others' : ''}`;
   const hi = name ? `Hi ${name.split(/\s+/)[0]},` : 'Hi,';
   const who = senders.length === 1 ? senders[0] : `${senders.slice(0, -1).join(', ')} and ${senders.at(-1)}`;
-  const intro = senders.length === 1 ? `${who} thinks you'd like ${items.length === 1 ? 'this show' : 'these shows'}:` : `${who} think you'd like these shows:`;
-  // Plain ?show= addresses (index.html turns them into #/show/<id>/<who>): survive email apps and link redirects that drop #.
-  const link = m => `${SITE}/?show=${m.show.id}&from=${encodeURIComponent(m.fromName || '')}`;
+  const these = items.length === 1 ? `this ${what}` : what === 'mix' ? 'these shows and movies' : `these ${what}s`;
+  const intro = senders.length === 1 ? `${who} thinks you'd like ${these}:` : `${who} think you'd like ${these}:`;
+  // Plain ?show= / ?movie= addresses (index.html turns them into #/show/<id>/<who>): survive email apps and link redirects that drop #.
+  const link = m => `${SITE}/?${isMovie(m) ? 'movie' : 'show'}=${m.show.id}&from=${encodeURIComponent(m.fromName || '')}`;
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#141821">
 <div style="display:none;max-height:0;overflow:hidden">${esc(subject)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px 12px">
@@ -91,9 +95,9 @@ ${items.map(m => `<tr><td style="padding:8px 24px">
     <br><span style="color:#5b6474">From ${esc(m.fromName || 'a friend')}</span>
     ${m.note ? `<div style="margin-top:6px;padding:8px 10px;background:#f4f5f7;border-radius:8px">&ldquo;${esc(m.note)}&rdquo;</div>` : ''}
   </td></tr></table></td></tr>`).join('')}
-<tr><td align="center" style="padding:16px 24px 28px"><a href="${items.length === 1 ? esc(link(items[0])) : `${SITE}/`}" style="display:inline-block;background:#e89a1c;color:#231500;font-weight:700;font-size:16px;text-decoration:none;padding:12px 24px;border-radius:10px">${items.length === 1 ? 'See the show' : 'Open TV Tracker'}</a></td></tr>
+<tr><td align="center" style="padding:16px 24px 28px"><a href="${items.length === 1 ? esc(link(items[0])) : `${SITE}/`}" style="display:inline-block;background:#e89a1c;color:#231500;font-weight:700;font-size:16px;text-decoration:none;padding:12px 24px;border-radius:10px">${items.length === 1 ? `See the ${what}` : 'Open TV Tracker'}</a></td></tr>
 </table>
-<p style="max-width:560px;font-size:12px;line-height:1.5;color:#5b6474;margin:16px auto 0;padding:0 12px">You're getting this because someone recommended a show to your TV Tracker account. <a href="${esc(unsubscribeUrl)}" style="color:#5b6474">Stop these emails</a> · you can also switch them off on your <a href="${SITE}/#/account" style="color:#5b6474">Account page</a>.</p>
+<p style="max-width:560px;font-size:12px;line-height:1.5;color:#5b6474;margin:16px auto 0;padding:0 12px">You're getting this because someone recommended a show or movie to your TV Tracker account. <a href="${esc(unsubscribeUrl)}" style="color:#5b6474">Stop these emails</a> · you can also switch them off on your <a href="${SITE}/#/account" style="color:#5b6474">Account page</a>.</p>
 </td></tr></table></body></html>`;
   const text = [hi, '', intro, '',
     ...items.flatMap(m => [`${m.show.name}${m.show.network ? ` (${m.show.network})` : ''} - from ${m.fromName || 'a friend'}`, ...(m.note ? [`  "${m.note}"`] : []), `  ${link(m)}`, '']),

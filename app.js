@@ -31,7 +31,8 @@ function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 // state.movies[id]  = { id, name, image, year, w, removed, t }   id: TMDB movie id; w: watched
 function norm(s) { s = s && typeof s === 'object' ? s : {}; return { v: 1, shows: s.shows || {}, watched: s.watched || {}, movies: s.movies || {} }; }
 let user = null;                        // { uid, email, name } when signed in
-let inbox = [];                         // shows other accounts sent you, newest first: { id, from, fromName, fromEmail, show, note, t }
+let inbox = [];                         // shows and movies other accounts sent you, newest first: { id, from, fromName, fromEmail, show, note, t, kind }
+const isMovieRec = m => m.kind === 'movie';   // a recommended movie: show.id is its TMDB id
 let blocked = {};                       // accounts you blocked from sending you shows: uid -> { name, email }
 let findable = true;                    // others can find you by name when sending a show
 // Same logo + text as the splash in index.html, shown while the sign-in check finishes.
@@ -84,7 +85,7 @@ function startRecommended(epIds) {
   if (!inbox.length) return;
   const sids = new Set(epIds.map(id => findEp(id)?.sid).filter(Boolean));
   for (const m of inbox) {
-    if (!sids.has(m.show.id)) continue;
+    if (isMovieRec(m) || !sids.has(m.show.id)) continue;
     if (!isFollowed(m.show.id)) follow(cache[m.show.id]?.show || m.show);
     cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
   }
@@ -514,36 +515,38 @@ views.shows = () => {
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
-// Shows other people sent to this account, at the top of My Shows until added or dismissed.
+// Shows and movies other people sent to this account, at the top of My Shows until added or dismissed.
 function inboxSection() {
   if (!inbox.length || sharedOpen()) return '';
-  const row = m => { const on = isFollowed(m.show.id), first = (m.fromName || '').trim().split(/\s+/)[0];
-    const href = `#/show/${m.show.id}${first ? '/' + encodeURIComponent(first) : ''}`;
+  const row = m => { const mv = isMovieRec(m), on = mv ? hasMovie(m.show.id) : isFollowed(m.show.id), first = (m.fromName || '').trim().split(/\s+/)[0];
+    const href = `#/${mv ? 'movie' : 'show'}/${m.show.id}${first ? '/' + encodeURIComponent(first) : ''}`;
     return `<div class="inboxrow">${poster(m.show, href)}<div class="grow">
-      <p><b>${esc(m.fromName)}</b> recommends <a href="${href}">${esc(m.show.name)}</a></p>
+      <p><b>${esc(m.fromName)}</b> recommends ${mv ? 'the movie ' : ''}<a href="${href}">${esc(m.show.name)}</a></p>
       ${m.note ? `<p class="inboxnote">“${esc(m.note)}”</p>` : ''}
       <p class="sub">${esc(cloud.loginName(m.fromEmail))} · ${ago(m.t)}</p>
       <div class="actions">${on ? '<span class="sub">Already on your list</span>'
-        : `<button class="btn primary sm" data-act="inbox-accept" data-id="${esc(m.id)}">＋ Add to my shows</button>`}
+        : `<button class="btn primary sm" data-act="inbox-accept" data-id="${esc(m.id)}">＋ Add to my ${mv ? 'movies' : 'shows'}</button>`}
         <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
         <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
-  return `<section class="inbox"><h2>Shows recommended by friends · ${inbox.length}</h2>
-    <p class="sub futurehint">Add one and it waits under Recommended by friends until you watch the first episode, then moves to Up next.</p>${inbox.map(row).join('')}</section>`;
+  const movies = inbox.some(isMovieRec), shows = inbox.some(m => !isMovieRec(m));
+  return `<section class="inbox"><h2>${movies ? (shows ? '' : 'Movies ') : 'Shows '}recommended by friends · ${inbox.length}</h2>
+    <p class="sub futurehint">${[shows && 'Add a show and it waits under Recommended by friends until you watch the first episode, then moves to Up next.',
+      movies && 'Add a movie and it goes on My Movies, at the bottom of this page.'].filter(Boolean).join(' ')}</p>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
-  inbox = items.filter(m => {   // already on your list and started: nothing to recommend
-    if (!(isFollowed(m.show.id) && started(m.show.id))) return true;
+  inbox = items.filter(m => {   // already on your list and started (or a movie already watched): nothing to recommend
+    if (isMovieRec(m) ? !movieSeen(m.show.id) : !(isFollowed(m.show.id) && started(m.show.id))) return true;
     cloud.dismissShow(m.id).catch(x => console.warn('inbox', x)); return false;
   });
   const tab = $('#tabs a[data-tab="shows"]'); let dot = tab.querySelector('.tabcount');
   if (!inbox.length) dot?.remove();
-  else { if (!dot) { dot = document.createElement('span'); dot.className = 'tabcount'; tab.append(dot); } dot.textContent = inbox.length; dot.title = `${inbox.length} show${inbox.length === 1 ? '' : 's'} recommended by friends`; }
+  else { if (!dot) { dot = document.createElement('span'); dot.className = 'tabcount'; tab.append(dot); } dot.textContent = inbox.length; dot.title = `${inbox.length} recommendation${inbox.length === 1 ? '' : 's'} from friends`; }
   if (route().name === 'shows') render();
 }
 
-// Recommend: send the show to someone's TV Tracker account (find them by name or email), or share a link by text or email.
+// Recommend: send the show (or movie) to someone's TV Tracker account (find them by name or email), or share a link by text or email.
 const K_SENT = 'tvt.sentTo';   // people you sent shows to recently, on this device: [{ uid, name, hint }]
-function sendShowDialog(s) {
+function sendShowDialog(s, movie) {
   const d = $('#appDialog'), recent = load(K_SENT, []);
   let pick = null;
   const person = p => `<button type="button" class="pickrow" data-uid="${esc(p.uid)}"><b>${esc(p.name)}</b>${p.hint ? `<span class="sub">${esc(p.hint)}</span>` : ''}</button>`;
@@ -563,7 +566,7 @@ function sendShowDialog(s) {
   f.addEventListener('click', e => { const b = e.target.closest('.pickrow'); if (b && people[b.dataset.uid]) choose(people[b.dataset.uid]); });
   input.oninput = () => { if (pick) { pick = null; found.innerHTML = ''; btn.textContent = 'Send'; } showErr(''); };
   d.querySelector('[data-close]').onclick = () => d.close();
-  d.querySelector('[data-share]').onclick = () => { d.close(); shareLink(s); };
+  d.querySelector('[data-share]').onclick = () => { d.close(); shareLink(s, movie); };
   f.onsubmit = async e => {
     e.preventDefault(); showErr('');
     const q = input.value.trim();
@@ -580,7 +583,7 @@ function sendShowDialog(s) {
         return showErr(r.length ? '' : `No one goes by exactly “${q}”. Check the spelling (it needs their full name), or use their email.`);
       }
       const to = pick || await cloud.findByEmail(q).catch(x => { throw x?.code === 'permission-denied' ? { code: 'tvt/lookup-denied' } : x; });
-      await cloud.sendShow(to.uid, s, f.note.value, user.name);
+      await cloud.sendShow(to.uid, s, f.note.value, user.name, movie);
       save(K_SENT, [to, ...recent.filter(p => p.uid !== to.uid)].slice(0, 6));
       d.close(); toast(`Sent ${s.name} to ${to.name}`);
     } catch (x) {
@@ -594,10 +597,10 @@ function sendShowDialog(s) {
   };
   d.showModal(); input.focus();
 }
-// Shares a link to the show page that greets the friend with "<your name> recommends this show".
-async function shareLink(s) {
+// Shares a link to the show (or movie) page that greets the friend with "<your name> recommends this show".
+async function shareLink(s, movie) {
   const name = (user?.name || '').trim().split(/\s+/)[0];
-  const url = `${location.origin}${location.pathname}#/show/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
+  const url = `${location.origin}${location.pathname}#/${movie ? 'movie' : 'show'}/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
   const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
   if (navigator.share) {
     try { await navigator.share({ title: s.name, text, url }); } catch (e) { if (e?.name !== 'AbortError') toast('Couldn\'t open sharing'); }
@@ -911,10 +914,11 @@ async function fetchMovie(id) {
     rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '',
     stream: (prov.flatrate || []).map(x => x.provider_name), rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
 }
-function addMovie(m, seen) {
+// rec: name of the friend who recommended it, shown on its card.
+function addMovie(m, seen, rec) {
   if (isKid()) return;
   const t = now();
-  state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t };
+  state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t, ...(rec ? { rec } : {}) };
   queue('movies', m.id, state.movies[m.id]); persist();
 }
 function setMovie(id, fields) {
@@ -934,7 +938,7 @@ function movieCard(m) {
   return `<article class="card movie${seen ? ' seen' : ''}">
     <div style="position:relative">${poster(m, '#/movie/' + m.id)}<span class="badge movie">Movie</span></div>
     <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
-      <div class="sub">${esc(m.year || 'Movie')}</div>
+      <div class="sub">${esc([m.year || 'Movie', m.rec && 'From ' + m.rec].filter(Boolean).join(' · '))}</div>
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
 }
@@ -959,11 +963,12 @@ views.movie = arg => {
       .catch(e => { app.innerHTML = `<p class="loading">Couldn't load: ${esc(e.message)}</p>`; });
     return;
   }
-  const on = hasMovie(id), seen = movieSeen(id);
+  const on = hasMovie(id), seen = movieSeen(id), from = linkFrom(id, 'movie');
   const hrs = m.runtime ? `${m.runtime >= 60 ? Math.floor(m.runtime / 60) + 'h ' : ''}${m.runtime % 60 ? (m.runtime % 60) + 'm' : ''}`.trim() : '';
   const where = m.stream.length ? `<p class="where"><b>Streaming on:</b> ${m.stream.map(esc).join(', ')}</p>`
     : m.rent.length ? `<p class="where"><b>Rent or buy:</b> ${m.rent.map(esc).join(', ')}</p>` : '';
   app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
+    ${from ? `<div class="recbanner"><span aria-hidden="true">★</span><span><b>${esc(from)}</b> recommends this movie${on ? ' — it\'s already on your list' : ''}</span></div>` : ''}
     <section class="hero">${poster(m)}
     <div class="meta"><h1>${esc(m.name)}</h1>
       <div class="sub">${['Movie', m.year, hrs, m.rating].filter(Boolean).map(esc).join(' · ')}</div>
@@ -976,6 +981,7 @@ views.movie = arg => {
           <button class="btn" data-act="movie-seen" data-movie="${id}">✓ I've seen it</button>`
         : seen ? `<button class="btn" data-act="movie-unwatch" data-movie="${id}">↺ Mark unwatched</button>`
         : `<button class="btn primary" data-act="movie-watch" data-movie="${id}">✓ Mark watched</button>`}
+        <button class="btn" data-act="movie-recommend" data-movie="${id}">↗ Recommend to a friend</button>
         <a class="btn ghost" href="https://www.themoviedb.org/movie/${id}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TMDB in a new tab">ⓘ More info on this movie ↗</a>
       </div>
       ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched in My Movies.' : 'On your My Movies list, at the bottom of My Shows.'}</p>
@@ -1372,10 +1378,10 @@ views.account = () => {
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
-  <div class="panel"><h3>Recommending shows</h3>
+  <div class="panel"><h3>Recommending shows and movies</h3>
     <label class="checkrow"><input type="checkbox" id="findable" ${findable ? 'checked' : ''}> Let people find me by my exact full name when they send a show</label>
     <p class="sub">Only someone who types your whole name (${esc(user.name)}) finds you — there's no browsing or partial search. Anyone with your email can still send you a show. Shows people send appear at the top of My Shows.</p>
-    ${cloud.recEmailEnabled ? `<label class="checkrow"><input type="checkbox" id="recEmail" disabled> Email me when someone recommends a show to me</label>` : ''}
+    ${cloud.recEmailEnabled ? `<label class="checkrow"><input type="checkbox" id="recEmail" disabled> Email me when someone recommends a show or movie to me</label>` : ''}
     ${Object.keys(blocked).length ? `<p>Blocked from sending you shows:</p>${Object.entries(blocked).map(([uid, b]) => `<div class="memrow"><span><b>${esc(b.name || '(no name)')}</b><br><span class="sub">${esc(cloud.loginName(b.email))}</span></span>
       <button class="btn xs" data-act="unblock" data-uid="${esc(uid)}" data-name="${esc(b.name || 'them')}">Unblock</button></div>`).join('')}` : ''}</div>
   ${cloud.weeklyEmailEnabled ? `<div class="panel"><h3>Weekly email</h3>
@@ -1405,7 +1411,7 @@ views.account = () => {
   if (re) cloud.recEmailOn().then(on => { re.checked = on; re.disabled = false; }).catch(x => console.warn('recommendation email setting', x));
   if (re) re.onchange = async () => {
     re.disabled = true;
-    try { await cloud.setRecEmail(re.checked); toast(re.checked ? 'You\'ll get an email when someone recommends a show' : 'Recommendation emails switched off'); }
+    try { await cloud.setRecEmail(re.checked); toast(re.checked ? 'You\'ll get an email when someone recommends a show or movie' : 'Recommendation emails switched off'); }
     catch (x) { re.checked = !re.checked; toast(cloud.friendlyError(x)); }
     re.disabled = false;
   };
@@ -1629,9 +1635,9 @@ function onUser(u) {
   refreshMissing();
 }
 // A show someone tapped Add on before they had an account (e.g. from a recommendation) is added once they're in.
-// The friend's name on a recommendation link (#/show/<id>/<name>) while that show's page is open.
-function linkFrom(id) {
-  const r = route(); if (r.name !== 'show' || +r.arg !== id) return '';
+// The friend's name on a recommendation link (#/show/<id>/<name>, or #/movie/…) while that page is open.
+function linkFrom(id, page = 'show') {
+  const r = route(); if (r.name !== page || +r.arg !== id) return '';
   try { return decodeURIComponent(r.extra || '').trim().slice(0, 40); } catch { return ''; }
 }
 function addAfterSignIn() {
@@ -1831,7 +1837,8 @@ const actions = {
     if (!requireAccount(true)) return;
     const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || state.movies[id];
     if (!m) return;
-    if (state.movies[id]) setMovie(id, { removed: false, w: !!seen }); else addMovie(m, seen);
+    const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
+    if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
     render(); toast(seen ? `${m.name} added to My Movies as watched` : `Added ${m.name} to My Movies`);
   },
   'movie-seen'(b, e) { return actions['movie-add'](b, e, true); },
@@ -1859,8 +1866,19 @@ const actions = {
     const id = +b.dataset.show, s = showInfo(id) || cache[id]?.show; if (!s) return;
     user && !isKid() ? sendShowDialog(s) : shareLink(s);
   },
+  'movie-recommend'(b) {
+    const id = +b.dataset.movie, m = movieCache[id] || state.movies[id]; if (!m) return;
+    user && !isKid() ? sendShowDialog(m, true) : shareLink(m, true);
+  },
   async 'inbox-accept'(b) {
     const m = inbox.find(x => x.id === b.dataset.id); if (!m || !requireAccount(true)) return;
+    if (isMovieRec(m)) {   // goes on My Movies, To watch
+      const mv = { ...m.show, year: (m.show.network.match(/\d{4}/) || [''])[0] };   // network: "Movie · <year>"
+      if (state.movies[mv.id]) setMovie(mv.id, { removed: false, rec: m.fromName }); else addMovie(mv, false, m.fromName);
+      cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
+      render(); toast(`Added ${mv.name} to My Movies`);
+      return;
+    }
     follow(m.show, true, m.fromName); cloud.dismissShow(m.id).catch(x => console.warn('inbox', x));
     render(); toast(`${m.show.name} added — it's under Recommended by friends until you start it`);
     if (!cache[m.show.id]) { try { await fetchShow(m.show.id); render(); } catch { } }
@@ -1868,7 +1886,7 @@ const actions = {
   'inbox-dismiss'(b) { cloud.dismissShow(b.dataset.id).catch(x => toast(cloud.friendlyError(x))); },
   async 'inbox-block'(b) {
     const m = inbox.find(x => x.id === b.dataset.id); if (!m) return;
-    if (!confirm(`Block ${m.fromName}? They won't be able to send you shows any more. You can unblock them on the Account page.`)) return;
+    if (!confirm(`Block ${m.fromName}? They won't be able to send you shows or movies any more. You can unblock them on the Account page.`)) return;
     try { await cloud.blockSender(m, inbox); toast(`Blocked ${m.fromName}`); } catch (x) { toast(cloud.friendlyError(x)); }
   },
   async unblock(b) {

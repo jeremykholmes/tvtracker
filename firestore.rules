@@ -15,7 +15,7 @@ rules_version = '2';
 // Sending a show to another account: directory/{email} finds an account by its exact sign-in email (no listing);
 // byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
 // only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
-// users/{uid}/inbox/{id} holds shows sent to that account: anyone signed in can add one as themselves (unless blocked
+// users/{uid}/inbox/{id} holds shows (and movies, kind 'movie') sent to that account: anyone signed in can add one as themselves (unless blocked
 // in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. Logins made for others aren't listed.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -56,7 +56,8 @@ service cloud.firestore {
       match /inbox/{id} {
         allow read, delete: if isOwner(uid);
         allow create: if canSend(uid)
-          && request.resource.data.keys().hasOnly(['from', 'fromName', 'fromEmail', 'show', 'note', 't'])
+          && request.resource.data.keys().hasOnly(['from', 'fromName', 'fromEmail', 'show', 'note', 't', 'kind'])
+          && request.resource.data.get('kind', 'show') in ['show', 'movie']
           && request.resource.data.keys().hasAll(['from', 'fromName', 'fromEmail', 'show', 'note', 't'])
           && request.resource.data.from == request.auth.uid && request.resource.data.fromEmail == request.auth.token.email
           && str(request.resource.data.fromName, 100) && str(request.resource.data.note, 300) && request.resource.data.t is int
