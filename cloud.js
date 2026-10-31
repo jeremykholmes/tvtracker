@@ -41,7 +41,9 @@ export async function start({ onUser, onData, onError, onInbox }) {
     kid = u?.linked?.role === 'kid';
     onUser(u);
     if (u) { listen(active, onData, onError); noteLogin(user); }
-    if (u && !u.linked && !isLogin(u.email)) watchInbox(user.uid);   // logins use someone else's list, so they don't get shows sent to them
+    // Shows sent to this account. A login made for someone else gets them too (once its owner gives it a real email,
+    // so people can find it); a kid login never does.
+    if (u && (u.linked ? u.linked.role !== 'kid' : !isLogin(u.email))) watchInbox(user.uid);
   });
 }
 
@@ -120,15 +122,15 @@ async function linkedList(uid) {
       return k.exists() ? { uid: owner, name: k.data().ownerName || me.data().ownerName || 'Shared', role: 'kid' } : null;
     }
     const l = o.exists() && (o.data().logins || {})[uid]; if (!l) return null;
-    return { uid: owner, name: o.data().profile?.name || me.data().ownerName || 'Shared', role: ['view', 'kid'].includes(l.role) ? l.role : 'edit' };
+    return { uid: owner, name: o.data().profile?.name || me.data().ownerName || 'Shared', role: ['view', 'kid'].includes(l.role) ? l.role : 'edit', email: l.email || '' };
   } catch (e) { console.warn('linked list', e); return null; }   // removed, or offline before it was ever loaded
 }
 export const relink = () => linkedList(auth.currentUser.uid);   // re-reads it, e.g. after the owner changed this login's access
-// [{ uid, name, username, role, maxRating, hide, allow }] for the logins the signed-in user has made.
+// [{ uid, name, username, role, email, maxRating, hide, allow }] for the logins the signed-in user has made.
 export async function logins() {
   const snap = await F.getDoc(F.doc(db, 'users', auth.currentUser.uid));
   const m = (snap.exists() && snap.data().logins) || {};
-  return Object.entries(m).map(([uid, l]) => ({ uid, name: l.name || l.username, username: l.username, role: ['view', 'kid'].includes(l.role) ? l.role : 'edit',
+  return Object.entries(m).map(([uid, l]) => ({ uid, name: l.name || l.username, username: l.username, role: ['view', 'kid'].includes(l.role) ? l.role : 'edit', email: l.email || '',
     maxRating: l.maxRating || '', hide: l.hide || {}, allow: l.allow || {} }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -162,11 +164,36 @@ export function setLogin(uid, role, settings, kidCopy) {
 }
 // Rewrites a kid login's filtered copy of the open list (the owner's or an editor's app does this whenever the list changes).
 export const writeKidCopy = (uid, kidCopy) => F.setDoc(F.doc(db, 'users', active, 'kids', uid), kidCopy);
-export function removeLogin(uid) {
+export async function removeLogin(uid) {
+  const l = (await logins()).find(x => x.uid === uid);
+  if (l?.email) await unlistLogin(uid, l.name, l.email);   // first: the rules allow it only while it's still your login
   const me = auth.currentUser.uid, b = F.writeBatch(db);
   b.update(F.doc(db, 'users', me), new F.FieldPath('logins', uid), F.deleteField());
   b.delete(F.doc(db, 'users', me, 'kids', uid));
   return b.commit();
+}
+// Gives a login (not a kid's) a real email address, or takes it away (email ''). With one, people can send it shows:
+// it's listed under that email and its full name (like any account), the shows appear at the top of its My Shows,
+// and email/recs.mjs emails it at that address. The owner's app writes these listings (the rules allow it for your own logins).
+export async function setLoginEmail(uid, name, email, oldEmail) {
+  email = dirId(email); oldEmail = dirId(oldEmail);
+  if (email && (isLogin(email) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) throw Object.assign(new Error('tvt/bad-email'), { code: 'tvt/bad-email' });
+  if (email && email !== oldEmail) {   // someone else's account already uses it
+    const d = await F.getDoc(F.doc(db, 'directory', email));
+    if (d.exists() && d.data().uid !== uid) throw Object.assign(new Error('tvt/email-taken'), { code: 'tvt/email-taken' });
+  }
+  if (oldEmail && oldEmail !== email) await unlistLogin(uid, name, oldEmail);
+  await F.updateDoc(F.doc(db, 'users', auth.currentUser.uid), new F.FieldPath('logins', uid, 'email'), email || F.deleteField());
+  if (!email) return unlistLogin(uid, name, '');
+  name = cleanName(name); const key = nameKey(name);
+  await F.setDoc(F.doc(db, 'directory', email), { uid, name, key });
+  if (key) await F.setDoc(F.doc(db, 'byName', key, 'people', uid), { name, hint: maskEmail(email) });
+}
+async function unlistLogin(uid, name, email) {
+  const key = nameKey(cleanName(name)), jobs = [];
+  if (email) jobs.push(F.getDoc(F.doc(db, 'directory', email)).then(d => d.exists() && d.data().uid === uid && F.deleteDoc(d.ref)));
+  if (key) jobs.push(F.deleteDoc(F.doc(db, 'byName', key, 'people', uid)));
+  await Promise.all(jobs);
 }
 
 /* ---------- sending a show to another account ----------
@@ -175,7 +202,8 @@ export function removeLogin(uid) {
    spaces tidied). Only someone who types the whole name reaches it; nothing can be listed or searched by part of a name.
    hint is a masked email to tell people with the same name apart. Leaving name search (users/{uid}.findable false)
    removes the entry. users/{uid}/inbox/{id}: a show (or movie, kind: 'movie') someone sent; only the recipient can read or delete it, and anyone
-   they block (users/{uid}.blocked) can't send. Logins made for others aren't listed and can't receive. */
+   they block (users/{uid}.blocked) can't send. Logins made for others are listed (and receive) only once their owner
+   gives them a real email (setLoginEmail); kid logins never. */
 const dirId = email => String(email || '').trim().toLowerCase();
 const maskEmail = email => { const [a, d] = dirId(email).split('@'); return a && d ? `${a[0]}•••@${d}` : ''; };
 // Must match nameKey() in firestore.rules.
@@ -443,6 +471,8 @@ export function friendlyError(e) {
   const c = e?.code || '';
   return ({
     'auth/email-already-in-use': 'An account with that email (or username) already exists.',
+    'tvt/bad-email': 'That email address doesn\'t look right.',
+    'tvt/email-taken': 'Another TV Tracker account already uses that email — they can be sent shows there already.',
     'auth/invalid-credential': 'Email (or username) or password is incorrect.',
     'auth/wrong-password': 'Email (or username) or password is incorrect.',
     'auth/user-not-found': 'No account with that email or username.',
