@@ -517,20 +517,21 @@ views.shows = () => {
 
 // Shows and movies other people sent to this account, at the top of My Shows until added or dismissed.
 function inboxSection() {
-  if (!inbox.length || sharedOpen()) return '';
+  if (!inbox.length || isKid()) return '';
+  const viewOnly = sharedOpen()?.role === 'view';   // a view-only login can read what was sent but can't add it to the list
   const row = m => { const mv = isMovieRec(m), on = mv ? hasMovie(m.show.id) : isFollowed(m.show.id), first = (m.fromName || '').trim().split(/\s+/)[0];
     const href = `#/${mv ? 'movie' : 'show'}/${m.show.id}${first ? '/' + encodeURIComponent(first) : ''}`;
     return `<div class="inboxrow">${poster(m.show, href)}<div class="grow">
       <p><b>${esc(m.fromName)}</b> recommends ${mv ? 'the movie ' : ''}<a href="${href}">${esc(m.show.name)}</a></p>
       ${m.note ? `<p class="inboxnote">“${esc(m.note)}”</p>` : ''}
       <p class="sub">${esc(cloud.loginName(m.fromEmail))} · ${ago(m.t)}</p>
-      <div class="actions">${on ? '<span class="sub">Already on your list</span>'
+      <div class="actions">${on ? '<span class="sub">Already on your list</span>' : viewOnly ? ''
         : `<button class="btn primary sm" data-act="inbox-accept" data-id="${esc(m.id)}">＋ Add to my ${mv ? 'movies' : 'shows'}</button>`}
-        <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on ? 'OK' : 'No thanks'}</button>
+        <button class="btn ghost sm" data-act="inbox-dismiss" data-id="${esc(m.id)}">${on || viewOnly ? 'OK' : 'No thanks'}</button>
         <button class="btn ghost sm" data-act="inbox-block" data-id="${esc(m.id)}">Block</button></div></div></div>`; };
   const movies = inbox.some(isMovieRec), shows = inbox.some(m => !isMovieRec(m));
   return `<section class="inbox"><h2>${movies ? (shows ? '' : 'Movies ') : 'Shows '}recommended by friends · ${inbox.length}</h2>
-    <p class="sub futurehint">${[shows && 'Add a show and it waits under Recommended by friends until you watch the first episode, then moves to Up next.',
+    <p class="sub futurehint">${viewOnly ? `Ask ${esc(sharedOpen().name)} to add the ones you want.` : [shows && 'Add a show and it waits under Recommended by friends until you watch the first episode, then moves to Up next.',
       movies && 'Add a movie and it goes on My Movies, at the bottom of this page.'].filter(Boolean).join(' ')}</p>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
@@ -1379,6 +1380,8 @@ views.account = () => {
       <p>${sh ? `You're using <b>${esc(sh.name)}'s</b> list${sh.role === 'view' ? ' (view only)' : sh.role === 'kid' ? `. ${esc(sh.name)} chooses which shows you see, and your checkmarks are your own`
         : ' and can make changes'}. ${esc(sh.name)} made this login and can change or remove it.`
         : 'This login no longer has access to a list. Ask the person who made it to add you again.'}</p>
+      ${sh && sh.role !== 'kid' ? `<p>${sh.email ? `Friends can send you shows by your name (${esc(user.name)}) or ${esc(sh.email)}. They appear at the top of My Shows${cloud.recEmailEnabled ? ', and you get an email' : ''}.`
+        : `To get shows friends recommend, ask ${esc(sh.name)} to add your email to this login.`}</p>` : ''}
       <div class="actions">${pwBtn}<button class="btn" data-act="signout">Sign out</button></div></div>`;
     return;
   }
@@ -1454,9 +1457,10 @@ async function drawLogins() {
   try {
     const list = await cloud.logins(), byUid = Object.fromEntries(list.map(l => [l.uid, l]));
     const opt = (l, v, t) => `<option value="${v}"${l.role === v ? ' selected' : ''}>${t}</option>`;
-    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}${l.role === 'kid'
+    box.innerHTML = list.length ? '<p class="sub" style="margin-top:12px">Logins for your list</p>' + list.map(l => `<div class="memrow"><span><b>${esc(l.name)}</b><br><span class="sub">Username: ${esc(l.username)}${l.role !== 'kid' && l.email ? ` · ${esc(l.email)}` : ''}${l.role === 'kid'
         ? ` · ${l.maxRating ? 'up to ' + esc(l.maxRating) : 'any rating'}${l.maxRating && Object.keys(l.allow).length ? ` · ${Object.keys(l.allow).length} allowed` : ''}${Object.keys(l.hide).length ? ` · ${Object.keys(l.hide).length} hidden` : ''}` : ''}</span></span>
-      <span class="actions">${l.role === 'kid' ? `<button class="btn sm" data-act="kid-settings" data-uid="${esc(l.uid)}">What they see</button>` : ''}
+      <span class="actions">${l.role === 'kid' ? `<button class="btn sm" data-act="kid-settings" data-uid="${esc(l.uid)}">What they see</button>`
+        : `<button class="btn sm" data-act="login-email" data-uid="${esc(l.uid)}" title="Lets friends send ${esc(l.name)} shows, and emails them when they do">${l.email ? 'Email' : '＋ Email'}</button>`}
       <select class="rolesel" data-uid="${esc(l.uid)}" aria-label="Access for ${esc(l.name)}">${opt(l, 'view', 'Can view')}${opt(l, 'edit', 'Can edit')}${opt(l, 'kid', 'Kid')}</select>
       <button class="btn sm" data-act="remove-login" data-uid="${esc(l.uid)}" data-name="${esc(l.name)}">Remove</button></span></div>`).join('') : '';
     box.querySelectorAll('select.rolesel').forEach(sel => sel.onchange = async () => {
@@ -1469,6 +1473,7 @@ async function drawLogins() {
         toast(`Access changed to ${role === 'view' ? 'view only' : role === 'kid' ? 'kid' : 'can edit'}`); drawLogins();
       } catch (x) { toast(cloud.friendlyError(x)); drawLogins(); }
     });
+    box.querySelectorAll('[data-act="login-email"]').forEach(b => b.onclick = () => loginEmailDialog(byUid[b.dataset.uid]));
     box.querySelectorAll('[data-act="kid-settings"]').forEach(b => b.onclick = async () => {
       const l = byUid[b.dataset.uid], settings = await kidSettingsDialog(l.name, l);
       if (!settings) return;
@@ -1476,6 +1481,28 @@ async function drawLogins() {
       catch (x) { toast(cloud.friendlyError(x)); }
     });
   } catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(x))}</p>`; }
+}
+// A real email for a login you made, so friends can send it shows (found by its name or this email) and it gets the email.
+function loginEmailDialog(l) {
+  const d = $('#appDialog');
+  d.innerHTML = `<form class="stack" id="leForm" autocomplete="off"><h2>${esc(l.name)}'s email</h2>
+    <p class="sub">With an email here, friends can recommend shows and movies to ${esc(l.name)} by name (${esc(l.name)}) or by this email. They show up at the top of their My Shows${cloud.recEmailEnabled ? ', and they get an email about each one' : ''}. They still sign in with username ${esc(l.username)}.</p>
+    <div class="field"><label for="leEmail">Their email</label><input id="leEmail" name="email" type="email" value="${esc(l.email)}" autocapitalize="none" spellcheck="false" placeholder="name@example.com"></div>
+    <p class="formerr" id="leErr" hidden></p>
+    <div class="actions">${l.email ? '<button type="button" class="btn danger" data-clear>Remove email</button>' : ''}<button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Save</button></div></form>`;
+  const f = $('#leForm'), err = $('#leErr'), btn = f.querySelector('.primary');
+  const save = async email => {
+    err.hidden = true; btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await cloud.setLoginEmail(l.uid, l.name, email, l.email);
+      d.close(); drawLogins();
+      toast(email ? `Friends can now send ${l.name} shows` : `Removed ${l.name}'s email`);
+    } catch (x) { console.warn('login email', x); err.textContent = cloud.friendlyError(x); err.hidden = false; btn.disabled = false; btn.textContent = 'Save'; }
+  };
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.querySelector('[data-clear]')?.addEventListener('click', () => save(''));
+  f.onsubmit = e => { e.preventDefault(); const v = f.email.value.trim(); if (!v) return save(''); save(v); };
+  d.showModal(); f.email.focus();
 }
 function changePasswordDialog() {
   const d = $('#appDialog');

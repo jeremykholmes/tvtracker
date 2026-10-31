@@ -16,7 +16,8 @@ rules_version = '2';
 // byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
 // only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
 // users/{uid}/inbox/{id} holds shows (and movies, kind 'movie') sent to that account: anyone signed in can add one as themselves (unless blocked
-// in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. Logins made for others aren't listed.
+// in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. A login made for someone else is listed
+// only once its owner gives it a real email (users/{owner}.logins.{uid}.email): the owner's app writes its directory and byName entries.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -35,6 +36,8 @@ service cloud.firestore {
     function canSend(to) { return signedIn() && request.auth.uid != to && !removed()
       && exists(userDoc(request.auth.uid)) && !kidLogin(get(userDoc(request.auth.uid)).data)
       && exists(userDoc(to)) && !(request.auth.uid in get(userDoc(to)).data.get('blocked', {})); }
+    // uid is a login the signed-in account made (and still lists).
+    function myLogin(uid) { return signedIn() && !removed() && exists(userDoc(request.auth.uid)) && uid in logins(request.auth.uid); }
     function str(v, max) { return v is string && v.size() <= max; }
     // Same as nameKey() in cloud.js.
     function nameKey(name) { return name.lower().replace('/', ' ').replace(' +', ' ').trim(); }
@@ -85,8 +88,10 @@ service cloud.firestore {
       allow create, update: if request.resource.data.keys().hasOnly(['uid', 'name', 'key']) && str(request.resource.data.name, 100)
         && str(request.resource.data.get('key', ''), 100)
         && ((signedIn() && !madeLogin() && request.auth.token.get('email', '').lower() == email && request.resource.data.uid == request.auth.uid)
+          || (myLogin(request.resource.data.uid) && logins(request.auth.uid)[request.resource.data.uid].get('email', '') == email
+            && (resource == null || resource.data.uid == request.resource.data.uid))
           || isAdmin());
-      allow delete: if signedIn() && (resource == null || resource.data.uid == request.auth.uid);
+      allow delete: if signedIn() && (resource == null || resource.data.uid == request.auth.uid || myLogin(resource.data.uid));
     }
 
     match /byName/{key}/people/{uid} {
@@ -94,8 +99,8 @@ service cloud.firestore {
       allow list: if signedIn() && request.query.limit <= 10;
       allow create, update: if request.resource.data.keys().hasOnly(['name', 'hint']) && str(request.resource.data.name, 100)
         && str(request.resource.data.hint, 120) && key == nameKey(request.resource.data.name)
-        && ((isOwner(uid) && !madeLogin()) || isAdmin());
-      allow delete: if isOwner(uid) || isAdmin();
+        && ((isOwner(uid) && !madeLogin()) || myLogin(uid) || isAdmin());
+      allow delete: if isOwner(uid) || myLogin(uid) || isAdmin();
     }
 
     match /removals/{uid} {

@@ -1,6 +1,7 @@
 // Emails people when a friend recommends a show to them, run every 15 minutes by .github/workflows/rec-email.yml.
 // Recommendations live in users/{uid}/inbox/{id}; each one is emailed once and then marked emailed: true.
-// Several waiting for the same person go in one email. Skips logins made for others (no real email address),
+// Several waiting for the same person go in one email. A login made for someone else (made-up email address) is emailed at the
+// real address its owner gave it (users/{owner}.logins.{uid}.email), and skipped without one or if it's a kid login. Also skips
 // anyone who switched these emails off (emailPrefs/{uid}.recsOff), and removed accounts.
 // The repo is public, so its Actions logs are too: the log never shows anyone's email address.
 import { initializeApp, cert } from 'firebase-admin/app';
@@ -35,6 +36,13 @@ async function send(to, mail, unsubscribeUrl) {
     throw new Error(`Resend ${r.status}: ${(await r.text()).slice(0, 300)}`);
   }
   throw new Error('Resend kept refusing (rate limit)');
+}
+
+// The real address of a login someone made: the email its owner gave it, while it still has (non-kid) access to their list.
+async function loginEmail(uid) {
+  const owner = (await db.doc(`users/${uid}`).get()).data()?.listOf; if (!owner) return '';
+  const l = ((await db.doc(`users/${owner}`).get()).data()?.logins || {})[uid];
+  return l && l.role !== 'kid' ? String(l.email || '').trim().toLowerCase() : '';
 }
 
 // The recommender's full name: the name saved with the recommendation, or their sign-in name (e.g. from Google)
@@ -78,7 +86,8 @@ for (const [uid, docs] of waiting) {
   try {
     const fresh = docs.filter(d => (d.data().t || 0) > Date.now() - RECENT).sort((a, b) => b.data().t - a.data().t);
     const user = await auth.getUser(uid).catch(() => null);
-    const email = (user?.email || '').toLowerCase();
+    let email = (user?.email || '').toLowerCase();
+    if (email.endsWith(LOGIN_DOMAIN)) email = await loginEmail(uid);
     const prefsRef = db.doc(`emailPrefs/${uid}`), prefs = (await prefsRef.get()).data() || {};
     const removed = (await db.doc(`removals/${uid}`).get()).exists;
     if (!fresh.length || !email || user.disabled || email.endsWith(LOGIN_DOMAIN) || prefs.recsOff || removed) {
@@ -90,7 +99,7 @@ for (const [uid, docs] of waiting) {
     const profile = (await db.doc(`users/${uid}`).get()).data()?.profile || {};
     const mail = buildRecEmail({ name: user.displayName || profile.name || '', items: await Promise.all(fresh.map(async d => ({ ...d.data(), fromName: await fullName(d.data()) }))), unsubscribeUrl });
     await markAll();   // marked first: a failed send is never repeated as a duplicate later
-    await send(user.email, mail, unsubscribeUrl);
+    await send(email, mail, unsubscribeUrl);
     sent++; console.log(`${who}: emailed ${fresh.length} recommendation(s)`);
     await sleep(600);
   } catch (e) {
