@@ -520,7 +520,8 @@ views.shows = () => {
     <div class="grid">${fromFriends.map(r => futureCard(r.s, r.p, (state.shows[r.s.id].rec || '').trim().split(/\s+/)[0] || 'Friend')).join('')}</div>` : '';
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
   app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
-      <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
+      <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
+      ${isKid() ? '' : '<button type="button" class="btn sm" data-act="add-show">＋ Add a Show</button>'}</div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
     ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${moviesSection(netChip)}`;
@@ -1015,7 +1016,7 @@ function moviesSection(netChip) {
   }
   return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
       <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
-      <button type="button" class="btn sm" data-act="add-movie">＋ Add a movie</button></div>
+      <button type="button" class="btn sm" data-act="add-movie">＋ Add a Movie</button></div>
     ${bar}
     ${toWatch.length ? `<h2>To watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : ''}
     ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}</section>`;
@@ -2052,6 +2053,10 @@ const actions = {
     const id = +b.dataset.show, name = showInfo(id)?.name || 'show';
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
+  },
+  'add-show'() {   // My Shows' button: Add Show, switched to TV shows
+    try { sessionStorage.setItem('tvt.qmode', 'tv'); } catch { }
+    if (location.hash === '#/search') render(true); else location.hash = '#/search';
   },
   'add-movie'() {   // My Movies' button: Add Show, switched to Movies
     try { sessionStorage.setItem('tvt.qmode', 'movie'); } catch { }
