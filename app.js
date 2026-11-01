@@ -430,8 +430,20 @@ const NET_SITES = {
   'history': 'history.com', 'a&e': 'aetv.com', 'lifetime': 'mylifetime.com', 'tlc': 'tlc.com', 'bbc one': 'bbc.co.uk', 'bbc two': 'bbc.co.uk',
   'itv1': 'itv.com', 'itvx': 'itv.com', 'channel 4': 'channel4.com', 'britbox': 'britbox.com', 'acorn tv': 'acorn.tv', 'mgm+': 'mgmplus.com',
   'crunchyroll': 'crunchyroll.com', 'youtube': 'youtube.com', 'youtube premium': 'youtube.com', 'tubi': 'tubitv.com', 'roku channel': 'therokuchannel.com',
-  'reelz': 'icons/reelz.svg', 'reelzchannel': 'icons/reelz.svg', 'reelz channel': 'icons/reelz.svg'
+  'reelz': 'icons/reelz.svg', 'reelzchannel': 'icons/reelz.svg', 'reelz channel': 'icons/reelz.svg',
+  'angel studios': 'angel.com', 'pluto tv': 'pluto.tv', 'plex': 'plex.tv', 'hoopla': 'hoopladigital.com', 'kanopy': 'kanopy.com',
+  'fandango at home': 'fandangoathome.com', 'philo': 'philo.com', 'sling tv': 'sling.com', 'fubotv': 'fubo.tv', 'great american pure flix': 'greatamericanpureflix.com'
 };
+// TMDB/JustWatch's names for streaming services, as TVmaze names them for shows, so a movie and a show on the same
+// service share one Where to watch button (and icon).
+const MOVIE_SERVICE = { 'amazon prime video': 'Prime Video', 'amazon prime video with ads': 'Prime Video', 'disney plus': 'Disney+',
+  'max': 'HBO Max', 'hbo max': 'HBO Max', 'max amazon channel': 'HBO Max', 'paramount plus': 'Paramount+', 'paramount plus essential': 'Paramount+',
+  'paramount plus premium': 'Paramount+', 'paramount+ with showtime': 'Paramount+', 'peacock premium': 'Peacock', 'peacock premium plus': 'Peacock',
+  'apple tv plus': 'Apple TV+', 'apple tv+': 'Apple TV+', 'tubi tv': 'Tubi', 'netflix standard with ads': 'Netflix', 'netflix basic with ads': 'Netflix',
+  'hulu': 'Hulu', 'the roku channel': 'Roku Channel', 'amc plus': 'AMC+', 'mgm plus': 'MGM+', 'starz': 'Starz', 'youtube premium': 'YouTube Premium' };
+const movieService = n => { n = (n || '').trim(); const k = n.toLowerCase(); return MOVIE_SERVICE[k] || SAME_SERVICE[n] || n; };
+// Where a movie on My Movies streams (from its card details, or what was typed in for one added by hand).
+const movieServices = m => [...new Set((m.custom ? (m.where ? [m.where] : []) : (movieDetails[m.id]?.stream || [])).map(movieService).filter(Boolean))];
 const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d + new URL(import.meta.url).search : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
 views.shows = () => {
   if (needsAccount()) return views.landing();
@@ -459,11 +471,14 @@ views.shows = () => {
   }
   const all = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
   // Filter by network or streaming service, remembered on this device. Only offered when shows span 2+ services.
-  const counts = {};
+  // Movies on My Movies count too: picking a service shows its shows and movies.
+  const counts = {}, mcounts = {}, mine = myMovies();
   for (const r of all) for (const n of new Set(services(r.s))) counts[n] = (counts[n] || 0) + 1;
-  const nets = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  for (const m of mine) for (const n of movieServices(m)) mcounts[n] = (mcounts[n] || 0) + 1;
+  const total = n => (counts[n] || 0) + (mcounts[n] || 0);
+  const nets = [...new Set([...Object.keys(counts), ...Object.keys(mcounts)])].sort((a, b) => total(b) - total(a) || a.localeCompare(b));
   let net = load(K_NET, '');
-  if (net && !counts[net]) net = '';
+  if (net && !total(net)) net = '';
   const byNet = net ? all.filter(r => services(r.s).includes(net)) : all;
   // Day filter: the weekday (your time) the show's next episode airs, or its latest one did. Remembered on this device.
   const dc = {};
@@ -483,11 +498,12 @@ views.shows = () => {
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   // Like the day buttons: the service (its logo, or its name over the count) and how many of your shows are on it.
-  const netChip = (n, label, c) => { const ic = n && netIcon(n), shows = `${c} show${c === 1 ? '' : 's'}`;
+  const tally = (sc, mc) => [sc && `${sc} show${sc === 1 ? '' : 's'}`, mc && `${mc} movie${mc === 1 ? '' : 's'}`].filter(Boolean).join(' · ') || '0 shows';
+  const netChip = (n, label, sc, mc) => { const ic = n && netIcon(n), shows = tally(sc, mc);
     return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
-    ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
+    ${netChip('', 'All', all.length, mine.length)}${nets.map(n => netChip(n, n, counts[n] || 0, mcounts[n] || 0)).join('')}</div>` : '';
   // Up next order: every show with aired episodes not checked off yet comes first — shows not started at all, then one
   // with an episode out today, then the rest, newest episode first. After them come caught-up shows whose next episode
   // airs within the week, soonest first.
@@ -511,7 +527,7 @@ views.shows = () => {
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${net || day !== '' ? '' : moviesSection()}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${day !== '' ? '' : moviesSection(net)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -973,19 +989,21 @@ function movieCard(m) {
       : m.custom ? `<span class="title">${esc(m.name)}</span>` : `<a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>`}
       <div class="sub">${esc(['Movie', m.year, runtimeText(d?.runtime), d?.rating].filter(Boolean).join(' · '))}</div>
       ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
-      ${d?.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
+      ${d?.stream?.length ? `<div class="sub stream">On ${esc([...new Set(d.stream.map(movieService))].join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
       ${m.rec ? `<div class="sub">From ${esc(m.rec)}</div>` : ''}
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}
       ${m.custom ? `<button class="btn ghost sm" data-act="movie-remove" data-movie="${m.id}">Remove</button>` : ''}</div></article>`;
 }
 // My Movies: its own part at the bottom of My Shows, with a heading like My Shows' and a way to add one.
-function moviesSection() {
+function moviesSection(net) {
   if (isKid() || !config.tmdbKey) return '';
-  const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
+  const every = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
+  const all = net ? every.filter(m => movieServices(m).includes(net)) : every;   // Where to watch picked: only movies on it
+  if (net && !all.length) return '';
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
   // Cards without details yet (or a week old): look them up once, then redraw.
-  const todo = all.filter(m => !m.custom && !detailsFresh(m.id) && !detailsAsked.has(m.id));
+  const todo = every.filter(m => !m.custom && !detailsFresh(m.id) && !detailsAsked.has(m.id));
   if (todo.length) {
     todo.forEach(m => detailsAsked.add(m.id));
     inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
@@ -993,7 +1011,7 @@ function moviesSection() {
       .then(() => { save(K_MDET, movieDetails); if (route().name === 'shows') render(); });
   }
   return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
-      <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
+      <span class="sub">${all.length ? `${net ? `On ${esc(net)} · ` : ''}${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
       <button type="button" class="btn sm" data-act="add-movie">＋ Add a movie</button></div>
     ${toWatch.length ? `<h2>To watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : ''}
     ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}</section>`;
@@ -1280,7 +1298,7 @@ function streamsFor(list) {
     .then(() => { save(K_MDET, movieDetails); if (route().name === 'search' && searchMode() === 'movie') drawResults(); });
 }
 const streamLine = m => { const d = movieDetails[m.id];
-  return !d ? '' : d.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''; };
+  return !d ? '' : d.stream?.length ? `<div class="sub stream">On ${esc([...new Set(d.stream.map(movieService))].join(', '))}</div>` : d.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''; };
 views.search = () => {
   const kid = isKid();
   const mv = searchMode() === 'movie';
