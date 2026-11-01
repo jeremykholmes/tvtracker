@@ -1176,40 +1176,12 @@ let lastMovies = [], lastMovieQuery = '';
 // Search TV shows or movies (kid logins: shows only). Remembered for this visit.
 const searchMode = () => { if (isKid()) return 'tv'; try { return sessionStorage.getItem('tvt.qmode') === 'movie' ? 'movie' : 'tv'; } catch { return 'tv'; } };
 const showLookup = {};   // id -> trimmed show from search/discover, used when following
-/* Angel Studios: in Movies search, a switch that lists only movies streaming on Angel Studios in the US. TMDB (from
-   JustWatch) has no "search within one service", so the whole Angel catalog is fetched (most popular first, up to
-   600 movies), kept on the device for a day, and searched by title here. Angel's provider id is looked up by name. */
-const K_ANGEL = 'tvt.angel.v1';
-let angel = load(K_ANGEL, null), angelLoading = null, angelErr = '';
-const angelOn = () => { try { return searchMode() === 'movie' && sessionStorage.getItem('tvt.angel') === '1'; } catch { return false; } };
-function angelMovies() {
-  if (angel?.list && now() - angel.t < DAY) return Promise.resolve(angel.list);
-  return angelLoading ||= (async () => {
-    const provs = (await tmdb('/watch/providers/movie?watch_region=US&language=en-US'))?.results || [];
-    const p = provs.find(x => /^angel studios$/i.test(x.provider_name.trim())) || provs.find(x => /angel/i.test(x.provider_name));
-    if (!p) throw new Error("Couldn't find Angel Studios' movies right now");
-    const list = [], seen = new Set();
-    for (let page = 1, pages = 1; page <= Math.min(pages, 30); page++) {
-      const j = await tmdb(`/discover/movie?with_watch_providers=${p.provider_id}&watch_region=US&include_adult=false&language=en-US&sort_by=popularity.desc&page=${page}`);
-      pages = j?.total_pages || 0;
-      for (const m of j?.results || []) if (!seen.has(m.id)) { seen.add(m.id); const t = trimMovie(m); t.summary = t.summary.slice(0, 160); if (t.name) list.push(t); }
-    }
-    angel = { t: now(), list }; save(K_ANGEL, angel);
-    return list;
-  })().finally(() => { angelLoading = null; });
-}
-const plain = t => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
-function angelMatches(list, q) {
-  const words = plain(q).split(' ').filter(Boolean);
-  return !words.length ? list : list.filter(m => { const n = ' ' + plain(m.name) + ' '; return words.every(w => n.includes(' ' + w) ); });
-}
 views.search = () => {
   const kid = isKid();
   const mv = searchMode() === 'movie';
   app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : `<h1>${mv ? 'Add a movie' : 'Add a show'}</h1>`}
     ${kid || !config.tmdbKey ? '' : `<div class="seg qmode" role="group" aria-label="Search for"><button type="button" data-act="qmode" data-mode="tv" class="${mv ? '' : 'on'}" aria-pressed="${!mv}">📺 TV shows</button><button type="button" data-act="qmode" data-mode="movie" class="${mv ? 'on' : ''}" aria-pressed="${mv}">🎬 Movies</button></div>`}
-    ${mv && !kid && config.tmdbKey ? `<div class="srcpick"><button type="button" class="${angelOn() ? 'on' : ''}" data-act="angel" aria-pressed="${angelOn()}">😇 Only on Angel Studios</button></div>` : ''}
-    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? (angelOn() ? 'Search Angel Studios movies…' : 'Search any movie…') : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
+    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Search any movie…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
     <button class="btn primary">Search</button></form><div id="results" class="rows"></div>`;
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
@@ -1229,7 +1201,6 @@ async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
   if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; return drawResults(); }
   const seq = ++searchSeq;
-  if (angelOn()) { lastMovies = []; lastMovieQuery = q; return drawResults(); }   // searched on the device, in drawAngelResults
   if (searchMode() === 'movie') {
     try {
       const r = (await tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`))?.results || [];
@@ -1270,30 +1241,11 @@ function drawResults() {
 }
 
 function drawMovieResults(box) {
-  if (angelOn()) return drawAngelResults(box);
   if (!lastMovies.length) {
     box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title to search.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>`;
     return;
   }
   box.innerHTML = `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>` + lastMovies.map(m => `<div class="row">${poster(m, '#/movie/' + m.id)}
-    <div class="info"><a href="#/movie/${m.id}">${esc(m.name)}</a>
-      <div class="sub">${['Movie', m.year].filter(Boolean).map(esc).join(' · ')}</div>
-      <div class="sub">${esc(m.summary.slice(0, 140))}${m.summary.length > 140 ? '…' : ''}</div></div>
-    ${movieBtn(m)}</div>`).join('');
-}
-
-function drawAngelResults(box) {
-  if (!angel?.list || now() - angel.t >= DAY) {
-    if (angelErr) { box.innerHTML = `<p class="muted">${esc(angelErr)} <button type="button" class="btn sm" data-act="angel-retry">Try again</button></p>`; return; }
-    box.innerHTML = '<p class="loading">Loading Angel Studios movies…</p>';
-    angelMovies().then(() => { angelErr = ''; }, e => { angelErr = e.message; }).finally(() => { if (route().name === 'search') drawResults(); });
-    if (!angel?.list) return;   // a day-old list is still shown while the new one loads
-  }
-  const q = lastMovieQuery, list = angelMatches(angel.list, q);
-  const head = q ? `<p class="sub">Angel Studios movies matching “${esc(q)}” · <a href="#/search" data-act="angel-all">Show all</a></p>`
-    : `<p class="sub">${angel.list.length} movies streaming on Angel Studios, most popular first. Type to search them.</p>`;
-  if (!list.length) { box.innerHTML = head + `<p class="muted">No Angel Studios movies match “${esc(q)}”. <a href="#/search" data-act="angel">Search all movies instead</a></p>`; return; }
-  box.innerHTML = head + list.map(m => `<div class="row">${poster(m, '#/movie/' + m.id)}
     <div class="info"><a href="#/movie/${m.id}">${esc(m.name)}</a>
       <div class="sub">${['Movie', m.year].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(m.summary.slice(0, 140))}${m.summary.length > 140 ? '…' : ''}</div></div>
@@ -1921,16 +1873,6 @@ const actions = {
     try { sessionStorage.setItem('tvt.qmode', 'movie'); } catch { }
     if (location.hash === '#/search') render(true); else location.hash = '#/search';
   },
-  angel(b, e) {   // Movies search: only Angel Studios movies, or all movies again
-    e?.preventDefault();
-    const q = $('#q')?.value.trim() || lastMovieQuery, on = !angelOn();
-    try { sessionStorage.setItem('tvt.angel', on ? '1' : ''); } catch { }
-    lastMovies = []; lastMovieQuery = '';
-    render(true);
-    if (q) doSearch(q); else drawResults();
-  },
-  'angel-all'(b, e) { e?.preventDefault(); lastMovieQuery = ''; try { sessionStorage.removeItem('tvt.q'); } catch { } drawResults(); },
-  'angel-retry'() { angelErr = ''; drawResults(); },
   qmode(b) {
     const q = $('#q')?.value.trim() || (searchMode() === 'movie' ? lastMovieQuery : lastQuery);
     try { sessionStorage.setItem('tvt.qmode', b.dataset.mode); } catch { }
@@ -1940,7 +1882,7 @@ const actions = {
   },
   'movie-add'(b, e, seen) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || angel?.list?.find(x => x.id === id) || state.movies[id];
+    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || state.movies[id];
     if (!m) return;
     const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
