@@ -1281,7 +1281,7 @@ async function doSearch(q) {
       lastMovies = [...angel, ...found.filter(m => !ids.has(m.id))]; lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
       // IMDb titles TMDB doesn't seem to have (no TMDB result with the same title and year): brand-new releases, mostly.
       const known = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => plain(m.name) + '|' + (m.year || '')));
-      lastImdb = imdbHits.filter(x => !known.has(plain(x.title) + '|' + x.year));   // same title but no year on TMDB isn't enough: that hid IMDb's new releases
+      lastImdb = imdbHits.map((x, rank) => ({ ...x, rank })).filter(x => !known.has(plain(x.title) + '|' + x.year));   // same title but no year on TMDB isn't enough: that hid IMDb's new releases
       if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
@@ -1329,16 +1329,18 @@ function drawMovieResults(box) {
     return;
   }
   streamsFor([...(svc?.list || []), ...titles]);
+  // One list: TMDB's results, with IMDb-only movies slotted in where IMDb ranked them (duplicates were left out above).
+  const rows = titles.map(movieRow);
+  for (const x of lastImdb) rows.splice(Math.min(x.rank, rows.length), 0, imdbRow(x));
   box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
-    + (titles.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + titles.map(movieRow).join('') : '')
-    + (lastImdb.length ? `<h2 class="svchead">More from IMDb</h2><p class="sub">Newer movies our movie list doesn't have yet</p>${lastImdb.map(imdbRow).join('')}` : '')
+    + (rows.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
     + ownMovieBtn();
 }
 const imdbRow = x => { const m = { id: x.id, name: x.title, image: imdbImg(x.image) }, on = hasMovie(x.id);
   return `<div class="row">${poster(m)}
     <div class="info"><a href="https://www.imdb.com/title/${esc(x.id)}/" target="_blank" rel="noopener">${esc(x.title)}</a>
-      <div class="sub">${['Movie', x.year, 'IMDb'].filter(Boolean).map(esc).join(' · ')}</div>${x.stars ? `<div class="sub">${esc(x.stars)}</div>` : ''}</div>
+      <div class="sub">${['Movie', x.year].filter(Boolean).map(esc).join(' · ')}</div>${x.stars ? `<div class="sub">${esc(x.stars)}</div>` : ''}</div>
     ${isKid() ? '' : on ? `<button class="btn sm" data-act="movie-remove" data-movie="${esc(x.id)}" title="On My Movies — tap to remove">✓ Added</button>`
       : `<span class="addbtns"><button class="btn primary sm" data-act="imdb-add" data-imdb="${esc(x.id)}">＋ Add</button>
          <button class="btn sm" data-act="imdb-add" data-seen="1" data-imdb="${esc(x.id)}" title="Already watched it">✓ Seen it</button></span>`}</div>`; };
