@@ -401,7 +401,7 @@ function lpPosters() {
   return lpLoading;
 }
 
-const K_NET = 'tvt.net', K_DAY = 'tvt.day', DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const K_NET = 'tvt.net', K_MNET = 'tvt.mnet', K_DAY = 'tvt.day', DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // 0–6 (Sunday–Saturday, local time) for when a show's next episode airs, or its latest one aired; null if unknown.
 function airDay(r) {
   const t = r.p?.upcoming ? airTime(r.p.upcoming) : r.p?.latest;
@@ -471,14 +471,11 @@ views.shows = () => {
   }
   const all = list.map(s => ({ s: showInfo(s.id), p: progress(s.id) }));
   // Filter by network or streaming service, remembered on this device. Only offered when shows span 2+ services.
-  // Movies on My Movies count too: picking a service shows its shows and movies.
-  const counts = {}, mcounts = {}, mine = myMovies();
+  const counts = {};
   for (const r of all) for (const n of new Set(services(r.s))) counts[n] = (counts[n] || 0) + 1;
-  for (const m of mine) for (const n of movieServices(m)) mcounts[n] = (mcounts[n] || 0) + 1;
-  const total = n => (counts[n] || 0) + (mcounts[n] || 0);
-  const nets = [...new Set([...Object.keys(counts), ...Object.keys(mcounts)])].sort((a, b) => total(b) - total(a) || a.localeCompare(b));
+  const nets = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
   let net = load(K_NET, '');
-  if (net && !total(net)) net = '';
+  if (net && !counts[net]) net = '';
   const byNet = net ? all.filter(r => services(r.s).includes(net)) : all;
   // Day filter: the weekday (your time) the show's next episode airs, or its latest one did. Remembered on this device.
   const dc = {};
@@ -498,12 +495,11 @@ views.shows = () => {
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   // Like the day buttons: the service (its logo, or its name over the count) and how many of your shows are on it.
-  const tally = (sc, mc) => [sc && `${sc} show${sc === 1 ? '' : 's'}`, mc && `${mc} movie${mc === 1 ? '' : 's'}`].filter(Boolean).join(' · ') || '0 shows';
-  const netChip = (n, label, sc, mc) => { const ic = n && netIcon(n), shows = tally(sc, mc);
-    return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === net ? ' on' : ''}" data-act="net" data-net="${esc(n)}" aria-pressed="${n === net}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
+  const netChip = (n, label, c, act = 'net', cur = net, what = 'show') => { const ic = n && netIcon(n), shows = `${c} ${what}${c === 1 ? '' : 's'}`;
+    return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === cur ? ' on' : ''}" data-act="${act}" data-net="${esc(n)}" aria-pressed="${n === cur}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
-    ${netChip('', 'All', all.length, mine.length)}${nets.map(n => netChip(n, n, counts[n] || 0, mcounts[n] || 0)).join('')}</div>` : '';
+    ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
   // Up next order: every show with aired episodes not checked off yet comes first — shows not started at all, then one
   // with an episode out today, then the rest, newest episode first. After them come caught-up shows whose next episode
   // airs within the week, soonest first.
@@ -527,7 +523,7 @@ views.shows = () => {
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span></div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${day !== '' ? '' : moviesSection(net)}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${moviesSection(netChip)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -996,11 +992,18 @@ function movieCard(m) {
       ${m.custom ? `<button class="btn ghost sm" data-act="movie-remove" data-movie="${m.id}">Remove</button>` : ''}</div></article>`;
 }
 // My Movies: its own part at the bottom of My Shows, with a heading like My Shows' and a way to add one.
-function moviesSection(net) {
+// netChip: My Shows' Where to watch button maker, reused for My Movies' own filter (remembered separately on this device).
+function moviesSection(netChip) {
   if (isKid() || !config.tmdbKey) return '';
   const every = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
-  const all = net ? every.filter(m => movieServices(m).includes(net)) : every;   // Where to watch picked: only movies on it
-  if (net && !all.length) return '';
+  const counts = {};
+  for (const m of every) for (const n of movieServices(m)) counts[n] = (counts[n] || 0) + 1;
+  const nets = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  let net = load(K_MNET, '');
+  if (net && !counts[net]) net = '';
+  const all = net ? every.filter(m => movieServices(m).includes(net)) : every;
+  const bar = netChip && nets.length > 1 ? `<div class="flabel" id="fl-mnet">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-mnet">
+    ${netChip('', 'All', every.length, 'mnet', net, 'movie')}${nets.map(n => netChip(n, n, counts[n], 'mnet', net, 'movie')).join('')}</div>` : '';
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
   // Cards without details yet (or a week old): look them up once, then redraw.
   const todo = every.filter(m => !m.custom && !detailsFresh(m.id) && !detailsAsked.has(m.id));
@@ -1011,8 +1014,9 @@ function moviesSection(net) {
       .then(() => { save(K_MDET, movieDetails); if (route().name === 'shows') render(); });
   }
   return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
-      <span class="sub">${all.length ? `${net ? `On ${esc(net)} · ` : ''}${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
+      <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
       <button type="button" class="btn sm" data-act="add-movie">＋ Add a movie</button></div>
+    ${bar}
     ${toWatch.length ? `<h2>To watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : ''}
     ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}</section>`;
 }
@@ -2104,6 +2108,7 @@ const actions = {
     toast(`Removed ${m.name}`, () => { setMovie(id, { removed: false }); render(); });
   },
   net(b) { save(K_NET, b.dataset.net); render(); },
+  mnet(b) { save(K_MNET, b.dataset.net); render(); },   // My Movies' own Where to watch filter
   day(b) { save(K_DAY, b.dataset.day); render(); },
   // Signed in (not a kid): send it to someone's account or share a link; otherwise just share a link.
   recommend(b) {
