@@ -904,7 +904,7 @@ const K_RENAME = 'tvt.movieRename.v1', renamed = load(K_RENAME, {});
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
 // Runtime, US rating, genres and where it streams, for the cards on My Movies, kept on this device for a week
 // (streaming changes): TMDB id -> { runtime, rating, genres, stream, rent, t }.
-const K_MDET = 'tvt.movieDetails.v3', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
+const K_MDET = 'tvt.movieDetails.v4', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
 const detailsFresh = id => movieDetails[id] && now() - movieDetails[id].t < 7 * DAY;
 const runtimeText = min => min ? `${min >= 60 ? Math.floor(min / 60) + 'h ' : ''}${min % 60 ? (min % 60) + 'm' : ''}`.trim() : '';
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
@@ -932,6 +932,11 @@ async function fetchMovie(id) {
     if (mine.name && plain(mine.name) !== plain(j.title || '')) m.name = mine.name;
     if (!m.year && mine.year) m.year = mine.year;
     if (!m.image && mine.image) m.image = mine.image;
+  }
+  // No streaming info on TMDB yet: check whether it's on Angel Studios (its own site, through worker.js).
+  if (!m.stream.length && !m.rent.length && (hasMovie(id) || +route().arg === id)) {   // only movies on My Movies or being viewed
+    const url = await fetch(`/api/angel?title=${encodeURIComponent(m.name)}&year=${m.year || ''}`).then(r => r.ok ? r.json() : {}).then(j => j.url || '').catch(() => '');
+    if (url) { m.stream = ['Angel Studios']; m.angel = url; }
   }
   // No poster on TMDB yet (a brand-new release): borrow IMDb's, and keep it with the movie if it's on My Movies.
   if (!m.image && m.imdb) {
@@ -1005,7 +1010,7 @@ views.movie = arg => {
   }
   const on = hasMovie(id), seen = movieSeen(id), from = linkFrom(id, 'movie');
   const hrs = runtimeText(m.runtime);
-  const where = m.stream.length ? `<p class="where"><b>Streaming on:</b> ${m.stream.map(esc).join(', ')}</p>`
+  const where = m.stream.length ? `<p class="where"><b>Streaming on:</b> ${m.stream.map(esc).join(', ')}${m.angel ? ` <a class="btn sm" href="${esc(m.angel)}" target="_blank" rel="noopener">▶ Watch on Angel</a>` : ''}</p>`
     : m.rent.length ? `<p class="where"><b>Rent or buy:</b> ${m.rent.map(esc).join(', ')}</p>` : '';
   app.innerHTML = `<button type="button" class="backbtn" data-act="back" aria-label="Back"><span aria-hidden="true">←</span> Back</button>
     ${from ? `<div class="recbanner"><span aria-hidden="true">★</span><span><b>${esc(from)}</b> recommends this movie${on ? ' — it\'s already on your list' : ''}</span></div>` : ''}
