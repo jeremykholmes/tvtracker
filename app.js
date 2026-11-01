@@ -1176,12 +1176,50 @@ let lastMovies = [], lastMovieQuery = '';
 // Search TV shows or movies (kid logins: shows only). Remembered for this visit.
 const searchMode = () => { if (isKid()) return 'tv'; try { return sessionStorage.getItem('tvt.qmode') === 'movie' ? 'movie' : 'tv'; } catch { return 'tv'; } };
 const showLookup = {};   // id -> trimmed show from search/discover, used when following
+/* Movie search also knows streaming services: type one's name ("Angel Studios", "Netflix", "Tubi"…) and its movies
+   (streaming in the US, most popular first) are listed above the title matches, with Show more. Every movie result
+   also says where it's streaming. Service list from TMDB/JustWatch, kept on the device for a day. */
+const K_PROV = 'tvt.movieProviders.v1';
+let provList = load(K_PROV, null), provLoading = null;
+let svcHit = null;   // the service the last movie search named: { id, name, page, pages, list }
+const plain = t => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/\+/g, ' plus').replace(/[^a-z0-9]+/g, ' ').trim();
+function movieProviders() {
+  if (provList?.list && now() - provList.t < DAY) return Promise.resolve(provList.list);
+  return provLoading ||= tmdb('/watch/providers/movie?watch_region=US&language=en-US').then(j => {
+    const list = (j?.results || []).map(x => ({ id: x.provider_id, name: x.provider_name, rank: x.display_priorities?.US ?? x.display_priority ?? 999 }))
+      .filter(x => !/channel$/i.test(x.name.trim()));   // "Starz Amazon Channel" etc. repeat a service under another store
+    provList = { t: now(), list }; save(K_PROV, provList); return list;
+  }).finally(() => { provLoading = null; });
+}
+// The service a search names: exactly, or (4+ letters) the start of its name — "angel" finds Angel Studios.
+async function serviceFor(q) {
+  const k = plain(q); if (k.length < 3) return null;
+  const list = (await movieProviders().catch(() => [])).slice().sort((a, b) => a.rank - b.rank);
+  return list.find(p => plain(p.name) === k) || (k.length >= 4 ? list.find(p => plain(p.name).startsWith(k)) : null) || null;
+}
+async function serviceMovies(hit) {
+  const j = await tmdb(`/discover/movie?with_watch_providers=${hit.id}&watch_region=US&include_adult=false&language=en-US&sort_by=popularity.desc&page=${hit.page + 1}`);
+  hit.page++; hit.pages = j?.total_pages || 0;
+  const have = new Set(hit.list.map(m => m.id));
+  hit.list.push(...(j?.results || []).map(trimMovie).filter(m => m.name && !have.has(m.id)));
+}
+// Where each movie in the results streams: looked up 4 at a time and kept with My Movies' details for a week.
+function streamsFor(list) {
+  const todo = list.filter(m => !detailsFresh(m.id) && !detailsAsked.has(m.id)).slice(0, 40);
+  if (!todo.length) return;
+  todo.forEach(m => detailsAsked.add(m.id));
+  inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
+    if (x) movieDetails[m.id] = { runtime: x.runtime, rating: x.rating, genres: x.genres.slice(0, 3), stream: x.stream.slice(0, 3), rent: x.rent.slice(0, 2), t: now() }; })
+    .then(() => { save(K_MDET, movieDetails); if (route().name === 'search' && searchMode() === 'movie') drawResults(); });
+}
+const streamLine = m => { const d = movieDetails[m.id];
+  return !d ? '' : d.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''; };
 views.search = () => {
   const kid = isKid();
   const mv = searchMode() === 'movie';
   app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : `<h1>${mv ? 'Add a movie' : 'Add a show'}</h1>`}
     ${kid || !config.tmdbKey ? '' : `<div class="seg qmode" role="group" aria-label="Search for"><button type="button" data-act="qmode" data-mode="tv" class="${mv ? '' : 'on'}" aria-pressed="${!mv}">📺 TV shows</button><button type="button" data-act="qmode" data-mode="movie" class="${mv ? 'on' : ''}" aria-pressed="${mv}">🎬 Movies</button></div>`}
-    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Search any movie…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
+    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Movie or streaming service…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
     <button class="btn primary">Search</button></form><div id="results" class="rows"></div>`;
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
@@ -1199,13 +1237,15 @@ views.search = () => {
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
-  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; return drawResults(); }
+  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; svcHit = null; return drawResults(); }
   const seq = ++searchSeq;
   if (searchMode() === 'movie') {
     try {
-      const r = (await tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`))?.results || [];
+      const [r, svc] = await Promise.all([
+        tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`).then(j => j?.results || []),
+        serviceFor(q).then(async p => { if (!p) return null; const hit = { id: p.id, name: p.name, page: 0, pages: 0, list: [] }; await serviceMovies(hit); return hit; }).catch(() => null)]);
       if (seq !== searchSeq) return;
-      lastMovies = r.map(trimMovie).filter(m => m.name); lastMovieQuery = q;
+      lastMovies = r.map(trimMovie).filter(m => m.name); lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
       drawResults();
     } catch (e) { toast(e.message); }
     return;
@@ -1240,16 +1280,21 @@ function drawResults() {
     ${followBtn(s)}</div>`).join('');
 }
 
+const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
+    <div class="info"><a href="#/movie/${m.id}">${esc(m.name)}</a>
+      <div class="sub">${['Movie', m.year].filter(Boolean).map(esc).join(' · ')}</div>${streamLine(m)}
+      <div class="sub">${esc(m.summary.slice(0, 140))}${m.summary.length > 140 ? '…' : ''}</div></div>
+    ${movieBtn(m)}</div>`;
 function drawMovieResults(box) {
-  if (!lastMovies.length) {
-    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title to search.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>`;
+  const svc = svcHit, titles = svc ? lastMovies.filter(m => !svc.list.some(x => x.id === m.id)) : lastMovies;
+  if (!svc && !titles.length) {
+    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>`;
     return;
   }
-  box.innerHTML = `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>` + lastMovies.map(m => `<div class="row">${poster(m, '#/movie/' + m.id)}
-    <div class="info"><a href="#/movie/${m.id}">${esc(m.name)}</a>
-      <div class="sub">${['Movie', m.year].filter(Boolean).map(esc).join(' · ')}</div>
-      <div class="sub">${esc(m.summary.slice(0, 140))}${m.summary.length > 140 ? '…' : ''}</div></div>
-    ${movieBtn(m)}</div>`).join('');
+  streamsFor([...(svc?.list || []), ...titles]);
+  box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
+      ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
+    + (titles.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + titles.map(movieRow).join('') : '');
 }
 
 views.login = mode => {
@@ -1873,6 +1918,12 @@ const actions = {
     try { sessionStorage.setItem('tvt.qmode', 'movie'); } catch { }
     if (location.hash === '#/search') render(true); else location.hash = '#/search';
   },
+  async 'svc-more'(b) {   // next page of a streaming service's movies
+    const hit = svcHit; if (!hit) return;
+    b.disabled = true; b.textContent = 'Loading…';
+    try { await serviceMovies(hit); } catch (e) { toast(e.message); }
+    if (svcHit === hit) drawResults();
+  },
   qmode(b) {
     const q = $('#q')?.value.trim() || (searchMode() === 'movie' ? lastMovieQuery : lastQuery);
     try { sessionStorage.setItem('tvt.qmode', b.dataset.mode); } catch { }
@@ -1882,7 +1933,7 @@ const actions = {
   },
   'movie-add'(b, e, seen) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || state.movies[id];
+    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || state.movies[id];
     if (!m) return;
     const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
