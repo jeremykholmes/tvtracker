@@ -16,6 +16,9 @@ html, body { margin: 0; background: var(--bg); color: var(--text); }
 body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
 a { color: inherit; }
 button, input { font: inherit; color: inherit; }
+/* 16px or more: an iPhone zooms the page in when a smaller text box is tapped, and an installed app stays zoomed,
+   which pushes the right edge and the bottom tab bar off the screen. */
+input, select, textarea { font-size: max(16px, 1em) !important; }
 img { display: block; }
 
 /* header */
