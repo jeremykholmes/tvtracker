@@ -1186,7 +1186,17 @@ const showLookup = {};   // id -> trimmed show from search/discover, used when f
 const K_PROV = 'tvt.movieProviders.v1';
 let provList = load(K_PROV, null), provLoading = null;
 let svcHit = null;   // the service the last movie search named: { id, name, page, pages, list }
-let lastImdb = [];   // IMDb titles from the last movie search that TMDB didn't have: { id: 'tt…', title, year, stars, image }
+let lastImdb = [];   // IMDb titles from the last movie search that TMDB's results didn't have: { id: 'tt…', title, year, stars, image, rank, tm }
+// IMDb id -> TMDB's movie for it (trimmed), or 0 when TMDB has none. Kept on the device: matches for good, misses for a
+// day (TMDB adds new movies). Lets the merged list leave out a movie both have — matched by id, not just title and year.
+const K_IMAP = 'tvt.imdbMap.v1', imap = load(K_IMAP, {});
+async function tmdbForImdb(tt) {
+  const c = imap[tt];
+  if (c && (c.m || now() - c.t < DAY)) return c.m || 0;
+  const t = await tmdb(`/find/${tt}?external_source=imdb_id&language=en-US`).then(j => j?.movie_results?.[0]);
+  imap[tt] = { m: t ? trimMovie(t) : 0, t: now() }; save(K_IMAP, imap);
+  return imap[tt].m;
+}
 // IMDb's title search, through the site's own Worker (worker.js). Empty on any problem, so search still works without it.
 const imdbSearch = q => fetch('/api/imdb?q=' + encodeURIComponent(q)).then(r => r.ok ? r.json() : { d: [] }).then(j => j.d || []).catch(() => []);
 const imdbImg = u => u ? u.replace(/\._V1_.*\.jpg$/, '._V1_QL75_UX300_.jpg') : '';   // a poster-sized copy of IMDb's image
@@ -1275,13 +1285,15 @@ async function doSearch(q) {
         tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`).then(j => j?.results || []),
         serviceFor(q).then(async p => { if (!p) return null; const hit = { id: p.id, name: p.name, page: 0, pages: 0, list: [] }; await serviceMovies(hit); return hit; }).catch(() => null),
         Promise.resolve(angelMatches(angelCat?.list || [], q)),
-        imdbSearch(q)]);
+        imdbSearch(q).then(hits => Promise.all(hits.map(async (x, rank) => ({ ...x, rank, tm: await tmdbForImdb(x.id).catch(() => undefined) }))))]);
       if (seq !== searchSeq) return;
       const found = r.map(trimMovie).filter(m => m.name), ids = new Set(angel.map(m => m.id));
       lastMovies = [...angel, ...found.filter(m => !ids.has(m.id))]; lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
-      // IMDb titles TMDB doesn't seem to have (no TMDB result with the same title and year): brand-new releases, mostly.
+      // IMDb's results that aren't already in the list. tm: TMDB's entry for the same IMDb id (shown instead of IMDb's
+      // details), 0: TMDB has none (a brand-new release, shown from IMDb), undefined: couldn't check (title + year then).
+      const have = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => m.id));
       const known = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => plain(m.name) + '|' + (m.year || '')));
-      lastImdb = imdbHits.map((x, rank) => ({ ...x, rank })).filter(x => !known.has(plain(x.title) + '|' + x.year));   // same title but no year on TMDB isn't enough: that hid IMDb's new releases
+      lastImdb = imdbHits.filter(x => x.tm ? !have.has(x.tm.id) : x.tm === 0 || !known.has(plain(x.title) + '|' + x.year));
       if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
@@ -1328,10 +1340,10 @@ function drawMovieResults(box) {
     box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
     return;
   }
-  streamsFor([...(svc?.list || []), ...titles]);
+  streamsFor([...(svc?.list || []), ...titles, ...lastImdb.map(x => x.tm).filter(Boolean)]);
   // One list: TMDB's results, with IMDb-only movies slotted in where IMDb ranked them (duplicates were left out above).
   const rows = titles.map(movieRow);
-  for (const x of lastImdb) rows.splice(Math.min(x.rank, rows.length), 0, imdbRow(x));
+  for (const x of lastImdb) rows.splice(Math.min(x.rank, rows.length), 0, x.tm ? movieRow(x.tm) : imdbRow(x));
   box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
     + (rows.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
@@ -2001,7 +2013,7 @@ const actions = {
   },
   'movie-add'(b, e, seen) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || state.movies[id];
+    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || lastImdb.find(x => x.tm?.id === id)?.tm || state.movies[id];
     if (!m) return;
     const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
