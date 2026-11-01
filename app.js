@@ -899,6 +899,8 @@ async function recShow(b) {
 /* ---------- movies (TMDB) ----------
    Search can switch to Movies. Added movies are listed under My Movies at the bottom of My Shows (To watch) and checked
    off once watched, which moves them to Watched. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
+// Titles corrected from IMDb (TMDB id -> { name, year }), so the movie page shows them too. Kept on the device.
+const K_RENAME = 'tvt.movieRename.v1', renamed = load(K_RENAME, {});
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
 // Runtime, US rating, genres and where it streams, for the cards on My Movies, kept on this device for a week
 // (streaming changes): TMDB id -> { runtime, rating, genres, stream, rent, t }.
@@ -920,7 +922,7 @@ async function fetchMovie(id) {
   if (!j) return null;
   const us = j.release_dates?.results?.find(r => r.iso_3166_1 === 'US');
   const prov = j['watch/providers']?.results?.US || {};
-  return movieCache[id] = { ...trimMovie(j), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
+  return movieCache[id] = { ...trimMovie(j), ...(renamed[id] || {}), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
     rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '',
     stream: [...new Set((prov.flatrate || []).map(x => serviceName(x.provider_name)))], rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
 }
@@ -1190,6 +1192,13 @@ let lastImdb = [];   // IMDb titles from the last movie search that TMDB's resul
 // IMDb id -> TMDB's movie for it (trimmed), or 0 when TMDB has none. Kept on the device: matches for good, misses for a
 // day (TMDB adds new movies). Lets the merged list leave out a movie both have — matched by id, not just title and year.
 const K_IMAP = 'tvt.imdbMap.v1', imap = load(K_IMAP, {});
+function imdbFix(m, x) {
+  if (!x.title || plain(m.name) === plain(x.title) && (m.year || !x.year)) return false;
+  m.name = x.title; if (!m.year && x.year) m.year = x.year; if (!m.image && x.image) m.image = imdbImg(x.image);
+  renamed[m.id] = { name: m.name, year: m.year }; save(K_RENAME, renamed);
+  if (movieCache[m.id]) Object.assign(movieCache[m.id], renamed[m.id]);
+  return true;
+}
 async function tmdbForImdb(tt) {
   const c = imap[tt];
   if (c && (c.m || now() - c.t < DAY)) return c.m || 0;
@@ -1294,6 +1303,15 @@ async function doSearch(q) {
       const have = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => m.id));
       const known = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => plain(m.name) + '|' + (m.year || '')));
       lastImdb = imdbHits.filter(x => x.tm ? !have.has(x.tm.id) : x.tm === 0 || !known.has(plain(x.title) + '|' + x.year));
+      // TMDB can lag behind on a new release: still under its working title, no release date (Angel's The Space Between
+      // Us is "Between the Lines" there). For a movie both have, IMDb's title and year win, wherever it's listed.
+      for (const x of imdbHits) if (x.tm) {
+        const t = lastMovies.find(m => m.id === x.tm.id) || svcHit?.list.find(m => m.id === x.tm.id) || x.tm;
+        if (imdbFix(t, x) && lastMovies.includes(t) && !ids.has(t.id)) {   // renamed: list it where IMDb ranks it, not at TMDB's spot
+          lastMovies.splice(lastMovies.indexOf(t), 1); lastImdb.push({ ...x, tm: t });
+        }
+      }
+      lastImdb.sort((a, b) => a.rank - b.rank);
       if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
