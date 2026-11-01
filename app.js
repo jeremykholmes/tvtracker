@@ -1203,6 +1203,27 @@ async function serviceMovies(hit) {
   const have = new Set(hit.list.map(m => m.id));
   hit.list.push(...(j?.results || []).map(trimMovie).filter(m => m.name && !have.has(m.id)));
 }
+// Angel Studios' whole US catalog, so its movies turn up in a normal title search (first, even when TMDB's own
+// results bury them under other movies of the same name). Up to 600 movies, kept on the device for a day.
+const K_ANGEL = 'tvt.angel.v2';
+let angelCat = load(K_ANGEL, null), angelLoading = null;
+function angelCatalog() {
+  if (angelCat?.list && now() - angelCat.t < DAY) return Promise.resolve(angelCat.list);
+  return angelLoading ||= (async () => {
+    const p = (await movieProviders()).find(x => plain(x.name) === 'angel studios');
+    if (!p) return [];
+    const hit = { id: p.id, page: 0, pages: 1, list: [] };
+    while (hit.page < Math.min(hit.pages, 30)) await serviceMovies(hit);
+    hit.list.forEach(m => { m.summary = m.summary.slice(0, 160); });
+    angelCat = { t: now(), list: hit.list }; save(K_ANGEL, angelCat);
+    return hit.list;
+  })().catch(() => angelCat?.list || []).finally(() => { angelLoading = null; });
+}
+// Angel movies whose title has every word of the search (word starts, so "king" finds The King of Kings).
+function angelMatches(list, q) {
+  const words = plain(q).split(' ').filter(Boolean);
+  return !words.length ? [] : list.filter(m => { const n = ' ' + plain(m.name); return words.every(w => n.includes(' ' + w)); });
+}
 // Where each movie in the results streams: looked up 4 at a time and kept with My Movies' details for a week.
 function streamsFor(list) {
   const todo = list.filter(m => !detailsFresh(m.id) && !detailsAsked.has(m.id)).slice(0, 40);
@@ -1234,6 +1255,7 @@ views.search = () => {
   q.addEventListener('blur', () => { if (document.hasFocus()) finish(); });   // not when switching apps/tabs
   $('#searchForm').addEventListener('submit', e => { e.preventDefault(); finish(); q.blur(); });
   if (q.value) doSearch(q.value); else drawResults();
+  if (mv) angelCatalog();   // fetched ahead, so Angel Studios movies are ready for the first search
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
@@ -1241,11 +1263,14 @@ async function doSearch(q) {
   const seq = ++searchSeq;
   if (searchMode() === 'movie') {
     try {
-      const [r, svc] = await Promise.all([
+      const [r, svc, angel] = await Promise.all([
         tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`).then(j => j?.results || []),
-        serviceFor(q).then(async p => { if (!p) return null; const hit = { id: p.id, name: p.name, page: 0, pages: 0, list: [] }; await serviceMovies(hit); return hit; }).catch(() => null)]);
+        serviceFor(q).then(async p => { if (!p) return null; const hit = { id: p.id, name: p.name, page: 0, pages: 0, list: [] }; await serviceMovies(hit); return hit; }).catch(() => null),
+        Promise.resolve(angelMatches(angelCat?.list || [], q))]);
       if (seq !== searchSeq) return;
-      lastMovies = r.map(trimMovie).filter(m => m.name); lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
+      const found = r.map(trimMovie).filter(m => m.name), ids = new Set(angel.map(m => m.id));
+      lastMovies = [...angel, ...found.filter(m => !ids.has(m.id))]; lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
+      if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
     return;
