@@ -1281,7 +1281,7 @@ async function doSearch(q) {
       lastMovies = [...angel, ...found.filter(m => !ids.has(m.id))]; lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
       // IMDb titles TMDB doesn't seem to have (no TMDB result with the same title and year): brand-new releases, mostly.
       const known = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => plain(m.name) + '|' + (m.year || '')));
-      lastImdb = imdbHits.filter(x => !known.has(plain(x.title) + '|' + x.year) && !lastMovies.some(m => plain(m.name) === plain(x.title) && !m.year));
+      lastImdb = imdbHits.filter(x => !known.has(plain(x.title) + '|' + x.year));   // same title but no year on TMDB isn't enough: that hid IMDb's new releases
       if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
