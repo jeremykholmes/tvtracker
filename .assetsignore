@@ -11,3 +11,4 @@ wrangler.jsonc
 CLAUDE.md
 README.md
 firestore.rules
+worker.js
