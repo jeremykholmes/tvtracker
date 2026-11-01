@@ -904,7 +904,7 @@ const K_RENAME = 'tvt.movieRename.v1', renamed = load(K_RENAME, {});
 const movieCache = {};   // TMDB id -> full details for the movie page, this visit only
 // Runtime, US rating, genres and where it streams, for the cards on My Movies, kept on this device for a week
 // (streaming changes): TMDB id -> { runtime, rating, genres, stream, rent, t }.
-const K_MDET = 'tvt.movieDetails.v2', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
+const K_MDET = 'tvt.movieDetails.v3', movieDetails = load(K_MDET, {}), detailsAsked = new Set();
 const detailsFresh = id => movieDetails[id] && now() - movieDetails[id].t < 7 * DAY;
 const runtimeText = min => min ? `${min >= 60 ? Math.floor(min / 60) + 'h ' : ''}${min % 60 ? (min % 60) + 'm' : ''}`.trim() : '';
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
@@ -918,13 +918,27 @@ function trimMovie(m) {
 // "Starz Amazon Channel" and "Starz Apple TV channel" are both just Starz.
 const serviceName = n => n.replace(/\s+(amazon|apple tv|roku premium|prime video)?\s*channel$/i, '').trim() || n;
 async function fetchMovie(id) {
-  const j = await tmdb(`/movie/${id}?language=en-US&append_to_response=watch/providers,release_dates`);
+  const j = await tmdb(`/movie/${id}?language=en-US&append_to_response=watch/providers,release_dates,external_ids`);
   if (!j) return null;
   const us = j.release_dates?.results?.find(r => r.iso_3166_1 === 'US');
   const prov = j['watch/providers']?.results?.US || {};
-  return movieCache[id] = { ...trimMovie(j), ...(renamed[id] || {}), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
-    rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '',
+  const m = { ...trimMovie(j), ...(renamed[id] || {}), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
+    rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '', imdb: j.external_ids?.imdb_id || '',
     stream: [...new Set((prov.flatrate || []).map(x => serviceName(x.provider_name)))], rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
+  // On My Movies under another name: that's IMDb's newer title (TMDB still had a working title), saved with the movie
+  // so every device shows it. Same for its poster.
+  const mine = state.movies[id];
+  if (mine && !mine.custom) {
+    if (mine.name && plain(mine.name) !== plain(j.title || '')) m.name = mine.name;
+    if (!m.year && mine.year) m.year = mine.year;
+    if (!m.image && mine.image) m.image = mine.image;
+  }
+  // No poster on TMDB yet (a brand-new release): borrow IMDb's, and keep it with the movie if it's on My Movies.
+  if (!m.image && m.imdb) {
+    const hit = (await imdbSearch(m.name)).find(x => x.id === m.imdb);
+    if (hit?.image) { m.image = imdbImg(hit.image); if (hasMovie(id)) setMovie(id, { image: m.image }); }
+  }
+  return movieCache[id] = m;
 }
 // rec: name of the friend who recommended it, shown on its card.
 function addMovie(m, seen, rec) {
@@ -1195,8 +1209,8 @@ const K_IMAP = 'tvt.imdbMap.v1', imap = load(K_IMAP, {});
 function imdbFix(m, x) {
   if (!x.title || plain(m.name) === plain(x.title) && (m.year || !x.year)) return false;
   m.name = x.title; if (!m.year && x.year) m.year = x.year; if (!m.image && x.image) m.image = imdbImg(x.image);
-  renamed[m.id] = { name: m.name, year: m.year }; save(K_RENAME, renamed);
-  if (movieCache[m.id]) Object.assign(movieCache[m.id], renamed[m.id]);
+  renamed[m.id] = { name: m.name, year: m.year, ...(m.image ? { image: m.image } : {}) }; save(K_RENAME, renamed);
+  if (movieCache[m.id]) { Object.assign(movieCache[m.id], renamed[m.id]); if (!movieCache[m.id].image && m.image) movieCache[m.id].image = m.image; }
   return true;
 }
 async function tmdbForImdb(tt) {
@@ -2031,7 +2045,7 @@ const actions = {
   },
   'movie-add'(b, e, seen) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = movieCache[id] || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || lastImdb.find(x => x.tm?.id === id)?.tm || state.movies[id];
+    const id = +b.dataset.movie, m = lastImdb.find(x => x.tm?.id === id)?.tm || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || movieCache[id] || state.movies[id];
     if (!m) return;
     const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
