@@ -3,8 +3,10 @@
 {
   "name": "tvtracker",
   "compatibility_date": "2026-10-30",
+  "main": "worker.js",   // only runs for /api/… addresses; every website file is served as-is
   "assets": {
     "directory": ".",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
   }

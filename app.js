@@ -929,7 +929,7 @@ function addMovie(m, seen, rec) {
   if (isKid()) return;
   const t = now();
   state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t, ...(rec ? { rec } : {}),
-    ...(m.custom ? { custom: true, where: m.where || '' } : {}) };
+    ...(m.custom ? { custom: true, where: m.where || '', ...(m.imdb ? { imdb: m.imdb } : {}) } : {}) };
   queue('movies', m.id, state.movies[m.id]); persist();
 }
 function setMovie(id, fields) {
@@ -948,7 +948,8 @@ function movieCard(m) {
   const seen = !!m.w, d = m.custom ? { stream: m.where ? [m.where] : [] } : movieDetails[m.id];
   return `<article class="card movie${seen ? ' seen' : ''}">
     <div style="position:relative">${poster(m, m.custom ? '' : '#/movie/' + m.id)}</div>
-    <div class="body">${m.custom ? `<span class="title">${esc(m.name)}</span>` : `<a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>`}
+    <div class="body">${m.imdb ? `<a class="title" href="https://www.imdb.com/title/${esc(m.imdb)}/" target="_blank" rel="noopener">${esc(m.name)}</a>`
+      : m.custom ? `<span class="title">${esc(m.name)}</span>` : `<a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>`}
       <div class="sub">${esc(['Movie', m.year, runtimeText(d?.runtime), d?.rating].filter(Boolean).join(' · '))}</div>
       ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
       ${d?.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
@@ -1185,6 +1186,10 @@ const showLookup = {};   // id -> trimmed show from search/discover, used when f
 const K_PROV = 'tvt.movieProviders.v1';
 let provList = load(K_PROV, null), provLoading = null;
 let svcHit = null;   // the service the last movie search named: { id, name, page, pages, list }
+let lastImdb = [];   // IMDb titles from the last movie search that TMDB didn't have: { id: 'tt…', title, year, stars, image }
+// IMDb's title search, through the site's own Worker (worker.js). Empty on any problem, so search still works without it.
+const imdbSearch = q => fetch('/api/imdb?q=' + encodeURIComponent(q)).then(r => r.ok ? r.json() : { d: [] }).then(j => j.d || []).catch(() => []);
+const imdbImg = u => u ? u.replace(/\._V1_.*\.jpg$/, '._V1_QL75_UX300_.jpg') : '';   // a poster-sized copy of IMDb's image
 const plain = t => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/\+/g, ' plus').replace(/[^a-z0-9]+/g, ' ').trim();
 function movieProviders() {
   if (provList?.list && now() - provList.t < DAY) return Promise.resolve(provList.list);
@@ -1262,17 +1267,21 @@ views.search = () => {
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
-  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; svcHit = null; return drawResults(); }
+  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; svcHit = null; lastImdb = []; return drawResults(); }
   const seq = ++searchSeq;
   if (searchMode() === 'movie') {
     try {
-      const [r, svc, angel] = await Promise.all([
+      const [r, svc, angel, imdbHits] = await Promise.all([
         tmdb(`/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`).then(j => j?.results || []),
         serviceFor(q).then(async p => { if (!p) return null; const hit = { id: p.id, name: p.name, page: 0, pages: 0, list: [] }; await serviceMovies(hit); return hit; }).catch(() => null),
-        Promise.resolve(angelMatches(angelCat?.list || [], q))]);
+        Promise.resolve(angelMatches(angelCat?.list || [], q)),
+        imdbSearch(q)]);
       if (seq !== searchSeq) return;
       const found = r.map(trimMovie).filter(m => m.name), ids = new Set(angel.map(m => m.id));
       lastMovies = [...angel, ...found.filter(m => !ids.has(m.id))]; lastMovieQuery = q; svcHit = svc?.list.length ? svc : null;
+      // IMDb titles TMDB doesn't seem to have (no TMDB result with the same title and year): brand-new releases, mostly.
+      const known = new Set([...lastMovies, ...(svcHit?.list || [])].map(m => plain(m.name) + '|' + (m.year || '')));
+      lastImdb = imdbHits.filter(x => !known.has(plain(x.title) + '|' + x.year) && !lastMovies.some(m => plain(m.name) === plain(x.title) && !m.year));
       if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
       drawResults();
     } catch (e) { toast(e.message); }
@@ -1315,7 +1324,7 @@ const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
     ${movieBtn(m)}</div>`;
 function drawMovieResults(box) {
   const svc = svcHit, titles = svc ? lastMovies.filter(m => !svc.list.some(x => x.id === m.id)) : lastMovies;
-  if (!svc && !titles.length) {
+  if (!svc && !titles.length && !lastImdb.length) {
     box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
     return;
   }
@@ -1323,8 +1332,16 @@ function drawMovieResults(box) {
   box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
     + (titles.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + titles.map(movieRow).join('') : '')
+    + (lastImdb.length ? `<h2 class="svchead">More from IMDb</h2><p class="sub">Newer movies our movie list doesn't have yet</p>${lastImdb.map(imdbRow).join('')}` : '')
     + ownMovieBtn();
 }
+const imdbRow = x => { const m = { id: x.id, name: x.title, image: imdbImg(x.image) }, on = hasMovie(x.id);
+  return `<div class="row">${poster(m)}
+    <div class="info"><a href="https://www.imdb.com/title/${esc(x.id)}/" target="_blank" rel="noopener">${esc(x.title)}</a>
+      <div class="sub">${['Movie', x.year, 'IMDb'].filter(Boolean).map(esc).join(' · ')}</div>${x.stars ? `<div class="sub">${esc(x.stars)}</div>` : ''}</div>
+    ${isKid() ? '' : on ? `<button class="btn sm" data-act="movie-remove" data-movie="${esc(x.id)}" title="On My Movies — tap to remove">✓ Added</button>`
+      : `<span class="addbtns"><button class="btn primary sm" data-act="imdb-add" data-imdb="${esc(x.id)}">＋ Add</button>
+         <button class="btn sm" data-act="imdb-add" data-seen="1" data-imdb="${esc(x.id)}" title="Already watched it">✓ Seen it</button></span>`}</div>`; };
 // Brand-new movies (like a just-released Angel Studios film) can be missing from TMDB: let people add one by hand.
 const ownMovieBtn = () => !lastMovieQuery || isKid() ? '' : `<div class="ownmovie"><p class="sub">Can't find it? New movies can take a few weeks to show up here.</p>
   <button type="button" class="btn" data-act="own-movie">＋ Add “${esc(lastMovieQuery)}” yourself</button></div>`;
@@ -1989,6 +2006,16 @@ const actions = {
     render(); toast(seen ? `${m.name} added to My Movies as watched` : `Added ${m.name} to My Movies`);
   },
   'movie-seen'(b, e) { return actions['movie-add'](b, e, true); },
+  async 'imdb-add'(b) {   // an IMDb result: use TMDB's entry if it has one by now, else save IMDb's details
+    if (!requireAccount(true)) return;
+    const x = lastImdb.find(i => i.id === b.dataset.imdb); if (!x) return;
+    const seen = !!b.dataset.seen;
+    b.disabled = true;
+    const t = await tmdb(`/find/${x.id}?external_source=imdb_id&language=en-US`).then(j => j?.movie_results?.[0]).catch(() => null);
+    const m = t ? trimMovie(t) : { id: x.id, name: x.title, year: x.year, image: imdbImg(x.image), custom: true, imdb: x.id, where: '' };
+    if (state.movies[m.id]) setMovie(m.id, { removed: false, w: seen }); else addMovie(m, seen);
+    render(); toast(seen ? `${m.name} added to My Movies as watched` : `Added ${m.name} to My Movies`);
+  },
   'own-movie'() { if (requireAccount(true)) ownMovieDialog(lastMovieQuery); },
   'movie-watch'(b) {
     if (!requireAccount() || b.classList.contains('on')) return;
