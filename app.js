@@ -908,6 +908,7 @@ const runtimeText = min => min ? `${min >= 60 ? Math.floor(min / 60) + 'h ' : ''
 const myMovies = () => isKid() ? [] : Object.values(state.movies).filter(m => !m.removed);
 const hasMovie = id => !isKid() && !!(state.movies[id] && !state.movies[id].removed);
 const movieSeen = id => hasMovie(id) && !!state.movies[id].w;
+const mid = v => /^\d+$/.test(String(v)) ? +v : String(v);   // a TMDB id, or 'c…' for a movie added by hand (not on TMDB yet)
 function trimMovie(m) {
   return { id: m.id, name: m.title || m.name || '', image: m.poster_path ? TMDB_IMG + m.poster_path : '',
     year: (m.release_date || '').slice(0, 4), date: m.release_date || '', summary: (m.overview || '').slice(0, 700), pop: m.popularity || 0 };
@@ -927,7 +928,8 @@ async function fetchMovie(id) {
 function addMovie(m, seen, rec) {
   if (isKid()) return;
   const t = now();
-  state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t, ...(rec ? { rec } : {}) };
+  state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t, ...(rec ? { rec } : {}),
+    ...(m.custom ? { custom: true, where: m.where || '' } : {}) };
   queue('movies', m.id, state.movies[m.id]); persist();
 }
 function setMovie(id, fields) {
@@ -943,16 +945,17 @@ function movieBtn(m) {
     <button class="btn sm" data-act="movie-seen" data-movie="${m.id}" title="Already watched it">✓ Seen it</button></span>`;
 }
 function movieCard(m) {
-  const seen = !!m.w, d = movieDetails[m.id];
+  const seen = !!m.w, d = m.custom ? { stream: m.where ? [m.where] : [] } : movieDetails[m.id];
   return `<article class="card movie${seen ? ' seen' : ''}">
-    <div style="position:relative">${poster(m, '#/movie/' + m.id)}</div>
-    <div class="body"><a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>
+    <div style="position:relative">${poster(m, m.custom ? '' : '#/movie/' + m.id)}</div>
+    <div class="body">${m.custom ? `<span class="title">${esc(m.name)}</span>` : `<a class="title" href="#/movie/${m.id}">${esc(m.name)}</a>`}
       <div class="sub">${esc(['Movie', m.year, runtimeText(d?.runtime), d?.rating].filter(Boolean).join(' · '))}</div>
       ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
       ${d?.stream?.length ? `<div class="sub stream">On ${esc(d.stream.join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
       ${m.rec ? `<div class="sub">From ${esc(m.rec)}</div>` : ''}
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
-        : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}</div></article>`;
+        : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}
+      ${m.custom ? `<button class="btn ghost sm" data-act="movie-remove" data-movie="${m.id}">Remove</button>` : ''}</div></article>`;
 }
 // My Movies: its own part at the bottom of My Shows, with a heading like My Shows' and a way to add one.
 function moviesSection() {
@@ -960,7 +963,7 @@ function moviesSection() {
   const all = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
   // Cards without details yet (or a week old): look them up once, then redraw.
-  const todo = all.filter(m => !detailsFresh(m.id) && !detailsAsked.has(m.id));
+  const todo = all.filter(m => !m.custom && !detailsFresh(m.id) && !detailsAsked.has(m.id));
   if (todo.length) {
     todo.forEach(m => detailsAsked.add(m.id));
     inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
@@ -1313,13 +1316,34 @@ const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
 function drawMovieResults(box) {
   const svc = svcHit, titles = svc ? lastMovies.filter(m => !svc.list.some(x => x.id === m.id)) : lastMovies;
   if (!svc && !titles.length) {
-    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>`;
+    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
     return;
   }
   streamsFor([...(svc?.list || []), ...titles]);
   box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
-    + (titles.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + titles.map(movieRow).join('') : '');
+    + (titles.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + titles.map(movieRow).join('') : '')
+    + ownMovieBtn();
+}
+// Brand-new movies (like a just-released Angel Studios film) can be missing from TMDB: let people add one by hand.
+const ownMovieBtn = () => !lastMovieQuery || isKid() ? '' : `<div class="ownmovie"><p class="sub">Can't find it? New movies can take a few weeks to show up here.</p>
+  <button type="button" class="btn" data-act="own-movie">＋ Add “${esc(lastMovieQuery)}” yourself</button></div>`;
+function ownMovieDialog(title) {
+  const d = $('#appDialog');
+  d.innerHTML = `<form class="stack" id="ownForm" autocomplete="off"><h2>Add a movie yourself</h2>
+    <p class="sub">For a movie that isn't in our movie list yet. It goes on My Movies like any other.</p>
+    <div class="field"><label for="ownName">Title</label><input id="ownName" name="mname" maxlength="120" required value="${esc(title)}"></div>
+    <div class="field"><label for="ownYear">Year (optional)</label><input id="ownYear" name="myear" inputmode="numeric" maxlength="4" pattern="\\d{4}" value="${new Date().getFullYear()}"></div>
+    <div class="field"><label for="ownWhere">Where it's streaming (optional)</label><input id="ownWhere" name="mwhere" maxlength="60" placeholder="e.g. Angel Studios"></div>
+    <div class="actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Add to my movies</button></div></form>`;
+  d.querySelector('[data-close]').onclick = () => d.close();
+  $('#ownForm').onsubmit = e => {
+    e.preventDefault();
+    const f = e.target.elements, name = f.mname.value.trim(); if (!name) return;
+    const m = { id: 'c' + now().toString(36), name, year: f.myear.value.trim(), where: f.mwhere.value.trim(), image: '', custom: true };
+    addMovie(m, false); d.close(); render(); toast(`Added ${name} to My Movies`);
+  };
+  d.showModal(); $('#ownWhere').focus();
 }
 
 views.login = mode => {
@@ -1965,20 +1989,21 @@ const actions = {
     render(); toast(seen ? `${m.name} added to My Movies as watched` : `Added ${m.name} to My Movies`);
   },
   'movie-seen'(b, e) { return actions['movie-add'](b, e, true); },
+  'own-movie'() { if (requireAccount(true)) ownMovieDialog(lastMovieQuery); },
   'movie-watch'(b) {
     if (!requireAccount() || b.classList.contains('on')) return;
-    const id = +b.dataset.movie, m = state.movies[id]; if (!m) return;
+    const id = mid(b.dataset.movie), m = state.movies[id]; if (!m) return;
     b.classList.add('on');
     setTimeout(() => { setMovie(id, { w: true }); render(); toast(`${m.name} watched`, () => { setMovie(id, { w: false }); render(); }); }, b.classList.contains('watchbtn') ? 550 : 0);
   },
   'movie-unwatch'(b) {
     if (!requireAccount()) return;
-    const id = +b.dataset.movie; if (!state.movies[id]) return;
+    const id = mid(b.dataset.movie); if (!state.movies[id]) return;
     setMovie(id, { w: false }); render(); toast(`${state.movies[id].name} moved back to To watch`);
   },
   'movie-remove'(b) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = state.movies[id]; if (!m) return;
+    const id = mid(b.dataset.movie), m = state.movies[id]; if (!m) return;
     setMovie(id, { removed: true }); render();
     toast(`Removed ${m.name}`, () => { setMovie(id, { removed: false }); render(); });
   },

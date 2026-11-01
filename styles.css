@@ -452,6 +452,8 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .seg.qmode { max-width: 360px; margin: 6px 0 14px; }
 .svchead { font-size: 18px; margin: 18px 0 2px; }
+.ownmovie { margin: 22px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ownmovie .sub { margin: 0 0 8px; }
 .card.movie.seen { opacity: .8; }
 details.moviesdone > summary { list-style: none; cursor: pointer; }
 details.moviesdone > summary::-webkit-details-marker { display: none; }
