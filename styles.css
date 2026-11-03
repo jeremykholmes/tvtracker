@@ -82,7 +82,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
 .code { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); white-space: nowrap; }
 
-.empty { text-align: center; padding: 60px 20px; background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty { text-align: center; padding: 60px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .empty p { color: var(--muted); max-width: 440px; margin: 8px auto 18px; }
 .loading { color: var(--muted); padding: 40px 0; text-align: center; }
 
@@ -424,7 +424,6 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 /* Future watch list: shows saved for later, which move to Up next once an episode is checked off */
 .futurehint { margin: -6px 0 12px; }
 .badge.later { background: var(--panel); color: var(--text); border: 1px solid var(--line); }
-.card.later { border-style: dashed; }
 .laternote { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
 .addbtns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
@@ -550,7 +549,6 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .grid .card .poster { width: 100%; border-radius: 10px; }
 .grid .card .poster:hover { outline: 2px solid var(--accent); }
 .grid .card .poster .noimg { font-size: 28px; }
-.grid .card.later .poster { outline: 2px dashed var(--line); outline-offset: -2px; }
 .grid .card .body { gap: 3px; }
 .grid .card .title { font-size: 15px; font-weight: 650; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .grid .card .sub, .grid .card .next { font-size: 13px; }
