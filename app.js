@@ -304,6 +304,7 @@ views.landing = () => {
       <p class="lead">TV Tracker keeps every series you watch organized — what's next, what's new, and when it airs — across every network and streaming service. Plus a movie list, with where each one is streaming.</p>
       ${cta}
       <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a></p>
+      <p class="lp-signin">Switching from TV Time, Trakt or Letterboxd? <a href="#/login/create">Bring your history with you</a> — import it in one step.</p>
     </div>
     <div class="lp-visual" aria-hidden="true">
       <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
@@ -312,7 +313,8 @@ views.landing = () => {
     </div>
   </section>
   <section class="lp-nets"><p>Track shows and movies from every network and streamer</p>
-    <div class="lp-netlist">${nets.map(n => `<span>${n}</span>`).join('')}</div></section>
+    <div class="lp-netlist">${nets.map(n => `<span>${n}</span>`).join('')}</div>
+    <p class="newon">See what's new this week on ${NEW_ON.map(([slug, name]) => `<a href="/new/${slug}">${esc(name)}</a>`).join(' · ')}</p></section>
   <section class="lp-sec"><span class="eyebrow">Popular shows</span><h2 class="lp-h2">Keep up with the shows everyone's watching</h2>
     <div class="lp-posters">${LP_SHOWS.map(n => `<a class="lp-pc" href="#/search"><span class="lp-pimg" data-lp="${esc(n)}"><span class="noimg">${esc(n.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span></span><b>${esc(n)}</b></a>`).join('')}</div></section>
   <section class="lp-sec lp-share lp-movies">
@@ -342,7 +344,7 @@ views.landing = () => {
     </div></div></section>
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
     <ol class="lp-steps">
-      <li><b>Create your account</b><p>Sign up with Google in one click, or use your email.</p></li>
+      <li><b>Create your account</b><p>Sign up with Google in one click, or use your email. Coming from TV Time, Trakt or Letterboxd? Import your history.</p></li>
       <li><b>Add your shows and movies</b><p>Search any series or film and add it to your list.</p></li>
       <li><b>Check off as you watch</b><p>We'll keep track of what's next and what's new.</p></li>
     </ol></section>
@@ -806,6 +808,9 @@ views.upcoming = () => {
 
 // Discover: rows of recommendations from what you watch, then this week's premieres.
 let discoverLoading = null;
+// "New this week on <service>" pages (seo.js), linked from Discover and the home page.
+const NEW_ON = [['netflix', 'Netflix'], ['hulu', 'Hulu'], ['disney-plus', 'Disney+'], ['max', 'HBO Max'], ['prime-video', 'Prime Video'],
+  ['apple-tv', 'Apple TV+'], ['peacock', 'Peacock'], ['paramount-plus', 'Paramount+']];
 views.discover = () => {
   const d = meta.discover, stale = !d || now() - d.t > STALE;
   if (stale && !discoverLoading) discoverLoading = loadDiscover().catch(e => toast('Couldn\'t load premieres: ' + e.message)).finally(() => { discoverLoading = null; if (route().name === 'discover') render(); });
@@ -822,6 +827,7 @@ views.discover = () => {
       <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
     ${recsSection()}
     <h2 class="dhead">Premiering this week</h2>
+    <p class="newon">New this week on: ${NEW_ON.map(([slug, name]) => `<a href="/new/${slug}">${esc(name)}</a>`).join(' · ')}</p>
     ${premieres}`;
 };
 
@@ -1618,6 +1624,76 @@ function drawMore(t) {
     <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026.</p>`;
 }
 
+/* ---------- import from TV Time, Trakt, Letterboxd (Account page) ----------
+   importer.js reads the files on the device; here each show is matched to TVmaze (by its TVDB or IMDb id when the
+   export has one, otherwise by name) and each movie to TMDB (by id, IMDb id, or title and year). Shows already on
+   the list get only their missing checkmarks; movies already on My Movies are marked seen if the export says so. */
+function setupImport() {
+  const out = $('#impOut'), file = $('#impFile'); if (!out || !file) return;
+  const lib = () => import('./importer.js' + new URL(import.meta.url).search);
+  const show = async files => {
+    out.innerHTML = '<p class="loading">Reading…</p>';
+    try {
+      const { parse } = await lib();
+      const found = parse(files, $('#impKind').value);
+      const nEps = found.shows.reduce((a, s) => a + s.watched.length, 0), seen = found.movies.filter(m => m.seen).length;
+      if (!found.shows.length && !found.movies.length) { out.innerHTML = '<p class="formerr">No shows or movies found in that. Check it\'s the export file from TV Time, Trakt or Letterboxd (the .zip is fine).</p>'; return; }
+      out.innerHTML = `<p>Found ${found.shows.length ? `<b>${found.shows.length} show${found.shows.length === 1 ? '' : 's'}</b>${nEps ? ` (${nEps.toLocaleString()} watched episode${nEps === 1 ? '' : 's'})` : ''}` : ''}${found.shows.length && found.movies.length ? ' and ' : ''}${found.movies.length ? `<b>${found.movies.length} movie${found.movies.length === 1 ? '' : 's'}</b> (${seen} seen, ${found.movies.length - seen} to watch)` : ''} from ${esc(found.sources.join(', '))}.</p>
+        <div class="actions"><button type="button" class="btn primary" id="impGo">Import them</button><button type="button" class="btn" id="impCancel">Cancel</button></div>`;
+      $('#impCancel').onclick = () => { out.innerHTML = ''; file.value = ''; };
+      $('#impGo').onclick = () => runImport(found, out);
+    } catch (x) { console.warn('import', x); out.innerHTML = `<p class="formerr">Couldn't read that file: ${esc(x.message || String(x))}</p>`; }
+  };
+  file.onchange = async () => {
+    if (!file.files.length) return;
+    out.innerHTML = '<p class="loading">Opening…</p>';
+    try { const { readFiles } = await lib(); show(await readFiles([...file.files])); }
+    catch (x) { console.warn('import', x); out.innerHTML = `<p class="formerr">Couldn't open that file: ${esc(x.message || String(x))}</p>`; }
+  };
+  $('#impTextBtn').onclick = () => { const t = $('#impText').value.trim(); if (t) show([{ name: 'list.txt', text: t }]); };
+}
+async function runImport(found, out) {
+  const total = found.shows.length + found.movies.length, missed = [];
+  let done = 0, shows = 0, eps = 0, movies = 0, seenNow = 0;
+  const progress = () => { out.innerHTML = `<p class="loading">Importing ${Math.min(++done, total)} of ${total}… Keep this page open.</p>`; };
+  const inThrees = async (items, fn) => { for (let i = 0; i < items.length; i += 3) await Promise.all(items.slice(i, i + 3).map(x => fn(x).catch(e => { console.warn('import', x, e); missed.push(x.name || '(no title)'); }).finally(progress))); };
+  out.innerHTML = '<p class="loading">Importing…</p>';
+  await inThrees(found.shows, async x => {
+    let s = x.tvdb ? await api(`/lookup/shows?thetvdb=${x.tvdb}`) : null;
+    if (!s && x.imdb) s = await api(`/lookup/shows?imdb=${x.imdb}`);
+    let t = s ? trimShow(s) : (x.tmdb ? await tvmazeFor(x.tmdb).catch(() => 0) : 0) || null;
+    if (!t && x.name) { s = await api(`/singlesearch/shows?q=${encodeURIComponent(x.name)}`); t = s ? trimShow(s) : null; }
+    if (!t) { missed.push(x.name || `TVDB ${x.tvdb}`); return; }
+    if (!isFollowed(t.id)) { follow(t, x.later); shows++; }
+    if (x.watched.length) {
+      const c = cache[t.id]?.episodes?.length ? cache[t.id] : await fetchShow(t.id);
+      const want = new Set(x.watched);
+      const ids = (c?.episodes || []).filter(e => want.has(`${e.s}:${e.n}`) && !isWatched(e.id)).map(e => e.id);
+      if (ids.length) { setWatched(ids, true); eps += ids.length; }
+    }
+  });
+  await inThrees(found.movies, async x => {
+    let t = null;
+    if (x.tmdb) { const j = await tmdb(`/movie/${x.tmdb}?language=en-US`); if (j) t = trimMovie(j); }
+    if (!t && x.imdb) t = await tmdbForImdb(x.imdb) || null;
+    if (!t && x.name) {
+      const q = y => tmdb(`/search/movie?query=${encodeURIComponent(x.name)}&language=en-US${y ? '&year=' + y : ''}`).then(r => r?.results?.[0]);
+      const hit = (x.year && await q(x.year)) || await q('');
+      if (hit) t = trimMovie(hit);
+    }
+    if (!t) { missed.push(x.name || x.imdb); return; }
+    if (!hasMovie(t.id)) { addMovie(t, x.seen); movies++; }
+    else if (x.seen && !movieSeen(t.id)) { setMovie(t.id, { w: true }); seenNow++; }
+  });
+  track('import', { shows, episodes: eps, movies, source: found.sources.join(', ') });
+  const parts = [shows && `${shows} show${shows === 1 ? '' : 's'}`, eps && `${eps.toLocaleString()} watched episode${eps === 1 ? '' : 's'}`,
+    movies && `${movies} movie${movies === 1 ? '' : 's'}`, seenNow && `${seenNow} movie${seenNow === 1 ? '' : 's'} marked seen`].filter(Boolean);
+  out.innerHTML = `<p><b>Done!</b> ${parts.length ? 'Added ' + parts.join(', ') + '.' : 'Everything was already on your list.'}</p>
+    ${missed.length ? `<p class="sub">Couldn't find ${missed.length}: ${missed.slice(0, 25).map(esc).join(', ')}${missed.length > 25 ? '…' : ''}. You can add those from Add Show.</p>` : ''}
+    <div class="actions"><a class="btn primary" href="#/">Go to My Shows</a></div>`;
+  $('#impFile').value = '';
+}
+
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
 views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = SPLASH; return; } location.hash = '#/login'; return; }
@@ -1696,6 +1772,18 @@ views.account = () => {
       <p class="formerr" id="loginErr" hidden></p>
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
+  <div class="panel" id="importPanel"><h3>Import from another app</h3>
+    <p>Bring your shows and movies over from <b>TV Time</b>, <b>Trakt</b> or <b>Letterboxd</b>: the shows you follow, the episodes you've watched, and the movies you've seen or want to see.</p>
+    <div class="actions"><label class="btn primary">Choose export file<input type="file" id="impFile" accept=".zip,.csv,.json,.txt" multiple hidden></label></div>
+    <details class="imphelp"><summary>How to get your export file</summary><ul>
+      <li><b>TV Time:</b> ask TV Time for a copy of your data (in the app's settings or TV Time's help center). It arrives by email as a .zip — upload it as it is.</li>
+      <li><b>Trakt:</b> on trakt.tv, open Settings → Data and export your data. Upload the .zip (or its .json files).</li>
+      <li><b>Letterboxd:</b> on letterboxd.com, open Settings → Data → Export your data. Upload the .zip.</li>
+      <li><b>Anything else:</b> a .csv file with a Title column, or type a list below.</li></ul></details>
+    <details class="imphelp"><summary>Or type a list of titles</summary>
+      <div class="field"><textarea id="impText" rows="5" placeholder="One per line, for example:&#10;Severance&#10;The Bear"></textarea></div>
+      <div class="actions"><select id="impKind" class="rolesel"><option value="shows">These are TV shows</option><option value="movies">These are movies</option></select><button type="button" class="btn" id="impTextBtn">Find them</button></div></details>
+    <div id="impOut"></div></div>
   <div class="panel"><h3>Recommending shows and movies</h3>
     <label class="checkrow"><input type="checkbox" id="findable" ${findable ? 'checked' : ''}> Let people find me by my exact full name when they send a show</label>
     <p class="sub">Only someone who types your whole name (${esc(user.name)}) finds you — there's no browsing or partial search. Anyone with your email can still send you a show. Shows people send appear at the top of My Shows.</p>
@@ -1733,6 +1821,7 @@ views.account = () => {
     catch (x) { re.checked = !re.checked; toast(cloud.friendlyError(x)); }
     re.disabled = false;
   };
+  setupImport();
   $('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target, err = $('#loginErr'), btn = f.querySelector('.primary');

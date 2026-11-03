@@ -514,3 +514,16 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .mk-movbtns { display: flex; gap: 6px; flex-wrap: wrap; }
 .mk-btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text) !important; }
 @media (max-width: 900px) { .lp-movies .lp-visual { order: 0; } .lp-movie-mk { transform: none; max-width: 460px; } }
+
+/* account page: import */
+.imphelp { margin: 8px 0; }
+.imphelp summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.imphelp ul { margin: 8px 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+.imphelp li { margin: 4px 0; }
+.imphelp .field { margin: 8px 0; }
+#impOut p { color: var(--text); }
+#impOut .sub { color: var(--muted); }
+
+.newon { color: var(--muted); font-size: 14px; margin: 8px 0 14px; }
+.newon a { color: var(--text); font-weight: 600; }
+.lp-nets .newon { text-align: center; margin-top: 16px; }

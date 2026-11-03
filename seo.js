@@ -5,7 +5,8 @@
 // Google can list. Each has the details people search for (seasons, episodes and air dates, where to watch) and
 // sends visitors into the app to track it. Shared links add ?r=<name>: link previews show the poster, and people
 // who open it go straight to the app's page with "<name> recommends this show".
-// Also the sitemaps that list them: /sitemaps/shows-<n>.xml (popular TVmaze shows) and /sitemaps/movies-<n>.xml.
+// Also "New this week on <service>" pages (/new and /new/netflix …) from TVmaze's schedule and TMDB, and
+// the sitemaps that list them: /sitemaps/shows-<n>.xml (popular TVmaze shows) and /sitemaps/movies-<n>.xml.
 
 const SITE = 'https://tvtracker.us';
 const TVMAZE = 'https://api.tvmaze.com';
@@ -56,7 +57,7 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${esc(url)}">
-  <meta property="og:type" content="video.${appHash.startsWith('movie') ? 'movie' : 'tv_show'}">
+  <meta property="og:type" content="${appHash.startsWith('movie') ? 'video.movie' : appHash.startsWith('show') ? 'video.tv_show' : 'website'}">
   <meta property="og:site_name" content="TV Tracker">
   <meta property="og:title" content="${esc(rec ? `${rec} recommends ${title.split(' – ')[0]}` : title)}">
   <meta property="og:description" content="${esc(description)}">
@@ -86,6 +87,18 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
     .seo .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
     .seo .chips li { background: var(--panel2); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
     .seo .note { color: var(--muted); font-size: 13px; }
+    .seo .lead { color: var(--muted); max-width: 70ch; margin: 0 0 16px; }
+    .seo .svcs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+    .seo .svcs a { text-decoration: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 14px; }
+    .seo .svcs a.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+    .seo .nwgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .seo .nwc { text-decoration: none; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .seo .nwc img, .seo .nwc .noimg { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 10px; background: var(--panel2); }
+    .seo .nwc b { font-size: 15px; line-height: 1.25; }
+    .seo .nwc span { color: var(--muted); font-size: 13px; line-height: 1.3; }
+    .seo .nwc .tag { align-self: flex-start; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 11px; border-radius: 6px; padding: 2px 7px; }
+    .newlinks { margin-top: 6px; }
+    @media (max-width: 640px) { .seo .nwgrid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 640px) { .seo-hero { grid-template-columns: 110px 1fr; gap: 14px; } .seo h1 { font-size: 24px; } }
   </style>
   <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
@@ -93,7 +106,8 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
 <body>
   <header class="top"><a href="/" class="brand"><img src="/icons/logo.svg" alt="" class="brandlogo"> TV Tracker</a></header>
   <main class="seo">${body}</main>
-  <footer class="foot"><a href="/">TV Tracker</a> · <a href="/privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
+  <footer class="foot"><div class="newlinks">New this week: ${SERVICES.map(s => `<a href="/new/${s.slug}">${esc(s.name)}</a>`).join(' · ')} · <a href="/new">All streaming</a></div>
+  <a href="/">TV Tracker</a> · <a href="/privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
 </body>
 </html>`;
 }
@@ -176,6 +190,94 @@ async function moviePage(id, slug, rec) {
   return html(page({ title, description, path: `/movie/${id}-${want}`, image, imageAlt: `${m.title} poster`, jsonLd, body, appHash: `movie/${id}`, rec }), 200, rec ? 600 : 6 * HOUR);
 }
 
+/* ---------- new this week ---------- */
+// tv: the names TVmaze gives the service (as a streaming channel, or a TV network whose shows stream there);
+// prov: TMDB's ids for the service in the US (several where it has more than one, e.g. with/without ads).
+export const SERVICES = [
+  { slug: 'netflix', name: 'Netflix', tv: /^Netflix$/i, prov: '8' },
+  { slug: 'hulu', name: 'Hulu', tv: /^Hulu$/i, prov: '15' },
+  { slug: 'disney-plus', name: 'Disney+', tv: /^Disney\+$/i, prov: '337' },
+  { slug: 'max', name: 'HBO Max', tv: /^(HBO Max|Max|HBO)$/i, prov: '1899|384' },
+  { slug: 'prime-video', name: 'Prime Video', tv: /^(Prime Video|Amazon Prime Video|Amazon Freevee)$/i, prov: '9' },
+  { slug: 'apple-tv', name: 'Apple TV+', tv: /^Apple TV\+?$/i, prov: '350' },
+  { slug: 'peacock', name: 'Peacock', tv: /^Peacock$/i, prov: '386|387' },
+  { slug: 'paramount-plus', name: 'Paramount+', tv: /^Paramount\+/i, prov: '531|2303|2616' }
+];
+// This week, Monday to Sunday, by the date in New York (when US streaming releases are dated).
+function thisWeek() {
+  const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const mon = new Date(today); mon.setDate(today.getDate() - (today.getDay() + 6) % 7);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return iso(d); });
+  return { days, today: iso(today) };
+}
+const dayName = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+const rangeText = days => {
+  const a = new Date(days[0] + 'T12:00:00Z'), b = new Date(days[6] + 'T12:00:00Z'), o = { timeZone: 'UTC' };
+  return a.getUTCMonth() === b.getUTCMonth() ? `${a.toLocaleDateString('en-US', { month: 'long', ...o })} ${a.getUTCDate()}–${b.getUTCDate()}, ${b.getUTCFullYear()}`
+    : `${a.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...o })} – ${b.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...o })}`;
+};
+// Every episode released this week (streaming, plus US TV for services that carry a network's shows), grouped by show.
+async function weekShows(days) {
+  const lists = await Promise.all(days.flatMap(d => [getJson(`${TVMAZE}/schedule/web?date=${d}`, 6 * HOUR), getJson(`${TVMAZE}/schedule?country=US&date=${d}`, 6 * HOUR)].map(p => p.catch(() => []))));
+  const shows = new Map();
+  for (const e of lists.flat()) {
+    const s = e?._embedded?.show || e?.show; if (!s || !e.airdate || e.number == null) continue;
+    if (s.language && s.language !== 'English' && !(s.webChannel?.name || '').match(/Netflix|Prime|Apple|Disney/)) continue;
+    const g = shows.get(s.id) || { s, eps: [] };
+    if (!g.eps.some(x => x.id === e.id)) g.eps.push({ id: e.id, season: e.season, number: e.number, airdate: e.airdate });
+    shows.set(s.id, g);
+  }
+  return [...shows.values()];
+}
+const serviceOf = s => s.webChannel?.name || s.network?.name || '';
+function showCard(g, today) {
+  const s = g.s, eps = g.eps.sort((a, b) => a.season - b.season || a.number - b.number);
+  const first = eps[0], last = eps[eps.length - 1], same = eps.every(e => e.airdate === first.airdate);
+  const premiere = eps.some(e => e.number === 1);
+  const tag = premiere ? (first.season === 1 ? 'New series' : `Season ${first.season} premiere`) : '';
+  const what = eps.length > 1 && same ? `All ${eps.length} episodes of season ${first.season}` : eps.length > 1 ? `Episodes ${first.number}–${last.number} of season ${first.season}` : `Season ${first.season}, episode ${first.number}`;
+  const when = first.airdate <= today ? (same ? `Out ${dayName(first.airdate)}` : `From ${dayName(first.airdate)}`) : `Coming ${dayName(first.airdate)}`;
+  const img = s.image?.medium || '';
+  return `<a class="nwc" href="/show/${s.id}-${slugify(s.name)}">${img ? `<img src="${esc(img)}" alt="${esc(s.name)} poster" loading="lazy" width="210" height="295">` : '<span class="noimg"></span>'}
+    ${tag ? `<span class="tag">${esc(tag)}</span>` : ''}<b>${esc(s.name)}</b><span>${esc(what)}</span><span>${esc(when)}${serviceOf(s) ? ' · ' + esc(serviceOf(s)) : ''}</span></a>`;
+}
+const movieCardHtml = m => `<a class="nwc" href="/movie/${m.id}-${slugify(m.title)}">${m.poster_path ? `<img src="https://image.tmdb.org/t/p/w342${esc(m.poster_path)}" alt="${esc(m.title)} poster" loading="lazy" width="210" height="315">` : '<span class="noimg"></span>'}
+  <b>${esc(m.title)}</b><span>${esc(year(m.release_date))}</span></a>`;
+
+async function newPage(slug) {
+  const svc = slug ? SERVICES.find(s => s.slug === slug) : null;
+  if (slug && !svc) return notFound('Page');
+  const { days, today } = thisWeek(), range = rangeText(days);
+  const all = await weekShows(days);
+  const rank = g => (g.eps.some(e => e.number === 1) ? 1000 : 0) + (g.s.weight || 0);
+  const pick = svc ? all.filter(g => svc.tv.test(serviceOf(g.s))) : all.filter(g => SERVICES.some(x => x.tv.test(serviceOf(g.s))) && (g.eps.some(e => e.number === 1) || (g.s.weight || 0) >= 90));
+  pick.sort((a, b) => rank(b) - rank(a));
+  const out = pick.filter(g => g.eps[0].airdate <= today).slice(0, 48), soon = pick.filter(g => g.eps[0].airdate > today).slice(0, 36);
+  let movies = [];
+  if (svc) {
+    const d = await getJson(`${TMDB}/discover/movie?api_key=${TMDB_KEY}&watch_region=US&with_watch_providers=${encodeURIComponent(svc.prov)}&with_watch_monetization_types=flatrate&sort_by=primary_release_date.desc&primary_release_date.lte=${today}&vote_count.gte=10&include_adult=false&language=en-US`, 6 * HOUR).catch(() => null);
+    movies = (d?.results || []).filter(m => m.title).slice(0, 12);
+  }
+  const name = svc ? svc.name : 'streaming';
+  const title = svc ? `New on ${svc.name} This Week (${range}) – Shows & Movies | TV Tracker` : `New on Streaming This Week (${range}) – Netflix, Hulu, Max & More | TV Tracker`;
+  const top = pick.slice(0, 4).map(g => g.s.name);
+  const description = clip(`What's new on ${name} this week, ${range}: ${top.length ? top.join(', ') + (pick.length > 4 ? ` and ${pick.length - 4} more` : '') + '. ' : ''}New series, season premieres and episodes${svc ? ', plus the newest movies' : ''}, updated daily.`, 160);
+  const svcLinks = `<nav class="svcs" aria-label="Streaming services"><a href="/new"${svc ? '' : ' class="on"'}>All</a>${SERVICES.map(s => `<a href="/new/${s.slug}"${svc === s ? ' class="on"' : ''}>${esc(s.name)}</a>`).join('')}</nav>`;
+  const body = `<h1>New on ${esc(name)} this week</h1>
+    <p class="lead">${esc(range)} · New series, season premieres and new episodes${svc ? ` on ${esc(svc.name)}` : ' across Netflix, Hulu, Disney+, HBO Max, Prime Video, Apple TV+, Peacock and Paramount+'}. Updated every day.</p>
+    ${svcLinks}
+    <div class="cta"><a class="btn primary" href="/#/login/create">＋ Track new episodes free</a></div>
+    <h2>Out now</h2>${out.length ? `<div class="nwgrid">${out.map(g => showCard(g, today)).join('')}</div>` : '<p>Nothing yet this week — check back soon.</p>'}
+    ${soon.length ? `<h2>Coming later this week</h2><div class="nwgrid">${soon.map(g => showCard(g, today)).join('')}</div>` : ''}
+    ${movies.length ? `<h2>Newest movies on ${esc(svc.name)}</h2><div class="nwgrid">${movies.map(movieCardHtml).join('')}</div>` : ''}
+    <p class="note">Release dates from TVmaze and TMDB; what's on each service can change. Track the shows you watch with TV Tracker and see new episodes as soon as they're out.</p>`;
+  const jsonLd = { '@context': 'https://schema.org', '@type': 'ItemList', name: `New on ${name} this week`, itemListElement: pick.slice(0, 20).map((g, i) =>
+    ({ '@type': 'ListItem', position: i + 1, url: `${SITE}/show/${g.s.id}-${slugify(g.s.name)}`, name: g.s.name })) };
+  return html(page({ title, description, path: svc ? `/new/${svc.slug}` : '/new', image: pick[0]?.s.image?.original || '', imageAlt: pick[0] ? `${pick[0].s.name} poster` : '',
+    jsonLd, body, appHash: 'discover' }), 200, 3 * HOUR);
+}
+
 /* ---------- sitemaps ---------- */
 // TVmaze lists every show 250 at a time (page n = show ids 250n…). Only popular ones (weight ≥ 80) go in, so Google
 // spends its time on shows people search for. 400 pages covers ids up to 100,000 (TVmaze is near 85,000 in 2026).
@@ -221,8 +323,9 @@ export async function seo(request, ctx) {
   let make;
   if ((m = url.pathname.match(/^\/show\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => showPage(m[1], m[2] || '', rec);
   else if ((m = url.pathname.match(/^\/movie\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => moviePage(m[1], m[2] || '', rec);
+  else if ((m = url.pathname.match(/^\/new(?:\/([a-z0-9-]+))?\/?$/))) make = () => newPage(m[1] || '');
   else if (url.pathname === '/sitemap.xml') return sitemapIndex();
-  else if (url.pathname === '/sitemaps/site.xml') return urlset([{ loc: SITE + '/' }, { loc: SITE + '/privacy.html' }]);
+  else if (url.pathname === '/sitemaps/site.xml') return urlset([{ loc: SITE + '/' }, { loc: SITE + '/privacy.html' }, { loc: SITE + '/new' }, ...SERVICES.map(s => ({ loc: `${SITE}/new/${s.slug}` }))]);
   else if ((m = url.pathname.match(/^\/sitemaps\/shows-(\d+)\.xml$/))) make = () => showSitemap(+m[1]);
   else if ((m = url.pathname.match(/^\/sitemaps\/movies-(\d+)\.xml$/))) make = () => movieSitemap(+m[1]);
   else return null;
