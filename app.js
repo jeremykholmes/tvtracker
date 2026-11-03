@@ -304,7 +304,7 @@ views.landing = () => {
       <p class="lead">TV Tracker keeps every series you watch organized — what's next, what's new, and when it airs — across every network and streaming service. Plus a movie list, with where each one is streaming.</p>
       ${cta}
       <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a></p>
-      <p class="lp-signin">Switching from TV Time, Trakt or Letterboxd? <a href="#/login/create">Bring your history with you</a> — import it in one step.</p>
+      <p class="lp-signin">Switching from Simkl, Trakt or Letterboxd? <a href="#/login/create">Bring your history with you</a> — import it in one step.</p>
     </div>
     <div class="lp-visual" aria-hidden="true">
       <div class="mk-window"><div class="mk-dots"><i></i><i></i><i></i></div>
@@ -344,7 +344,7 @@ views.landing = () => {
     </div></div></section>
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
     <ol class="lp-steps">
-      <li><b>Create your account</b><p>Sign up with Google in one click, or use your email. Coming from TV Time, Trakt or Letterboxd? Import your history.</p></li>
+      <li><b>Create your account</b><p>Sign up with Google in one click, or use your email. Coming from Simkl, Trakt or Letterboxd? Import your history.</p></li>
       <li><b>Add your shows and movies</b><p>Search any series or film and add it to your list.</p></li>
       <li><b>Check off as you watch</b><p>We'll keep track of what's next and what's new.</p></li>
     </ol></section>
@@ -1628,7 +1628,7 @@ function drawMore(t) {
     <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026.</p>`;
 }
 
-/* ---------- import from TV Time, Trakt, Letterboxd (Account page) ----------
+/* ---------- import from Simkl, Trakt, Letterboxd (Account page) ----------
    importer.js reads the files on the device; here each show is matched to TVmaze (by its TVDB or IMDb id when the
    export has one, otherwise by name) and each movie to TMDB (by id, IMDb id, or title and year). Shows already on
    the list get only their missing checkmarks; movies already on My Movies are marked seen if the export says so. */
@@ -1641,7 +1641,7 @@ function setupImport() {
       const { parse } = await lib();
       const found = parse(files, $('#impKind').value);
       const nEps = found.shows.reduce((a, s) => a + s.watched.length, 0), seen = found.movies.filter(m => m.seen).length;
-      if (!found.shows.length && !found.movies.length) { out.innerHTML = '<p class="formerr">No shows or movies found in that. Check it\'s the export file from TV Time, Trakt or Letterboxd (the .zip is fine).</p>'; return; }
+      if (!found.shows.length && !found.movies.length) { out.innerHTML = '<p class="formerr">No shows or movies found in that. Check it\'s the export file from Simkl, Trakt or Letterboxd (the .zip is fine).</p>'; return; }
       out.innerHTML = `<p>Found ${found.shows.length ? `<b>${found.shows.length} show${found.shows.length === 1 ? '' : 's'}</b>${nEps ? ` (${nEps.toLocaleString()} watched episode${nEps === 1 ? '' : 's'})` : ''}` : ''}${found.shows.length && found.movies.length ? ' and ' : ''}${found.movies.length ? `<b>${found.movies.length} movie${found.movies.length === 1 ? '' : 's'}</b> (${seen} seen, ${found.movies.length - seen} to watch)` : ''} from ${esc(found.sources.join(', '))}.</p>
         <div class="actions"><button type="button" class="btn primary" id="impGo">Import them</button><button type="button" class="btn" id="impCancel">Cancel</button></div>`;
       $('#impCancel').onclick = () => { out.innerHTML = ''; file.value = ''; };
@@ -1777,10 +1777,10 @@ views.account = () => {
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
   <div class="panel" id="importPanel"><h3>Import from another app</h3>
-    <p>Bring your shows and movies over from <b>TV Time</b>, <b>Trakt</b> or <b>Letterboxd</b>: the shows you follow, the episodes you've watched, and the movies you've seen or want to see.</p>
+    <p>Bring your shows and movies over from <b>Simkl</b>, <b>Trakt</b> or <b>Letterboxd</b>: the shows you follow, the episodes you've watched, and the movies you've seen or want to see.</p>
     <div class="actions"><label class="btn primary">Choose export file<input type="file" id="impFile" accept=".zip,.csv,.json,.txt" multiple hidden></label></div>
     <details class="imphelp"><summary>How to get your export file</summary><ul>
-      <li><b>TV Time:</b> ask TV Time for a copy of your data (in the app's settings or TV Time's help center). It arrives by email as a .zip — upload it as it is.</li>
+      <li><b>Simkl:</b> on simkl.com, open Apps → Export → Backup and download the .zip backup (free). Upload the .zip as it is.</li>
       <li><b>Trakt:</b> on trakt.tv, open Settings → Data and export your data. Upload the .zip (or its .json files).</li>
       <li><b>Letterboxd:</b> on letterboxd.com, open Settings → Data → Export your data. Upload the .zip.</li>
       <li><b>Anything else:</b> a .csv file with a Title column, or type a list below.</li></ul></details>
