@@ -1538,7 +1538,7 @@ async function loadTraffic() {
     <div class="tstats">${stat('Today', t.today)}${stat('Last 7 days', t.week)}${stat('Last 30 days', t.month)}${stat('All time', t.all)}</div>
     <div class="tchart" role="img" aria-label="Visitors per day, last 30 days">${days.map(x => `<span title="${label(x.d)}: ${n(x.users)} visitor${x.users === 1 ? '' : 's'}, ${n(x.views)} page view${x.views === 1 ? '' : 's'}"><i style="height:${Math.max(x.users ? 4 : 1, Math.round(x.users / max * 100))}%"></i></span>`).join('')}</div>
     <div class="taxis sub"><span>${label(days[0].d)}</span><span>Visitors per day · busiest ${n(max)}</span><span>${label(days[29].d)}</span></div>
-    <p class="sub">From Google Analytics. Big numbers are visitors (people); recent hours can take a little while to show up.</p>`;
+    <p class="sub">From Google Analytics. Big numbers are visitors (people); recent hours can take a little while to show up. Your own visits aren't counted on any device where you've signed in.</p>`;
 }
 
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
@@ -1883,6 +1883,12 @@ function onUser(u) {
     } catch { }
   }
   if (u) save(K.state, norm(null));              // shows added before signing in are cleared, not carried over
+  // Keeps the site owner's visits out of Google Analytics: once the admin signs in on a device, that device stops
+  // being counted, even signed out (index.html checks tvt.noga before the page counts). Another account signing in turns it back on.
+  if (u) try {
+    if (cloud.isAdmin()) { localStorage.setItem('tvt.noga', '1'); window['ga-disable-G-7SHW9HZXCV'] = true; }
+    else if (localStorage.getItem('tvt.noga')) { localStorage.removeItem('tvt.noga'); window['ga-disable-G-7SHW9HZXCV'] = false; }
+  } catch { }
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {}; kidLimit = { maxRating: '', block: [] };
   if (u) waitForServer();
   forgetFullList();
