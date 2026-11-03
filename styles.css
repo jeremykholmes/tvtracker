@@ -500,3 +500,17 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .mbar { height: 8px; background: color-mix(in srgb, var(--line) 70%, transparent); border-radius: 4px; overflow: hidden; }
 .mbar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .mrow b { font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }
+
+/* landing page: movies section (visual on the left on wide screens) */
+.lp-movies .lp-visual { order: -1; }
+.lp-movies .lp-cta { margin-top: 20px; }
+.lp-movie-mk { transform: perspective(1400px) rotateY(-6deg) rotateX(2deg); }
+.mk-tabs { display: flex; gap: 4px; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; align-self: flex-start; font-size: 13px; font-weight: 600; }
+.mk-tabs span { padding: 4px 12px; border-radius: 999px; color: var(--muted); }
+.mk-tabs .on { background: var(--accent); color: var(--accent-ink); }
+.mk-search { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--muted); font-size: 14px; }
+.mk-search span { color: var(--text); }
+.mk-where { color: var(--ok) !important; font-weight: 600; }
+.mk-movbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.mk-btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text) !important; }
+@media (max-width: 900px) { .lp-movies .lp-visual { order: 0; } .lp-movie-mk { transform: none; max-width: 460px; } }
