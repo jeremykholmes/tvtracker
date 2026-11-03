@@ -287,6 +287,13 @@ export const deleteMessage = id => F.deleteDoc(F.doc(db, 'messages', id));
 /* ---------- admin ---------- */
 // Verified email only: Google confirms it on Google sign-in, so nobody can claim the address with a password sign-up.
 export const isAdmin = () => !!adminEmail && !!auth?.currentUser?.emailVerified && (auth.currentUser.email || '').toLowerCase() === adminEmail.toLowerCase();
+// Website traffic from Google Analytics, fetched by the Worker (worker.js, /api/traffic), which checks this sign-in is the owner's.
+export async function traffic() {
+  const r = await fetch('/api/traffic', { headers: { authorization: 'Bearer ' + await auth.currentUser.getIdToken() } });
+  const j = await r.json().catch(() => ({ error: 'Traffic numbers are unavailable (' + r.status + ').' }));
+  if (j.error) throw new Error(j.error);
+  return j;
+}
 // Every account's stored profile and list size (only the admin's account is allowed to read these).
 // Lists accounts that haven't opened the site since sending shows arrived, so people can find them.
 export async function backfillDirectory(accounts) {

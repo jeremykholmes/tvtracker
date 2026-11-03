@@ -466,3 +466,16 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 /* My Movies: its own part at the bottom of My Shows */
 .mymovies { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); }
 .card .sub.stream { color: var(--text); }
+
+/* admin page: website traffic */
+.tstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 14px; }
+@media (max-width: 560px) { .tstats { grid-template-columns: repeat(2, 1fr); } }
+.tstat { background: var(--panel2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tstat b { font-size: 24px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.tstat .sub { font-size: 12px; }
+.tchart { display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid var(--line); }
+.tchart span { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.tchart i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; }
+.tchart span:hover i { opacity: .75; }
+.taxis { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin: 4px 0 12px; }
+.livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: middle; }

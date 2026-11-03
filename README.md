@@ -64,6 +64,19 @@ To switch it on: do steps 1–3 of [Weekly email](#weekly-email) (Resend and the
 ## Removing accounts
 The Admin page has a **Remove** button on every account and every login made for others (not your own). It locks the account out straight away (the database rules refuse any account listed in `removals/{uid}`), and `.github/workflows/remove-accounts.yml` runs `email/remove-accounts.mjs` hourly to delete its sign-in and data, then marks it done. Needs the `FIREBASE_SERVICE_ACCOUNT` secret (see Weekly email) and the latest `firestore.rules` published. To finish a removal right away: Actions → **Remove accounts → Run workflow**.
 
+## Website traffic
+The Admin page has a **Website traffic** panel from Google Analytics (property with tag `G-7SHW9HZXCV`, set up in `index.html`): visitors on the site right now, visitors and page views for today / last 7 days / last 30 days / all time, and a bar chart of visitors per day for the last 30 days. The Worker (`worker.js`, `/api/traffic`) fetches the numbers with Google's Analytics Data API, and only answers the site owner's signed-in account. Until the setup below is done the panel says it isn't connected yet.
+
+One-time setup:
+1. **Google Cloud** (https://console.cloud.google.com, project `tv-tracker-6135d` or any other): **APIs & Services → Library** → search **Google Analytics Data API** → **Enable**.
+2. **IAM & Admin → Service accounts → Create service account** (any name, e.g. `analytics-reader`; skip the optional roles) → open it → **Keys → Add key → Create new key → JSON**. This downloads a JSON file. Copy the account's email (`…@….iam.gserviceaccount.com`).
+3. **Google Analytics** (https://analytics.google.com) → **Admin** (gear) → **Property access management** → **＋ → Add users** → paste the service account's email, role **Viewer**, uncheck "Notify", **Add**.
+4. Analytics **Admin → Property details**: copy the **Property ID** (a number like `456789012` — not the `G-…` ID).
+5. **Cloudflare dashboard → Workers & Pages → tvtracker → Settings → Variables and Secrets → Add**, type **Secret**:
+   - `GA_PROPERTY_ID` = the Property ID
+   - `GA_SERVICE_ACCOUNT` = the whole JSON file's contents
+   Then **Deploy**. Delete the downloaded JSON file afterwards. Secrets stay put across the automatic deploys from `main`.
+
 ## Hosting
 The site is a Cloudflare Worker named `tvtracker` that serves the repo's files as a static site, at **tvtracker.us** (and tvtracker.jeremykholmes.workers.dev). `wrangler.jsonc` sets it up; `.assetsignore` lists the repo files that aren't part of the website (workflows, email jobs, docs, `firestore.rules`) so they're never served.
 
