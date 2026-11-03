@@ -87,6 +87,13 @@ Below it, **More analytics · last 30 days** shows:
 
 The site owner's own devices aren't counted: once the admin account signs in on a device, `app.js` turns Google Analytics off there (remembered as `tvt.noga`, checked in `index.html`).
 
+## Show and movie pages for Google
+The app's pages live after a `#` (`#/show/44778`), which Google ignores, so `seo.js` (run by the Worker) gives every show and movie a real page Google can list: `/show/<TVmaze id>-<name>` and `/movie/<TMDB id>-<name>` (e.g. `/show/44778-severance`). Each has the title, description, poster, seasons with every episode's name and air date, the next episode, where it airs or streams, cast (movies), link-preview tags and Google structured data (`TVSeries` / `Movie`), plus buttons into the app. A wrong or missing name in the address redirects to the right one. Pages are cached by Cloudflare for 6 hours.
+
+**Recommend → share a link** now sends these addresses with `?r=<your name>`, so text and social previews show the show's poster; opening one goes straight to the app with the "recommends" banner.
+
+**Sitemaps**: `/sitemap.xml` (made by the Worker) lists `/sitemaps/site.xml`, `/sitemaps/shows-0.xml` … `shows-399.xml` (TVmaze's shows, 250 per file, only popular ones — weight 80+) and `/sitemaps/movies-1.xml` … `movies-25.xml` (TMDB's popular and top-rated movies). In Search Console → **Sitemaps**, submit `sitemap.xml` once.
+
 ## Hosting
 The site is a Cloudflare Worker named `tvtracker` that serves the repo's files as a static site, at **tvtracker.us** (and tvtracker.jeremykholmes.workers.dev). `wrangler.jsonc` sets it up; `.assetsignore` lists the repo files that aren't part of the website (workflows, email jobs, docs, `firestore.rules`) so they're never served.
 

@@ -137,6 +137,8 @@ const PAGE_NAMES = { '': 'My Shows', shows: 'My Shows', show: 'Show pages', movi
 const pageName = loc => {
   try {
     const u = new URL(loc), path = u.pathname.replace(/\/index\.html$/, '/');
+    if (/^\/show\//.test(path)) return 'Show pages (from Google)';
+    if (/^\/movie\//.test(path)) return 'Movie pages (from Google)';
     if (path !== '/') return path.replace(/^\//, '').replace(/\.html$/, '').replace(/^./, c => c.toUpperCase()) + ' page';
     const name = u.hash.replace(/^#\/?/, '').split('/')[0];
     return PAGE_NAMES[name] || 'Other';
@@ -190,8 +192,10 @@ async function searchConsole(token) {
   return { site, clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0, queries: queries.map(row), pages: pages.map(row) };
 }
 
+import { seo } from './seo.js';   // show and movie pages for Google, and the sitemaps
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/api/imdb') {
       try { return await imdb(url.searchParams.get('q') || ''); }
@@ -205,6 +209,8 @@ export default {
       try { return await traffic(request, env); }
       catch (e) { return json({ error: String(e?.message || e) }, 502); }
     }
+    const page = await seo(request, ctx);
+    if (page) return page;
     return env.ASSETS.fetch(request);
   }
 };
