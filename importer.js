@@ -1,5 +1,7 @@
 // Reads export files from other apps (Account page → Import), entirely on the device:
-//   TV Time   — its data export (.zip of .csv files, or the .csv files): followed shows and seen episodes
+//   Simkl     — its backup (.zip of .json, from simkl.com Apps → Export → Backup) or its .csv backup: shows (with
+//               watched episodes), anime and movies; "plan to watch" goes to the Future watch list / to watch
+//   TV Time   — the export it offered before closing in July 2026 (.zip of .csv files), for anyone who saved one
 //   Trakt     — its export (.zip of .json files, or the .json files): watched/watchlist shows (with episodes) and movies
 //   Letterboxd — its export (.zip of .csv files): watched.csv / diary.csv / ratings.csv → seen, watchlist.csv → to watch
 //   anything else — a .csv with a title (or name) column, or a .txt list with one title per line
@@ -94,6 +96,17 @@ function collector() {
 }
 
 /* ---------- each app's files ---------- */
+// Simkl: { shows: [{ show, status, seasons }], anime: […], movies: [{ movie, status }] } (its API's "all items").
+function simkl(data, c) {
+  const ids = x => ({ name: x?.title || '', year: x?.year ? String(x.year) : '', tvdb: num(x?.ids?.tvdb), imdb: tt(x?.ids?.imdb), tmdb: num(x?.ids?.tmdb) });
+  const plan = st => /plan/i.test(st || '');
+  for (const it of [...(data.shows || []), ...(data.anime || [])]) {
+    const eps = [];
+    for (const s of it.seasons || []) for (const e of s.episodes || []) eps.push([s.number, e.number]);
+    c.show(ids(it.show), eps, plan(it.status) && !eps.length);
+  }
+  for (const it of data.movies || []) c.movie(ids(it.movie), !plan(it.status));
+}
 // Trakt: its own API's shapes — [{ show, seasons }], [{ type, show|movie|episode }], [{ movie }].
 function trakt(data, file, c) {
   const watchlist = /watchlist|list/i.test(file) && !/watched|history/i.test(file);
@@ -134,9 +147,11 @@ function genericCsv(rows, file, c, kind) {
     const name = col(r, 'title', 'name', 'show', 'series', 'movie');
     const type = col(r, 'type', 'kind', 'media_type').toLowerCase();
     const year = yearOf(col(r, 'year', 'release_year', 'release_date')), imdb = tt(col(r, 'imdb_id', 'imdb', 'const', 'url'));
+    const tvdb = num(col(r, 'tvdb', 'tvdb_id')), tmdb = num(col(r, 'tmdb', 'tmdb_id'));
+    const status = col(r, 'status', 'list', 'watchlist');
     const isMovie = /movie|film/.test(type) || (!type && kind === 'movies');
-    if (isMovie) c.movie({ name, year, imdb }, !/watchlist|to.?watch/i.test(file + ' ' + col(r, 'status', 'list')));
-    else c.show({ name, year, imdb }, [], false);
+    if (isMovie) c.movie({ name, year, imdb, tmdb }, !/watchlist|to.?watch|plan/i.test(file + ' ' + status));
+    else c.show({ name, year, imdb, tvdb }, [], /plan/i.test(status));
   }
 }
 
@@ -147,6 +162,8 @@ export function parse(files, kind = 'shows') {
     const t = text.trim(); if (!t) continue;
     if (/\.json$/i.test(name) || /^[[{]/.test(t)) {
       let data; try { data = JSON.parse(t); } catch { continue; }
+      if (data && !Array.isArray(data) && (Array.isArray(data.shows) || Array.isArray(data.movies) || Array.isArray(data.anime))
+        && [...(data.shows || []), ...(data.anime || []), ...(data.movies || [])].some(x => x && (x.show || x.movie))) { simkl(data, c); sources.add('Simkl'); continue; }
       if (!Array.isArray(data)) data = Object.values(data).find(Array.isArray) || [];
       if (data.some(x => x && (x.show || x.movie))) { trakt(data, name, c); sources.add('Trakt'); }
       continue;
@@ -163,7 +180,7 @@ export function parse(files, kind = 'shows') {
     const cols = Object.keys(rows[0]);
     if (cols.includes('letterboxd_uri')) { letterboxd(rows, name, c); sources.add('Letterboxd'); }
     else if (cols.some(k => /^(tv_show_(name|id)|series_name|episode_season_number|s_id|movie_name|entity_type)$/.test(k))) { tvtime(rows, name, c); sources.add('TV Time'); }
-    else if (cols.some(k => /^(title|name|show|series|movie)$/.test(k))) { genericCsv(rows, name, c, kind); sources.add('your file'); }
+    else if (cols.some(k => /^(title|name|show|series|movie)$/.test(k))) { genericCsv(rows, name, c, kind); sources.add(cols.includes('simkl_id') ? 'Simkl' : 'your file'); }
   }
   return c.done(sources);
 }
