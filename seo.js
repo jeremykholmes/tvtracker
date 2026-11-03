@@ -14,6 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
+const PAGE_VERSION = 2;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -334,7 +335,8 @@ export async function seo(request, ctx) {
   else if ((m = url.pathname.match(/^\/sitemaps\/movies-(\d+)\.xml$/))) make = () => movieSitemap(+m[1]);
   else return null;
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
-  const cache = caches.default, key = new Request(url.toString(), { method: 'GET' });
+  // PAGE_VERSION is part of the cache key: raise it when the pages' design changes so cached copies aren't reused.
+  const cache = caches.default, key = new Request(url.toString() + (url.search ? '&' : '?') + '__v=' + PAGE_VERSION, { method: 'GET' });
   const hit = await cache.match(key);
   if (hit) return hit;
   let res;
