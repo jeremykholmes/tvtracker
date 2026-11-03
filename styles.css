@@ -584,3 +584,9 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 #results .row > .addbtns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 720px) { #results.rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
 #results > p.sub { margin: 0 0 -8px; }
+
+/* Show and movie tiles (My Shows, Upcoming, Discover premieres, Add Show results): a darker border around the whole tile */
+:root { --tile-line: #4a5263; }
+@media (prefers-color-scheme: light) { :root { --tile-line: #b9c0ca; } }
+.grid .card, .urows .row, #results .row { border: 1.5px solid var(--tile-line); border-radius: 12px; padding: 10px; background: var(--panel); }
+.grid .card .poster, .urows .row .poster, #results .row .poster { border-radius: 8px; }
