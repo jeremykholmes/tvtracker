@@ -620,7 +620,12 @@ function sendShowDialog(s, movie) {
 // Shares a link to the show (or movie) page that greets the friend with "<your name> recommends this show".
 async function shareLink(s, movie) {
   const name = (user?.name || '').trim().split(/\s+/)[0];
-  const url = `${location.origin}${location.pathname}#/${movie ? 'movie' : 'show'}/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
+  // The show's (or movie's) own page (seo.js), so the link preview has its poster; ?r= opens the app with "<name> recommends".
+  // Movies added from IMDb or by hand have no such page and use the app's address.
+  const slug = String(s.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
+  const url = /^\d+$/.test(String(s.id)) ? `${location.origin}/${movie ? 'movie' : 'show'}/${s.id}-${slug}${name ? '?r=' + encodeURIComponent(name) : ''}`
+    : `${location.origin}${location.pathname}#/${movie ? 'movie' : 'show'}/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
   const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
   track('recommend', { method: 'link', movie: !!movie });
   if (navigator.share) {
