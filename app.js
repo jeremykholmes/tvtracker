@@ -1628,7 +1628,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
   }
   if (!quiet) app.innerHTML = '<h1>Admin</h1><p class="loading">Loading accounts…</p>';
   let list, msgs = [], msgErr = '', gone = {};
-  try { [list, msgs, gone] = await Promise.all([cloud.allAccounts(), cloud.messages().catch(x => { msgErr = cloud.friendlyError(x); return []; }),
+  try { [list, msgs, gone] = await Promise.all([cloud.allAccounts().catch(x => { throw cloud.step(x, 'loading every account'); }), cloud.messages().catch(x => { msgErr = cloud.friendlyError(cloud.step(x, 'loading messages')); return []; }),
     cloud.removals().catch(() => ({}))]); }
   catch (x) { if (route().name === 'admin') app.innerHTML = `<h1>Admin</h1><p class="formerr">${esc(cloud.friendlyError(x))}</p>`; return; }
   if (route().name !== 'admin') return;
@@ -1938,7 +1938,7 @@ function flush() {
   return cloud.save(out)
     .then(() => { if (!--inFlight && !pending) syncStatus(); })
     .catch(e => {
-      inFlight--; console.warn(e);
+      inFlight--; cloud.step(e, 'saving changes (' + Object.keys(out).filter(k => k !== 'updated').join(', ') + ')'); console.warn(e);
       if (e?.code === 'permission-denied' && sharedOpen()) { syncStatus(); onCloudError(e); return; }   // access changed: drop the change
       pending = { shows: { ...batch.shows, ...(pending?.shows || {}) }, watched: { ...batch.watched, ...(pending?.watched || {}) }, movies: { ...batch.movies, ...(pending?.movies || {}) } };
       syncStatus(cloud.friendlyError(e), true);
@@ -2005,7 +2005,7 @@ function onData(data, fromServer) {
   const confirmed = fromServer && !serverSynced;
   if (fromServer) { serverSynced = true; slowServer = false; }
   if (!data && fromServer && cloud.activeUid() === user.uid) {   // brand-new account: create its document
-    cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(onCloudError);
+    cloud.save({ profile: { name: user.name, email: user.email }, updated: now() }).catch(e => onCloudError(cloud.step(e, 'setting up your account')));
   }
   const first = firstSnapshot;
   const remote = norm(data);
@@ -2489,5 +2489,5 @@ $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contac
 accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError, onInbox })
-  .catch(e => { authReady = true; accountChip(); onCloudError(e); render(true); });
+  .catch(e => { authReady = true; accountChip(); onCloudError(cloud.step(e, 'signing in')); render(true); });
 openRefresh();
