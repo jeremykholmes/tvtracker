@@ -3,8 +3,8 @@
 {
   "name": "tvtracker",
   "compatibility_date": "2026-10-30",
-  "main": "worker.js",
-  "keep_vars": true,     // keeps variables set in the Cloudflare dashboard (e.g. GA_PROPERTY_ID) when a push to main deploys   // only runs for /api/… addresses; every website file is served as-is
+  "main": "worker.js",   // only runs for /api/… addresses; every website file is served as-is
+  "keep_vars": true,     // keeps variables set in the Cloudflare dashboard (e.g. GA_PROPERTY_ID) when a push to main deploys
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
