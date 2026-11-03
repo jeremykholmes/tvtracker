@@ -55,6 +55,9 @@ function noteLogin(user) {
   F.updateDoc(F.doc(db, 'users', user.uid), { lastLogin: now }).catch(() => {});
 }
 
+// Notes which step a database error came from, so its message can say (e.g. "refused access while saving changes").
+export const step = (e, where) => { try { if (e && typeof e === 'object' && !e.where) e.where = where; } catch { } return e; };
+
 // Two listeners (main doc + checkmark buckets) combined into one view for the app.
 function listen(uid, onData, onError) {
   let main, mainSrv = false, mainPend = false, watched = null, wSrv = false, wPend = false, migrating = false;
@@ -66,16 +69,16 @@ function listen(uid, onData, onError) {
     const data = main || Object.keys(all).length ? { ...(main || {}), watched: all } : null;
     onData(data, mainSrv && wSrv, mainPend || wPend);
     // One-time move of checkmarks out of the old single big document.
-    if (!migrating && mainSrv && wSrv && main && main.watched) { migrating = true; migrate(uid, legacy, watched).catch(e => { migrating = false; onError(e); }); }
+    if (!migrating && mainSrv && wSrv && main && main.watched) { migrating = true; migrate(uid, legacy, watched).catch(e => { migrating = false; onError(step(e, 'moving old checkmarks')); }); }
   };
   const opts = { includeMetadataChanges: true }, me = auth.currentUser.uid;
   unsubs.push(F.onSnapshot(kid ? F.doc(db, 'users', uid, 'kids', me) : F.doc(db, 'users', uid), opts, snap => {
     main = snap.exists() ? snap.data() : null; mainSrv = !snap.metadata.fromCache; mainPend = snap.metadata.hasPendingWrites; emit();
-  }, onError));
+  }, e => onError(step(e, 'reading your list'))));
   unsubs.push(F.onSnapshot(F.collection(db, 'users', kid ? me : uid, 'watched'), opts, snap => {
     const w = {}; snap.forEach(d => Object.assign(w, d.data().e || {}));
     watched = w; wSrv = !snap.metadata.fromCache; wPend = snap.metadata.hasPendingWrites; emit();
-  }, onError));
+  }, e => onError(step(e, 'reading your checkmarks'))));
 }
 
 async function migrate(uid, legacy, current) {
@@ -497,6 +500,6 @@ export function friendlyError(e) {
     'auth/unauthorized-domain': 'This website isn\'t on Firebase\'s authorized domains list yet.',
     'auth/operation-not-allowed': 'That sign-in method isn\'t turned on in Firebase yet.',
     'auth/network-request-failed': 'Network problem — check your connection.',
-    'permission-denied': 'The database refused access — check the Firestore rules.'
+    'permission-denied': 'The database refused access' + (e?.where ? ' while ' + e.where : '') + ' — check the Firestore rules.'
   })[c] || e?.message || String(e);
 }
