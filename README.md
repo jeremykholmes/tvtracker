@@ -94,6 +94,12 @@ The app's pages live after a `#` (`#/show/44778`), which Google ignores, so `seo
 
 **Sitemaps**: `/sitemap.xml` (made by the Worker) lists `/sitemaps/site.xml`, `/sitemaps/shows-0.xml` … `shows-399.xml` (TVmaze's shows, 250 per file, only popular ones — weight 80+) and `/sitemaps/movies-1.xml` … `movies-25.xml` (TMDB's popular and top-rated movies). In Search Console → **Sitemaps**, submit `sitemap.xml` once.
 
+## Import from other apps
+Account page → **Import from another app**. Upload an export from **TV Time** (its data export .zip or .csv files), **Trakt** (.zip or .json files) or **Letterboxd** (.zip), or a .csv with a Title column, or type a list of titles. `importer.js` reads the files on the device (it opens .zip files itself); `app.js` (`runImport`) matches shows to TVmaze by TVDB/IMDb id or name and movies to TMDB by id, IMDb id or title + year, then adds shows (watchlist-only ones go to the Future watch list), checks off watched episodes, and adds movies as seen or to watch. Anything it can't find is listed at the end. Counted in Google Analytics as an `import` event.
+
+## New this week pages
+`/new` and `/new/<service>` (netflix, hulu, disney-plus, max, prime-video, apple-tv, peacock, paramount-plus), made by `seo.js` from TVmaze's schedules for this week (Monday–Sunday, New York time) and TMDB's newest movies on each service: new series, season premieres and new episodes, each linking to its show page. Cached 3 hours, listed in the sitemap, and linked from every show/movie page's footer, the home page and Discover.
+
 ## Hosting
 The site is a Cloudflare Worker named `tvtracker` that serves the repo's files as a static site, at **tvtracker.us** (and tvtracker.jeremykholmes.workers.dev). `wrangler.jsonc` sets it up; `.assetsignore` lists the repo files that aren't part of the website (workflows, email jobs, docs, `firestore.rules`) so they're never served.
 
