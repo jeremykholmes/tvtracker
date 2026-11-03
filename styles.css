@@ -558,15 +558,16 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .grid .card .btn { margin-top: 6px; }
 @media (max-width: 720px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
 
-/* Upcoming: the same tall poster tiles as My Shows (Discover's premiere lists, also .urows, keep their side-by-side tiles) */
-.urows:not(.drows) { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 14px; }
-.urows:not(.drows) .row { flex-direction: column; align-items: stretch; gap: 8px; background: none; border: 0; padding: 0; border-radius: 0; }
-.urows:not(.drows) .row .poster { width: 100%; border-radius: 10px; }
-.urows:not(.drows) .row .poster:hover { outline: 2px solid var(--accent); }
-.urows:not(.drows) .row .poster .noimg { font-size: 28px; }
-.urows:not(.drows) .row .info a { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.urows:not(.drows) .row .info .sub { font-size: 13px; margin-top: 3px; }
-.urows:not(.drows) .row .when { font-size: 13px; margin-top: 4px; }
-.urows:not(.drows) .row .watchbtn { margin-top: 8px; }
-.urows:not(.drows) .dayhead { margin-top: 6px; }
-@media (max-width: 720px) { .urows:not(.drows) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
+/* Upcoming and Discover's premiere lists: the same tall poster tiles as My Shows */
+.urows { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 14px; }
+.urows .row { flex-direction: column; align-items: stretch; gap: 8px; background: none; border: 0; padding: 0; border-radius: 0; }
+.urows .row .poster { width: 100%; border-radius: 10px; }
+.urows .row .poster:hover { outline: 2px solid var(--accent); }
+.urows .row .poster .noimg { font-size: 28px; }
+.urows .row .info a { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.urows .row .info .sub { font-size: 13px; margin-top: 3px; }
+.urows .row .when { font-size: 13px; margin-top: 4px; }
+.urows .row .watchbtn { margin-top: 8px; }
+.urows .dayhead { margin-top: 6px; }
+@media (max-width: 720px) { .urows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
+.drows .row .tilebtns { margin-top: 8px; }
