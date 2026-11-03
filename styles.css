@@ -571,3 +571,18 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .urows .dayhead { margin-top: 6px; }
 @media (max-width: 720px) { .urows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
 .drows .row .tilebtns { margin-top: 8px; }
+
+/* Add Show results (shows and movies): the same tall poster tiles as My Shows; headings and notes span the full width */
+#results.rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 14px; }
+#results > :not(.row) { grid-column: 1 / -1; }
+#results .row { flex-direction: column; align-items: stretch; gap: 8px; background: none; border: 0; padding: 0; border-radius: 0; }
+#results .row .poster { width: 100%; border-radius: 10px; }
+#results .row .poster:hover { outline: 2px solid var(--accent); }
+#results .row .poster .noimg { font-size: 28px; }
+#results .row .info a { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#results .row .info .sub { font-size: 13px; margin-top: 3px; }
+#results .row .info .sub:last-child { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#results .row > .btn, #results .row > .addbtns { align-self: flex-start; }
+#results .row > .addbtns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 720px) { #results.rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; } }
+#results > p.sub { margin: 0 0 -8px; }
