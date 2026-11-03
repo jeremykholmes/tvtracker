@@ -1519,7 +1519,8 @@ async function loadTraffic() {
   try { t = await cloud.traffic(); }
   catch (x) { if (document.contains(box)) box.innerHTML = `<h3>Website traffic</h3><p class="formerr">${esc(x.message || String(x))}</p>`; return; }
   if (!document.contains(box)) return;
-  if (t.setup) { box.innerHTML = '<h3>Website traffic</h3><p>Not connected to Google Analytics yet. See "Website traffic" in README.md for the one-time setup.</p>'; return; }
+  if (t.setup) { box.innerHTML = `<h3>Website traffic</h3><p>Not connected to Google Analytics yet. See "Website traffic" in README.md for the one-time setup.</p>
+    ${t.missing ? `<p class="sub">The site can't see: <b>${t.missing.map(esc).join(', ')}</b>. Settings it does see: ${t.has?.length ? t.has.map(esc).join(', ') : 'none'}.</p>` : ''}`; return; }
   const n = v => (v || 0).toLocaleString();
   // One bar per day, including days with no visitors (Google leaves those out).
   const have = Object.fromEntries((t.days || []).map(d => [d.date, d])), days = [];

@@ -98,8 +98,11 @@ async function googleToken(sa) {
 
 async function traffic(request, env) {
   if (!await isOwner(request).catch(() => false)) return json({ error: 'Only the site owner can see this.' }, 403);
-  if (!env.GA_PROPERTY_ID || !env.GA_SERVICE_ACCOUNT) return json({ setup: true });
-  const token = await googleToken(JSON.parse(env.GA_SERVICE_ACCOUNT));
+  const missing = ['GA_PROPERTY_ID', 'GA_SERVICE_ACCOUNT'].filter(k => !env[k]);
+  if (missing.length) return json({ setup: true, missing, has: Object.keys(env).filter(k => k !== 'ASSETS').sort() });   // names only, never values
+  let sa; try { sa = JSON.parse(env.GA_SERVICE_ACCOUNT); } catch { return json({ error: 'GA_SERVICE_ACCOUNT isn\'t the whole JSON key file (it must start with { and end with }).' }); }
+  if (!sa.client_email || !sa.private_key) return json({ error: 'GA_SERVICE_ACCOUNT is missing client_email or private_key — paste the whole JSON key file.' });
+  const token = await googleToken(sa);
   const ga = async (method, body) => {
     const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${String(env.GA_PROPERTY_ID).replace(/\D/g, '')}:${method}`,
       { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
