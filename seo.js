@@ -87,6 +87,9 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
     .seo .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
     .seo .chips li { background: var(--panel2); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
     .seo .note { color: var(--muted); font-size: 13px; }
+    .seo .backbtn { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 14px; padding: 6px 14px 6px 10px; border-radius: 999px; border: 1px solid var(--line);
+      background: var(--panel2); text-decoration: none; font-weight: 600; font-size: 14px; }
+    .seo .backbtn:hover { border-color: var(--muted); }
     .seo .lead { color: var(--muted); max-width: 70ch; margin: 0 0 16px; }
     .seo .svcs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
     .seo .svcs a { text-decoration: none; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 14px; }
@@ -105,7 +108,8 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
 </head>
 <body>
   <header class="top"><a href="/" class="brand"><img src="/icons/logo.svg" alt="" class="brandlogo"> TV Tracker</a></header>
-  <main class="seo">${body}</main>
+  <main class="seo"><a class="backbtn" href="${appHash === 'discover' ? '/#/discover' : '/'}" onclick="try { if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) { history.back(); return false; } } catch (e) { }">‹ Back</a>
+  ${body}</main>
   <footer class="foot"><div class="newlinks">New this week: ${SERVICES.map(s => `<a href="/new/${s.slug}">${esc(s.name)}</a>`).join(' · ')} · <a href="/new">All streaming</a></div>
   <a href="/">TV Tracker</a> · <a href="/privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
 </body>
