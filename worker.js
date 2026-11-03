@@ -4,6 +4,9 @@
 //                        find brand-new movies TMDB doesn't list yet. Fetched here because browsers can't call IMDb.
 //   /api/angel?title=<title>&year=<year>  Whether a movie streams on Angel Studios (its page at angel.com/watch/<name>),
 //                        for movies TMDB/JustWatch has no streaming info for yet. Answers { url } ('' when not found).
+//   /api/traffic         Website traffic from Google Analytics for the Admin page (site owner only: send the Firebase
+//                        ID token as "Authorization: Bearer …"). Needs two Worker secrets, set in the Cloudflare
+//                        dashboard: GA_PROPERTY_ID and GA_SERVICE_ACCOUNT (see "Website traffic" in README.md).
 const json = (body, status = 200, cache = 'no-store') =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cache } });
 
@@ -48,6 +51,80 @@ async function angel(title, year) {
   return json({ url: '' }, 200, 'public, max-age=86400');
 }
 
+/* ---------- /api/traffic ---------- */
+const FIREBASE_PROJECT = 'tv-tracker-6135d';   // matches firebase-config.js
+const ADMIN_EMAIL = 'jeremykholmes@gmail.com';   // matches adminEmail in firebase-config.js and firestore.rules
+
+const b64url = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+const toB64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const RS256 = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+
+// Checks a Firebase sign-in token (signed by Google) and that it's the site owner's verified email.
+let firebaseKeys = { keys: null, until: 0 };
+async function isOwner(request) {
+  const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const [h, p, sig] = token.split('.'); if (!sig) return false;
+  const head = JSON.parse(new TextDecoder().decode(b64url(h))), claims = JSON.parse(new TextDecoder().decode(b64url(p)));
+  if (head.alg !== 'RS256') return false;
+  if (!firebaseKeys.keys || Date.now() > firebaseKeys.until) {
+    const r = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
+    firebaseKeys = { keys: (await r.json()).keys || [], until: Date.now() + 3600e3 };
+  }
+  const jwk = firebaseKeys.keys.find(k => k.kid === head.kid); if (!jwk) return false;
+  const key = await crypto.subtle.importKey('jwk', jwk, RS256, false, ['verify']);
+  if (!await crypto.subtle.verify(RS256, key, b64url(sig), new TextEncoder().encode(h + '.' + p))) return false;
+  const now = Date.now() / 1000;
+  return claims.aud === FIREBASE_PROJECT && claims.iss === 'https://securetoken.google.com/' + FIREBASE_PROJECT &&
+    claims.exp > now && claims.iat < now + 300 && claims.email_verified === true && String(claims.email || '').toLowerCase() === ADMIN_EMAIL;
+}
+
+// A Google access token for the service account (read-only Analytics), reused until shortly before it expires.
+let gaToken = { token: '', until: 0 };
+async function googleToken(sa) {
+  if (gaToken.token && Date.now() < gaToken.until) return gaToken.token;
+  const now = Math.floor(Date.now() / 1000), enc = o => toB64url(new TextEncoder().encode(JSON.stringify(o)));
+  const unsigned = enc({ alg: 'RS256', typ: 'JWT' }) + '.' + enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/analytics.readonly',
+    aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+  const pem = sa.private_key.replace(/-----[^-]+-----|\s/g, '');
+  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), c => c.charCodeAt(0)), RS256, false, ['sign']);
+  const jwt = unsigned + '.' + toB64url(await crypto.subtle.sign(RS256, key, new TextEncoder().encode(unsigned)));
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + jwt });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('Google sign-in for the service account failed: ' + (j.error_description || j.error || r.status));
+  gaToken = { token: j.access_token, until: Date.now() + (j.expires_in - 120) * 1000 };
+  return gaToken.token;
+}
+
+async function traffic(request, env) {
+  if (!await isOwner(request).catch(() => false)) return json({ error: 'Only the site owner can see this.' }, 403);
+  if (!env.GA_PROPERTY_ID || !env.GA_SERVICE_ACCOUNT) return json({ setup: true });
+  const token = await googleToken(JSON.parse(env.GA_SERVICE_ACCOUNT));
+  const ga = async (method, body) => {
+    const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${String(env.GA_PROPERTY_ID).replace(/\D/g, '')}:${method}`,
+      { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error?.message || 'Google Analytics ' + r.status);
+    return j;
+  };
+  const metrics = [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }];
+  const ranges = { today: ['today', 'today'], week: ['6daysAgo', 'today'], month: ['29daysAgo', 'today'], all: ['2015-08-14', 'today'] };
+  const [live, totals, daily] = await Promise.all([
+    ga('runRealtimeReport', { metrics: [{ name: 'activeUsers' }] }),
+    ga('runReport', { dateRanges: Object.entries(ranges).map(([name, [startDate, endDate]]) => ({ name, startDate, endDate })), metrics }),
+    ga('runReport', { dateRanges: [{ startDate: '29daysAgo', endDate: 'today' }], dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
+      orderBys: [{ dimension: { dimensionName: 'date' } }] })
+  ]);
+  const num = v => +(v?.value || 0);
+  const out = { now: num(live.rows?.[0]?.metricValues?.[0]) };
+  for (const name of Object.keys(ranges)) {
+    const row = (totals.rows || []).find(r => r.dimensionValues?.some(d => d.value === name));
+    out[name] = { users: num(row?.metricValues?.[0]), sessions: num(row?.metricValues?.[1]), views: num(row?.metricValues?.[2]) };
+  }
+  out.days = (daily.rows || []).map(r => ({ date: r.dimensionValues[0].value, users: num(r.metricValues[0]), views: num(r.metricValues[1]) }));
+  return json(out);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -58,6 +135,10 @@ export default {
     if (url.pathname === '/api/angel') {
       try { return await angel(url.searchParams.get('title') || '', url.searchParams.get('year') || ''); }
       catch (e) { return json({ url: '', error: String(e?.message || e) }, 502); }
+    }
+    if (url.pathname === '/api/traffic') {
+      try { return await traffic(request, env); }
+      catch (e) { return json({ error: String(e?.message || e) }, 502); }
     }
     return env.ASSETS.fetch(request);
   }

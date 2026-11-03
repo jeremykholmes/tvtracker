@@ -1511,6 +1511,36 @@ views.contact = arg => {
   });
 };
 
+// Admin page: website traffic from Google Analytics — visitors now, totals for today / 7 / 30 days / all time,
+// and a bar per day for the last 30 days. Filled in after the page shows, so the accounts don't wait for it.
+async function loadTraffic() {
+  const box = document.getElementById('traffic'); if (!box) return;
+  let t;
+  try { t = await cloud.traffic(); }
+  catch (x) { if (document.contains(box)) box.innerHTML = `<h3>Website traffic</h3><p class="formerr">${esc(x.message || String(x))}</p>`; return; }
+  if (!document.contains(box)) return;
+  if (t.setup) { box.innerHTML = '<h3>Website traffic</h3><p>Not connected to Google Analytics yet. See "Website traffic" in README.md for the one-time setup.</p>'; return; }
+  const n = v => (v || 0).toLocaleString();
+  // One bar per day, including days with no visitors (Google leaves those out).
+  const have = Object.fromEntries((t.days || []).map(d => [d.date, d])), days = [];
+  const last = t.days?.length ? t.days[t.days.length - 1].date : '';
+  const end = last ? new Date(+last.slice(0, 4), +last.slice(4, 6) - 1, +last.slice(6, 8)) : new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(end); d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    days.push({ d, users: have[key]?.users || 0, views: have[key]?.views || 0 });
+  }
+  const max = Math.max(1, ...days.map(d => d.users));
+  const label = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const stat = (name, x) => `<div class="tstat"><span class="sub">${name}</span><b>${n(x.users)}</b><span class="sub">${n(x.views)} page view${x.views === 1 ? '' : 's'}</span></div>`;
+  box.innerHTML = `<h3>Website traffic</h3>
+    <p><span class="livedot"></span><b>${n(t.now)}</b> on the site right now <span class="sub">(last 30 minutes)</span></p>
+    <div class="tstats">${stat('Today', t.today)}${stat('Last 7 days', t.week)}${stat('Last 30 days', t.month)}${stat('All time', t.all)}</div>
+    <div class="tchart" role="img" aria-label="Visitors per day, last 30 days">${days.map(x => `<span title="${label(x.d)}: ${n(x.users)} visitor${x.users === 1 ? '' : 's'}, ${n(x.views)} page view${x.views === 1 ? '' : 's'}"><i style="height:${Math.max(x.users ? 4 : 1, Math.round(x.users / max * 100))}%"></i></span>`).join('')}</div>
+    <div class="taxis sub"><span>${label(days[0].d)}</span><span>Visitors per day · busiest ${n(max)}</span><span>${label(days[29].d)}</span></div>
+    <p class="sub">From Google Analytics. Big numbers are visitors (people); recent hours can take a little while to show up.</p>`;
+}
+
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
 views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = SPLASH; return; } location.hash = '#/login'; return; }
@@ -1543,12 +1573,14 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
       <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
       <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
   app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others${removed.length ? ` · ${removed.length} removed` : ''}</span></div>
+    <div class="panel" id="traffic"><h3>Website traffic</h3><p class="loading">Loading Google Analytics…</p></div>
     <div class="panel"><h3>Contact us messages · ${msgs.length}</h3>${msgErr ? `<p class="formerr">${esc(msgErr)}</p>` : msgs.map(msgRow).join('') || '<p>No messages yet.</p>'}</div>
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
     ${removed.length ? `<div class="panel"><h3>Removed logins · ${removed.length}</h3><p>Their owner took away their access, so they can't see any list. The sign-in itself still exists — delete it in the Firebase console under Authentication → Users if it isn't needed.</p>${removed.sort(byRecent).map(row).join('')}</div>` : ''}
     ${removing.length ? `<div class="panel"><h3>Being removed · ${removing.length}</h3><p>Locked out already. Their sign-in and data are deleted within the hour.</p>${removing.sort(byRecent).map(row).join('')}</div>` : ''}
     <p class="sub">Counts accounts that have saved anything. Last login is the last time someone opened the site signed in (Arizona time); it shows — until their next visit. Newest logins are listed first. Every sign-up is in the Firebase console under Authentication → Users.</p>`;
+  loadTraffic();
 };
 
 views.account = () => {
