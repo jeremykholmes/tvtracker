@@ -474,8 +474,13 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .tstat b { font-size: 24px; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .tstat .sub { font-size: 12px; }
 .tchart { display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid var(--line); }
-.tchart span { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.tchart button { flex: 1; height: 100%; display: flex; align-items: flex-end; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 3px 3px 0 0; }
 .tchart i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; }
-.tchart span:hover i { opacity: .75; }
+.tchart button:hover i { opacity: .75; }
+.tchart:has(.on) i { opacity: .4; }
+.tchart button.on { background: var(--panel2); }
+.tchart button.on i { opacity: 1; }
+.tday b { color: var(--text); }
+.taxis .tday { text-align: center; }
 .taxis { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin: 4px 0 12px; }
 .livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: middle; }
