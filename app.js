@@ -36,6 +36,9 @@ const isMovieRec = m => m.kind === 'movie';   // a recommended movie: show.id is
 let blocked = {};                       // accounts you blocked from sending you shows: uid -> { name, email }
 let findable = true;                    // others can find you by name when sending a show
 // Same logo + text as the splash in index.html, shown while the sign-in check finishes.
+// The same address format as seo.js's show and movie pages (/show/44778-severance); a name that doesn't match exactly redirects.
+const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
 const SPLASH = '<div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div>';
 let authReady = !cloud.configured;       // false until Firebase reports who's signed in
 const stateKey = () => user ? `${K.state}.${cloud.activeUid() || user.uid}${isKid() ? '.kid.' + user.uid : ''}` : K.state;
@@ -393,7 +396,7 @@ function lpPosters() {
   const imgs = lpImgs;
   const paint = () => document.querySelectorAll('[data-lp]').forEach(el => {
     const { img: src, id } = imgs[el.dataset.lp] || {};
-    if (id && el.parentElement.matches('a.lp-pc')) el.parentElement.href = '#/show/' + id;
+    if (id && el.parentElement.matches('a.lp-pc')) el.parentElement.href = '/show/' + id + '-' + slugify(el.dataset.lp);   // its page on the site (seo.js), which Google can list
     if (!src || el.dataset.src === src) return;
     el.dataset.src = src;
     const im = new Image();
@@ -2578,6 +2581,7 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 
 // The footer is drawn here (app.js always loads fresh) so changes to it show up even if index.html is cached.
 $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contact us</a>
+  <span class="newlinks">New this week: ${NEW_ON.map(([slug, name]) => `<a href="/new/${slug}">${esc(name)}</a>`).join(' · ')} · <a href="/new">All streaming</a></span>
   <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
