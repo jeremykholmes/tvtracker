@@ -14,7 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
-const PAGE_VERSION = 3;
+const PAGE_VERSION = 4;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -60,7 +60,7 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
   ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${esc(url)}">`}
   <meta property="og:type" content="${appHash.startsWith('movie') ? 'video.movie' : appHash.startsWith('show') ? 'video.tv_show' : 'website'}">
   <meta property="og:site_name" content="TV Tracker">
-  <meta property="og:title" content="${esc(rec ? `${rec} recommends ${title.split(' – ')[0]}` : title)}">
+  <meta property="og:title" content="${esc(rec ? `${rec} recommends ${title.split(' – ')[0].replace(/ Season \d+$/, '')}` : title)}">
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${esc(url)}">
   <meta property="og:image" content="${esc(image || SITE + '/icons/icon-512.png')}">
@@ -163,7 +163,12 @@ async function showPage(id, slug, rec) {
       <ol>${list.map(e => `<li value="${e.number}">${esc(e.name || `Episode ${e.number}`)} <time datetime="${esc(e.airdate || '')}">${shortDate(e.airdate)}</time></li>`).join('')}</ol></details>`;
   }).join('');
   const image = s.image?.original || s.image?.medium || '';
-  const title = `${s.name} – Episodes, Seasons & Air Dates | TV Tracker`;
+  // People search for the season they're on ("severance season 2 release date"), so shows still airing name the
+  // newest season. Ended shows with several seasons say how many; one-season and other shows keep the general title.
+  const airing = ['Running', 'To Be Determined', 'In Development'].includes(s.status);
+  const title = airing && latest ? `${s.name} Season ${latest} – Episodes & Release Dates | TV Tracker`
+    : s.status === 'Ended' && nSeasons > 1 ? `${s.name} – All ${nSeasons} Seasons, Episodes & Air Dates | TV Tracker`
+    : `${s.name} – Episodes, Seasons & Air Dates | TV Tracker`;
   const body = `<div class="seo-hero">${image ? `<img src="${esc(s.image.medium || image)}" alt="${esc(s.name)} poster" width="210" height="295">` : '<div></div>'}
     <div><h1>${esc(s.name)}</h1><p class="facts">${facts.map(esc).join(' · ')}</p>
       ${summary ? `<p class="summary">${esc(summary)}</p>` : ''}
@@ -176,7 +181,10 @@ async function showPage(id, slug, rec) {
   const jsonLd = { '@context': 'https://schema.org', '@type': 'TVSeries', name: s.name, url: `${SITE}/show/${id}-${want}`, ...(image ? { image } : {}),
     ...(summary ? { description: clip(summary, 500) } : {}), ...(s.premiered ? { startDate: s.premiered } : {}), ...(s.ended ? { endDate: s.ended } : {}),
     ...(s.genres?.length ? { genre: s.genres } : {}), numberOfSeasons: nSeasons, numberOfEpisodes: nEps,
-    ...(where ? { productionCompany: { '@type': 'Organization', name: where } } : {}) };
+    // The network or streamer isn't the production company, and schema.org has no field for it, so it's left out here.
+    ...(s.externals?.imdb ? { sameAs: [`https://www.imdb.com/title/${s.externals.imdb}/`] } : {}),
+    ...(seasons.length ? { containsSeason: seasons.map(x => { const list = eps.filter(e => e.season === x.number);
+      return { '@type': 'TVSeason', seasonNumber: x.number, name: `Season ${x.number}`, numberOfEpisodes: list.length, ...(list[0]?.airdate ? { startDate: list[0].airdate } : {}) }; }) } : {}) };
   return html(page({ title, description, path: `/show/${id}-${want}`, image, imageAlt: `${s.name} poster`, jsonLd, body, appHash: `show/${id}`, rec }), 200, rec ? 600 : 6 * HOUR);
 }
 
