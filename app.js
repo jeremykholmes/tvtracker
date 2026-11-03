@@ -283,9 +283,9 @@ views.landing = () => {
   const cta = `<div class="lp-cta">
       <button class="btn gbtn lg" data-act="google">${GOOGLE_G} Continue with Google</button>
       <a class="btn primary lg" href="#/login/create">Create free account</a></div>`;
-  const nets = ['Netflix', 'HBO Max', 'Hulu', 'Disney+', 'Apple TV+', 'Prime Video', 'Peacock', 'Paramount+', 'NBC', 'CBS', 'ABC', 'FX'];
+  const nets = ['Netflix', 'HBO Max', 'Hulu', 'Disney+', 'Apple TV+', 'Prime Video', 'Peacock', 'Paramount+', 'Angel Studios', 'Tubi', 'NBC', 'CBS', 'ABC', 'FX'];
   const feats = [
-    ['▤', 'One list for everything', 'Every show you watch, from every network and streaming service, together in one place.'],
+    ['▤', 'One list for everything', 'Every show and movie you watch, from every network and streaming service, together in one place.'],
     ['✓', 'One-tap progress', 'Mark the next episode watched, check off a whole season, or catch up to any point instantly.'],
     ['◷', 'Never miss an air date', 'See exactly when new episodes drop, with fresh episodes pulled in automatically.'],
     ['✦', 'Discover what\'s new', 'Browse this week\'s premieres and returning seasons across broadcast and streaming.'],
@@ -301,7 +301,7 @@ views.landing = () => {
     <div class="lp-copy">
       <span class="eyebrow">Your personal TV guide</span>
       <h1>Never lose your place in a show again.</h1>
-      <p class="lead">TV Tracker keeps every series you watch organized — what's next, what's new, and when it airs — across every network and streaming service.</p>
+      <p class="lead">TV Tracker keeps every series you watch organized — what's next, what's new, and when it airs — across every network and streaming service. Plus a movie list, with where each one is streaming.</p>
       ${cta}
       <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a></p>
     </div>
@@ -311,10 +311,23 @@ views.landing = () => {
       </div>
     </div>
   </section>
-  <section class="lp-nets"><p>Track shows from every network and streamer</p>
+  <section class="lp-nets"><p>Track shows and movies from every network and streamer</p>
     <div class="lp-netlist">${nets.map(n => `<span>${n}</span>`).join('')}</div></section>
   <section class="lp-sec"><span class="eyebrow">Popular shows</span><h2 class="lp-h2">Keep up with the shows everyone's watching</h2>
     <div class="lp-posters">${LP_SHOWS.map(n => `<a class="lp-pc" href="#/search"><span class="lp-pimg" data-lp="${esc(n)}"><span class="noimg">${esc(n.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span></span><b>${esc(n)}</b></a>`).join('')}</div></section>
+  <section class="lp-sec lp-share lp-movies">
+    <div class="lp-share-copy"><span class="eyebrow">Movies, too</span>
+      <h2 class="lp-h2">Keep a list of movies to watch</h2>
+      <p class="lead">Switch Add Show to <b>Movies</b> and search any film, brand-new releases included. Add it to your <b>To watch</b> list or mark it <b>Seen it</b>, and see exactly where it's streaming in the US. Not sure what to watch? Type a service like Netflix or Angel Studios to see the movies on it.</p>
+      <ul class="lp-checks"><li>Search any movie, even this week's releases</li><li>See where every movie is streaming</li><li>Browse the movies on any streaming service</li><li>Send a movie to a friend in one tap</li></ul>
+      <div class="lp-cta"><a class="btn primary lg" href="#/login/create">Start your movie list</a></div></div>
+    <div class="lp-visual" aria-hidden="true"><div class="mk-window lp-movie-mk"><div class="mk-dots"><i></i><i></i><i></i></div>
+      <div class="mk-tabs"><span>TV shows</span><span class="on">Movies</span></div>
+      <div class="mk-search">⌕ <span>dune</span></div>
+      ${[['Dune: Part Two', '2024 · PG-13 · 2h 46m', 'Streaming on Max', 1, true], ['Dune', '2021 · PG-13 · 2h 35m', 'Streaming on Max', 2, false], ['Dune', '1984 · PG-13 · 2h 17m', 'Rent or buy', 3, false]].map(([t, meta, where, p, added]) =>
+        `<div class="mk-card"><div class="mk-poster p${p}"></div><div class="mk-body"><b>${t}</b><span>${meta}</span><span class="mk-where">${where}</span>
+          <span class="mk-movbtns">${added ? '<span class="mk-btn">✓ On your list</span>' : '<span class="mk-btn">＋ Add</span><span class="mk-btn ghost">✓ Seen it</span>'}</span></div></div>`).join('')}
+    </div></div></section>
   <section class="lp-sec"><span class="eyebrow">Features</span><h2 class="lp-h2">Everything you need to keep up</h2>
     <div class="lp-feats">${feats.map(([i, t, d]) => `<div class="lp-feat"><span class="lp-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join('')}</div></section>
   <section class="lp-sec lp-share">
@@ -330,12 +343,12 @@ views.landing = () => {
   <section class="lp-sec"><span class="eyebrow">How it works</span><h2 class="lp-h2">Up and running in a minute</h2>
     <ol class="lp-steps">
       <li><b>Create your account</b><p>Sign up with Google in one click, or use your email.</p></li>
-      <li><b>Add your shows</b><p>Search any series and add it to your list.</p></li>
+      <li><b>Add your shows and movies</b><p>Search any series or film and add it to your list.</p></li>
       <li><b>Check off as you watch</b><p>We'll keep track of what's next and what's new.</p></li>
     </ol></section>
-  <section class="lp-band"><h2 class="lp-h2">Start tracking your shows today</h2>
+  <section class="lp-band"><h2 class="lp-h2">Start tracking your shows and movies today</h2>
     <p>Free to use. No credit card required.</p>${cta}
-    <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows</a> first</p></section>
+    <p class="lp-signin">Already have an account? <a href="#/login">Sign in</a> · or <a href="#/search">browse shows and movies</a> first</p></section>
 </div>`;
   lpPosters();
   if (!lpTopCached()) lpTop().then(top => {
