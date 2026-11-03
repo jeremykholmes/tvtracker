@@ -59,11 +59,14 @@ const isLater = id => isFollowed(id) && !!state.shows[id].later && !started(id);
 const current = () => followed().filter(s => !isLater(s.id));   // the shows being watched: everything but the Future watch list
 
 function persist() { save(stateKey(), state); }
+// Counts an action in Google Analytics (shown on the Admin page). Does nothing on the site owner's devices (see index.html).
+function track(name, params) { try { window.gtag?.('event', name, params || {}); } catch { } }
 function setWatched(ids, w) {
   const t = now();
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
   const moved = w ? startShows(ids) : [];
   if (w) startRecommended(ids);
+  if (w) track('episode_watched', { episodes: ids.length });
   persist();
   if (w) collapseFinished(ids);
   return moved;   // ids of shows that just left the Future watch list
@@ -104,6 +107,7 @@ function follow(s, later, rec) {
   state.shows[s.id] = { id: s.id, name: s.name, image: s.image || '', network: s.network || '', removed: false, later: !!later, t: now(),
     ...(rec ? { rec: String(rec).slice(0, 100) } : {}) };
   queue('shows', s.id, state.shows[s.id]); persist();
+  track('add_show', { later: !!later, recommended: !!rec });
 }
 function unfollow(id) {
   if (isKid()) return;
@@ -601,6 +605,7 @@ function sendShowDialog(s, movie) {
       await cloud.sendShow(to.uid, s, f.note.value, user.name, movie);
       save(K_SENT, [to, ...recent.filter(p => p.uid !== to.uid)].slice(0, 6));
       d.close(); toast(`Sent ${s.name} to ${to.name}`);
+      track('recommend', { method: 'in_app', movie: !!movie });
     } catch (x) {
       console.warn('send show', x);
       showErr(({ 'tvt/lookup-denied': 'Couldn\'t look them up — the database refused (step 1: lookup). The latest Firestore rules may not be published.',
@@ -617,6 +622,7 @@ async function shareLink(s, movie) {
   const name = (user?.name || '').trim().split(/\s+/)[0];
   const url = `${location.origin}${location.pathname}#/${movie ? 'movie' : 'show'}/${s.id}${name ? '/' + encodeURIComponent(name) : ''}`;
   const text = name ? `${name} recommends ${s.name} — check it out on TV Tracker` : `Check out ${s.name} on TV Tracker`;
+  track('recommend', { method: 'link', movie: !!movie });
   if (navigator.share) {
     try { await navigator.share({ title: s.name, text, url }); } catch (e) { if (e?.name !== 'AbortError') toast('Couldn\'t open sharing'); }
     return;
@@ -965,6 +971,7 @@ function addMovie(m, seen, rec) {
   state.movies[m.id] = { id: m.id, name: m.name, image: m.image || '', year: m.year || '', w: !!seen, removed: false, t, ...(rec ? { rec } : {}),
     ...(m.custom ? { custom: true, where: m.where || '', ...(m.imdb ? { imdb: m.imdb } : {}) } : {}) };
   queue('movies', m.id, state.movies[m.id]); persist();
+  track('add_movie', { seen: !!seen, recommended: !!rec });
 }
 function setMovie(id, fields) {
   const m = state.movies[id]; if (!m) return;
@@ -1517,9 +1524,9 @@ async function loadTraffic() {
   const box = document.getElementById('traffic'); if (!box) return;
   let t;
   try { t = await cloud.traffic(); }
-  catch (x) { if (document.contains(box)) box.innerHTML = `<h3>Website traffic</h3><p class="formerr">${esc(x.message || String(x))}</p>`; return; }
+  catch (x) { if (document.contains(box)) box.innerHTML = `<h3>Website traffic</h3><p class="formerr">${esc(x.message || String(x))}</p>`; document.getElementById('moreStats')?.remove(); return; }
   if (!document.contains(box)) return;
-  if (t.setup) { box.innerHTML = `<h3>Website traffic</h3><p>Not connected to Google Analytics yet. See "Website traffic" in README.md for the one-time setup.</p>
+  if (t.setup) { document.getElementById('moreStats')?.remove(); box.innerHTML = `<h3>Website traffic</h3><p>Not connected to Google Analytics yet. See "Website traffic" in README.md for the one-time setup.</p>
     ${t.missing ? `<p class="sub">The site can't see: <b>${t.missing.map(esc).join(', ')}</b>. Settings it does see: ${t.has?.length ? t.has.map(esc).join(', ') : 'none'}.</p>` : ''}`; return; }
   const n = v => (v || 0).toLocaleString();
   // One bar per day, including days with no visitors (Google leaves those out).
@@ -1541,6 +1548,7 @@ async function loadTraffic() {
     <div class="taxis sub"><span>${label(days[0].d)}</span><span class="tday" aria-live="polite">Tap a day for its numbers · busiest ${n(max)}</span><span>${label(days[29].d)}</span></div>
     <p class="sub">From Google Analytics. Big numbers are visitors (people); recent hours can take a little while to show up. Your own visits aren't counted on any device where you've signed in.</p>`;
 
+  drawMore(t);
   // Tapping (or clicking) a day shows that day's visitors and page views under the chart; tapping it again clears it.
   const chart = box.querySelector('.tchart'), readout = box.querySelector('.tday'), blank = readout.textContent;
   chart.addEventListener('click', e => {
@@ -1552,6 +1560,44 @@ async function loadTraffic() {
     const x = days[+b.dataset.i];
     readout.innerHTML = `<b>${x.d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}:</b> ${n(x.users)} visitor${x.users === 1 ? '' : 's'} · ${n(x.views)} page view${x.views === 1 ? '' : 's'}`;
   });
+}
+
+// Admin page: the rest of the analytics, last 30 days — what people did on the site, where visitors come from, devices,
+// places, pages, clicks out to other sites, and Google search (Search Console).
+function drawMore(t) {
+  const box = document.getElementById('moreStats'); if (!box) return;
+  const n = v => Math.round(v || 0).toLocaleString(), m = t.more || {}, g = t.search || {};
+  const cap = x => String(x || '').replace(/^./, c => c.toUpperCase());
+  // A list of names with a bar sized to the biggest, and the number.
+  const bars = (rows, title, empty = 'Nothing yet.', label = cap) => {
+    const max = Math.max(1, ...(rows || []).map(r => r.n));
+    return `<div class="mstat"><h4>${title}</h4>${(rows || []).length ? rows.map(r => `<div class="mrow"><span class="mname">${esc(label(r.name))}</span>
+      <span class="mbar"><i style="width:${Math.max(2, Math.round(r.n / max * 100))}%"></i></span><b>${n(r.n)}</b></div>`).join('') : `<p class="sub">${empty}</p>`}</div>`;
+  };
+  const tile = (label, v) => `<div class="tstat"><span class="sub">${label}</span><b>${v}</b></div>`;
+  const a = m.actions || {};
+  const searchPart = g.error && !g.needsAccess ? `<p class="formerr">${esc(g.error)}</p>`
+    : g.needsAccess ? `<p>Not connected yet. In <b>Search Console → Settings → Users and permissions → Add user</b>, add the service account's email (the <code>…iam.gserviceaccount.com</code> one) with <b>Restricted</b> permission, and turn on the <b>Google Search Console API</b> in Google Cloud for the same project.</p>`
+    : `<div class="tstats">${tile('Clicks from Google', n(g.clicks))}${tile('Times shown in results', n(g.impressions))}${tile('Click-through rate', ((g.ctr || 0) * 100).toFixed(1) + '%')}${tile('Average position', g.position ? g.position.toFixed(1) : '—')}</div>
+      <div class="mgrid">${bars((g.queries || []).map(q => ({ name: q.name, n: q.clicks || q.impressions })), 'Top searches <span class="sub">(clicks, or times shown if none)</span>', 'No searches yet.', x => x)}
+      ${bars((g.pages || []).map(q => ({ name: q.name.replace(/^https?:\/\/(www\.)?tvtracker\.us/, '') || '/', n: q.clicks })), 'Pages people clicked', 'No clicks yet.', x => x)}</div>
+      <p class="sub">Google's search numbers run 2–3 days behind.</p>`;
+  box.innerHTML = `<h3>More analytics · last 30 days</h3>
+    ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
+    <h4 class="msec">What people did</h4>
+    <div class="tstats six">${tile('Sign-ups', n(a.sign_up))}${tile('Shows added', n(a.add_show))}${tile('Movies added', n(a.add_movie))}${tile('Episode check-offs', n(a.episode_watched))}${tile('Recommendations', n(a.recommend))}${tile('App installs', n(a.app_install))}</div>
+    <div class="mgrid">
+      ${bars(m.sources, 'Where visitors come from')}
+      ${bars(m.sites, 'Referring sites', 'Nothing yet.', x => x)}
+      ${bars(m.devices, 'Devices')}
+      ${bars(m.newVsReturning, 'New vs. returning')}
+      ${bars(m.countries, 'Countries', 'Nothing yet.', x => x)}
+      ${bars(m.cities, 'Cities', 'Nothing yet.', x => x)}
+      ${bars(m.pages, 'Most-viewed pages', 'Nothing yet.', x => x)}
+      ${bars(m.outbound, 'Clicks out to other sites', 'Nothing yet.', x => x)}
+    </div>`}
+    <h4 class="msec">Google search</h4>${searchPart}
+    <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026.</p>`;
 }
 
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
@@ -1587,6 +1633,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
       <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
   app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others${removed.length ? ` · ${removed.length} removed` : ''}</span></div>
     <div class="panel" id="traffic"><h3>Website traffic</h3><p class="loading">Loading Google Analytics…</p></div>
+    <div class="panel" id="moreStats"><h3>More analytics · last 30 days</h3><p class="loading">Loading…</p></div>
     <div class="panel"><h3>Contact us messages · ${msgs.length}</h3>${msgErr ? `<p class="formerr">${esc(msgErr)}</p>` : msgs.map(msgRow).join('') || '<p>No messages yet.</p>'}</div>
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
@@ -1901,6 +1948,9 @@ function onUser(u) {
   if (u) try {
     if (cloud.isAdmin()) { localStorage.setItem('tvt.noga', '1'); window['ga-disable-G-7SHW9HZXCV'] = true; }
     else if (localStorage.getItem('tvt.noga')) { localStorage.removeItem('tvt.noga'); window['ga-disable-G-7SHW9HZXCV'] = false; }
+  } catch { }
+  if (u?.isNew && !cloud.isLogin(u.email)) try {
+    if (!localStorage.getItem('tvt.su.' + u.uid)) { localStorage.setItem('tvt.su.' + u.uid, '1'); track('sign_up', { method: cloud.usesPassword() ? 'email' : 'google' }); }
   } catch { }
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {}; kidLimit = { maxRating: '', block: [] };
   if (u) waitForServer();
@@ -2341,7 +2391,11 @@ function render(fromRoute) {
 let navDepth = 0, restoreScroll = false;
 const scrollSpots = {};
 window.addEventListener('scroll', () => { scrollSpots[location.hash] = scrollY; }, { passive: true });
+// Each page opened in the app, for the Admin page's "Most-viewed pages" (page_location carries the #/page part).
+const trackPage = () => track('page_open', { page_location: location.href, page_title: document.title });
+trackPage();
 window.addEventListener('hashchange', () => {
+  trackPage();
   const back = restoreScroll; restoreScroll = false;
   navDepth = back ? Math.max(0, navDepth - 1) : navDepth + 1;
   render(true); scrollTo(0, back ? scrollSpots[location.hash] || 0 : 0);
@@ -2375,7 +2429,7 @@ let installPrompt = null;
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function appButton() { $('#getapp').hidden = installed(); }
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; appButton(); });
-window.addEventListener('appinstalled', () => { installPrompt = null; $('#appDialog').close?.(); $('#getapp').hidden = true; toast('TV Tracker added to your device'); });
+window.addEventListener('appinstalled', () => { track('app_install'); installPrompt = null; $('#appDialog').close?.(); $('#getapp').hidden = true; toast('TV Tracker added to your device'); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 function installSteps() {
   const ua = navigator.userAgent;

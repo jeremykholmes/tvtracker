@@ -90,7 +90,8 @@ async function migrate(uid, legacy, current) {
   await b.commit();
 }
 
-const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] });
+const toUser = u => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0],
+  isNew: Date.now() - Date.parse(u.metadata?.creationTime || 0) < 5 * 60e3 });   // made in the last few minutes (for the sign-up count)
 
 // Switches the open list (yours, or the owner's for a login they made; asKid: through that login's filtered copy).
 export function openAccount(uid, asKid = false) {
