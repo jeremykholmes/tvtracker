@@ -527,3 +527,13 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .newon { color: var(--muted); font-size: 14px; margin: 8px 0 14px; }
 .newon a { color: var(--text); font-weight: 600; }
 .lp-nets .newon { text-align: center; margin-top: 16px; }
+
+/* Discover: New this week on <service> buttons (open the /new/<service> pages) */
+.newsvcs { margin: 4px 0 18px; }
+.newsvcs .dhead { margin-top: 0; }
+.newsvc-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.newsvc { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 6px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel2); text-decoration: none; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.newsvc img { width: 32px; height: 32px; border-radius: 50%; object-fit: contain; background: #fff; }
+.newsvc.all { padding: 0 16px; background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.newsvc:hover { border-color: var(--muted); }

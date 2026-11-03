@@ -825,9 +825,12 @@ views.discover = () => {
        <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows drows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
   app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Shows picked for you from what you watch</span>
       <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
+    <div class="newsvcs"><h2 class="dhead">New this week on</h2>
+      <div class="newsvc-row">${NEW_ON.map(([slug, name]) => { const ic = netIcon(name);
+        return `<a class="newsvc" href="/new/${slug}">${ic ? `<img src="${esc(ic)}" alt="" loading="lazy">` : ''}<span>${esc(name)}</span></a>`; }).join('')}
+        <a class="newsvc all" href="/new"><span>All streaming</span></a></div></div>
     ${recsSection()}
     <h2 class="dhead">Premiering this week</h2>
-    <p class="newon">New this week on: ${NEW_ON.map(([slug, name]) => `<a href="/new/${slug}">${esc(name)}</a>`).join(' · ')}</p>
     ${premieres}`;
 };
 
