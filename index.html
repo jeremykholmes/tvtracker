@@ -28,6 +28,12 @@
   <meta property="og:image:height" content="512">
   <meta property="og:image:alt" content="TV Tracker logo">
   <meta name="twitter:card" content="summary">
+  <!-- Tells Google the site's name (shown above results) and what it is -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+    {"@type":"WebSite","@id":"https://tvtracker.us/#website","name":"TV Tracker","alternateName":"tvtracker.us","url":"https://tvtracker.us/"},
+    {"@type":"WebApplication","name":"TV Tracker","url":"https://tvtracker.us/","applicationCategory":"EntertainmentApplication","operatingSystem":"Any (works in your web browser)",
+     "description":"Free TV show and movie tracker: check off episodes as you watch, see what's airing next, keep a list of movies with where they're streaming, and share your list with your household.",
+     "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@id":"https://tvtracker.us/#website"}}]}</script>
   <meta name="theme-color" content="#0e1014">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="TV Tracker">
@@ -44,6 +50,10 @@
     .splash p { margin: 0; }
     @keyframes splash-pulse { 50% { opacity: .45; transform: scale(.94); } }
     @media (prefers-reduced-motion: reduce) { .splash img { animation: none; } }
+    /* Plain text and links readable before the app loads (the app replaces it), so search engines see what the site is. */
+    .intro { max-width: 640px; margin: 0 auto; padding: 0 20px 40px; text-align: center; color: #98a1b0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .intro h1 { font-size: 20px; margin: 0 0 8px; color: inherit; }
+    .intro a { color: inherit; font-weight: 600; }
   </style>
   <script>
     // Links in emails use ?show=<id>&from=<name> or ?movie=<id>&from=<name> (no #, which some email apps and link
@@ -75,10 +85,15 @@
     <button type="button" class="btn sm topout" id="topout" data-act="signout" hidden>Sign out</button>
   </header>
   <div class="busy" id="busy" hidden></div>
-  <main id="app"><div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div></main>
+  <main id="app"><div class="splash"><img src="icons/logo.svg" alt=""><p>Loading your shows…</p></div>
+    <section class="intro">
+      <h1>TV Tracker: a free TV show and movie tracker</h1>
+      <p>Check off episodes as you watch, see when new episodes air, keep a list of movies with where each one is streaming, and share your list with your household. Free, no ads.</p>
+      <p>New this week on <a href="/new/netflix">Netflix</a> · <a href="/new/hulu">Hulu</a> · <a href="/new/disney-plus">Disney+</a> · <a href="/new/max">HBO Max</a> · <a href="/new/prime-video">Prime Video</a> · <a href="/new/apple-tv">Apple TV+</a> · <a href="/new/peacock">Peacock</a> · <a href="/new/paramount-plus">Paramount+</a> · <a href="/new">All streaming</a></p>
+    </section></main>
   <div id="toast" class="toast" hidden></div>
   <dialog id="appDialog" class="appdlg"></dialog>
-  <footer class="foot"><a href="#/contact">Contact us</a> · <a href="privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
+  <footer class="foot">New this week: <a href="/new/netflix">Netflix</a> · <a href="/new/hulu">Hulu</a> · <a href="/new/disney-plus">Disney+</a> · <a href="/new/max">HBO Max</a> · <a href="/new/prime-video">Prime Video</a> · <a href="/new/apple-tv">Apple TV+</a> · <a href="/new/peacock">Peacock</a> · <a href="/new/paramount-plus">Paramount+</a> · <a href="/new">All streaming</a><br><a href="#/contact">Contact us</a> · <a href="privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
   <script type="module">import('./app.js' + window.TVT_V);</script>
 </body>
 </html>

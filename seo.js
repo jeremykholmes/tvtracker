@@ -14,7 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
-const PAGE_VERSION = 2;
+const PAGE_VERSION = 3;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -38,7 +38,7 @@ const xml = body => new Response(body, { headers: { 'content-type': 'application
 
 // The page around the content: the site's look, Google Analytics (skipped on the owner's devices, as in index.html),
 // link-preview tags and Google's structured data.
-function page({ title, description, path, image, imageAlt, jsonLd, body, appHash, rec }) {
+function page({ title, description, path, image, imageAlt, jsonLd, body, appHash, rec, noindex }) {
   const url = SITE + path;
   return `<!doctype html>
 <html lang="en">
@@ -57,7 +57,7 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
-  <link rel="canonical" href="${esc(url)}">
+  ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${esc(url)}">`}
   <meta property="og:type" content="${appHash.startsWith('movie') ? 'video.movie' : appHash.startsWith('show') ? 'video.tv_show' : 'website'}">
   <meta property="og:site_name" content="TV Tracker">
   <meta property="og:title" content="${esc(rec ? `${rec} recommends ${title.split(' – ')[0]}` : title)}">
@@ -117,15 +117,34 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
 </html>`;
 }
 
-const notFound = what => html(page({ title: `${what} not found – TV Tracker`, description: 'Track the TV shows and movies you watch with TV Tracker.', path: '/',
+const notFound = what => html(page({ title: `${what} not found – TV Tracker`, description: 'Track the TV shows and movies you watch with TV Tracker.', path: '/', noindex: true,
   appHash: 'search', jsonLd: {}, body: `<h1>${what} not found</h1><p>It may have been removed. <a href="/#/search">Search for a show</a> or <a href="/">go to TV Tracker</a>.</p>` }), 404, 600);
 
 /* ---------- show pages ---------- */
+// "Shows like …": TMDB's recommendations for the show, matched back to TVmaze (whose ids the show pages use) by name
+// and premiere year. Links between show pages help Google find and rank them. Never holds up or breaks the page.
+async function similarShows(s) {
+  const work = (async () => {
+    const ex = s.externals || {};
+    const find = async (id, src) => id ? (await getJson(`${TMDB}/find/${encodeURIComponent(id)}?api_key=${TMDB_KEY}&external_source=${src}`, 7 * DAY).catch(() => null))?.tv_results?.[0]?.id : null;
+    const tid = await find(ex.imdb, 'imdb_id') || await find(ex.thetvdb, 'tvdb_id');
+    if (!tid) return [];
+    const recs = (await getJson(`${TMDB}/tv/${tid}/recommendations?api_key=${TMDB_KEY}&language=en-US&page=1`, 7 * DAY))?.results || [];
+    const hits = await Promise.all(recs.filter(r => r.name).slice(0, 10).map(r => getJson(`${TVMAZE}/singlesearch/shows?q=${encodeURIComponent(r.name)}`, 7 * DAY)
+      .then(t => t && t.id !== s.id && (!r.first_air_date || !t.premiered || Math.abs(year(t.premiered) - year(r.first_air_date)) <= 1) ? t : null).catch(() => null)));
+    const seen = new Set();
+    return hits.filter(t => t && !seen.has(t.id) && seen.add(t.id)).slice(0, 8);
+  })().catch(() => []);
+  return Promise.race([work, new Promise(r => setTimeout(() => r([]), 4000))]);
+}
+const similarCard = t => `<a class="nwc" href="/show/${t.id}-${slugify(t.name)}">${t.image?.medium ? `<img src="${esc(t.image.medium)}" alt="${esc(t.name)} poster" loading="lazy" width="210" height="295">` : '<span class="noimg"></span>'}
+  <b>${esc(t.name)}</b><span>${esc([serviceOf(t), year(t.premiered)].filter(Boolean).join(' · '))}</span></a>`;
 async function showPage(id, slug, rec) {
   const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=episodes&embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
   if (!s) return notFound('Show');
   const want = slugify(s.name);
   if (slug !== want) return Response.redirect(`${SITE}/show/${id}-${want}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
+  const similar = await similarShows(s);
   const eps = (s._embedded?.episodes || []).filter(e => e.season && e.number != null);
   const seasons = (s._embedded?.seasons || []).filter(x => x.number && eps.some(e => e.season === x.number));
   const next = s._embedded?.nextepisode;
@@ -152,7 +171,8 @@ async function showPage(id, slug, rec) {
       <div class="cta"><a class="btn primary" href="/#/show/${id}">＋ Track ${esc(s.name)} free</a><a class="btn" href="/#/show/${id}">See episodes in the app</a></div>
       <p class="note">Check off episodes as you watch, see what's airing next, and share your list. Free, no ads.</p></div></div>
     ${seasonList ? `<h2>${esc(s.name)} episode guide</h2>${seasonList}` : ''}
-    ${where ? `<h2>Where to watch ${esc(s.name)}</h2><p>${esc(s.name)} ${s.status === 'Ended' ? 'aired' : 'airs'} on <b>${esc(where)}</b>${s.network?.country?.name ? ` (${esc(s.network.country.name)})` : ''}.${s.officialSite ? ` <a href="${esc(s.officialSite)}" rel="nofollow noopener" target="_blank">Official site</a>.` : ''} Open it in TV Tracker to see every streaming service it's on in the US.</p>` : ''}`;
+    ${where ? `<h2>Where to watch ${esc(s.name)}</h2><p>${esc(s.name)} ${s.status === 'Ended' ? 'aired' : 'airs'} on <b>${esc(where)}</b>${s.network?.country?.name ? ` (${esc(s.network.country.name)})` : ''}.${s.officialSite ? ` <a href="${esc(s.officialSite)}" rel="nofollow noopener" target="_blank">Official site</a>.` : ''} Open it in TV Tracker to see every streaming service it's on in the US.</p>` : ''}
+    ${similar.length ? `<h2>Shows like ${esc(s.name)}</h2><div class="nwgrid">${similar.map(similarCard).join('')}</div>` : ''}`;
   const jsonLd = { '@context': 'https://schema.org', '@type': 'TVSeries', name: s.name, url: `${SITE}/show/${id}-${want}`, ...(image ? { image } : {}),
     ...(summary ? { description: clip(summary, 500) } : {}), ...(s.premiered ? { startDate: s.premiered } : {}), ...(s.ended ? { endDate: s.ended } : {}),
     ...(s.genres?.length ? { genre: s.genres } : {}), numberOfSeasons: nSeasons, numberOfEpisodes: nEps,
@@ -162,7 +182,7 @@ async function showPage(id, slug, rec) {
 
 /* ---------- movie pages ---------- */
 async function moviePage(id, slug, rec) {
-  const m = await getJson(`${TMDB}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=release_dates,credits,watch/providers`, 6 * HOUR);
+  const m = await getJson(`${TMDB}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=release_dates,credits,watch/providers,recommendations`, 6 * HOUR);
   if (!m || m.adult) return notFound('Movie');
   const want = slugify(m.title);
   if (slug !== want) return Response.redirect(`${SITE}/movie/${id}-${want}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
@@ -174,6 +194,7 @@ async function moviePage(id, slug, rec) {
   const director = (m.credits?.crew || []).filter(c => c.job === 'Director').map(c => c.name);
   const runtime = m.runtime ? `${Math.floor(m.runtime / 60) ? Math.floor(m.runtime / 60) + 'h ' : ''}${m.runtime % 60}m` : '';
   const yr = year(m.release_date);
+  const similar = (m.recommendations?.results || []).filter(r => r.title && !r.adult && r.id !== m.id).slice(0, 8);
   const description = clip(`${m.title}${yr ? ` (${yr})` : ''}${streaming.length ? ` is streaming on ${streaming.slice(0, 3).join(', ')}` : ''}. ${m.overview || 'Where to watch, runtime, rating and cast.'}`, 160);
   const facts = [yr, cert, runtime, ...(m.genres || []).slice(0, 3).map(g => g.name), m.vote_average ? `★ ${m.vote_average.toFixed(1)}/10` : ''].filter(Boolean);
   const poster = m.poster_path ? 'https://image.tmdb.org/t/p/w342' + m.poster_path : '';
@@ -187,7 +208,8 @@ async function moviePage(id, slug, rec) {
     <h2>Where to watch ${esc(m.title)}</h2>
     ${streaming.length ? `<p>Streaming in the US on:</p><ul class="chips">${streaming.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : `<p>Not on a US streaming subscription right now.</p>`}
     ${rentBuy.length ? `<p>Rent or buy:</p><ul class="chips">${rentBuy.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-    ${director.length || cast.length ? `<h2>Cast &amp; crew</h2>${director.length ? `<p><b>Directed by</b> ${director.map(esc).join(', ')}</p>` : ''}${cast.length ? `<p><b>Starring</b> ${cast.map(esc).join(', ')}</p>` : ''}` : ''}`;
+    ${director.length || cast.length ? `<h2>Cast &amp; crew</h2>${director.length ? `<p><b>Directed by</b> ${director.map(esc).join(', ')}</p>` : ''}${cast.length ? `<p><b>Starring</b> ${cast.map(esc).join(', ')}</p>` : ''}` : ''}
+    ${similar.length ? `<h2>Movies like ${esc(m.title)}</h2><div class="nwgrid">${similar.map(movieCardHtml).join('')}</div>` : ''}`;
   const jsonLd = { '@context': 'https://schema.org', '@type': 'Movie', name: m.title, url: `${SITE}/movie/${id}-${want}`, ...(image ? { image } : {}),
     ...(m.overview ? { description: m.overview } : {}), ...(m.release_date ? { datePublished: m.release_date } : {}), ...(cert ? { contentRating: cert } : {}),
     ...(m.runtime ? { duration: `PT${m.runtime}M` } : {}), ...(m.genres?.length ? { genre: m.genres.map(g => g.name) } : {}),
@@ -342,6 +364,7 @@ export async function seo(request, ctx) {
   let res;
   try { res = await make(); }
   catch (e) { return html(page({ title: 'TV Tracker', description: 'Track the TV shows and movies you watch.', path: url.pathname, appHash: 'search', jsonLd: {},
+    noindex: true,
     body: `<h1>Couldn't load this page</h1><p>Please try again in a moment, or <a href="/">open TV Tracker</a>.</p>` }), 503, 60); }
   if (res.status === 200 && ctx?.waitUntil) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
