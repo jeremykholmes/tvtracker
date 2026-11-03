@@ -1536,9 +1536,21 @@ async function loadTraffic() {
   box.innerHTML = `<h3>Website traffic</h3>
     <p><span class="livedot"></span><b>${n(t.now)}</b> on the site right now <span class="sub">(last 30 minutes)</span></p>
     <div class="tstats">${stat('Today', t.today)}${stat('Last 7 days', t.week)}${stat('Last 30 days', t.month)}${stat('All time', t.all)}</div>
-    <div class="tchart" role="img" aria-label="Visitors per day, last 30 days">${days.map(x => `<span title="${label(x.d)}: ${n(x.users)} visitor${x.users === 1 ? '' : 's'}, ${n(x.views)} page view${x.views === 1 ? '' : 's'}"><i style="height:${Math.max(x.users ? 4 : 1, Math.round(x.users / max * 100))}%"></i></span>`).join('')}</div>
-    <div class="taxis sub"><span>${label(days[0].d)}</span><span>Visitors per day · busiest ${n(max)}</span><span>${label(days[29].d)}</span></div>
+    <div class="tchart" aria-label="Visitors per day, last 30 days. Tap a day to see its numbers.">${days.map((x, i) => `<button type="button" data-i="${i}" aria-label="${label(x.d)}: ${n(x.users)} visitor${x.users === 1 ? '' : 's'}"><i style="height:${Math.max(x.users ? 4 : 1, Math.round(x.users / max * 100))}%"></i></button>`).join('')}</div>
+    <div class="taxis sub"><span>${label(days[0].d)}</span><span class="tday" aria-live="polite">Tap a day for its numbers · busiest ${n(max)}</span><span>${label(days[29].d)}</span></div>
     <p class="sub">From Google Analytics. Big numbers are visitors (people); recent hours can take a little while to show up. Your own visits aren't counted on any device where you've signed in.</p>`;
+
+  // Tapping (or clicking) a day shows that day's visitors and page views under the chart; tapping it again clears it.
+  const chart = box.querySelector('.tchart'), readout = box.querySelector('.tday'), blank = readout.textContent;
+  chart.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const on = !b.classList.contains('on');
+    chart.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
+    if (!on) { readout.textContent = blank; return; }
+    b.classList.add('on');
+    const x = days[+b.dataset.i];
+    readout.innerHTML = `<b>${x.d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}:</b> ${n(x.users)} visitor${x.users === 1 ? '' : 's'} · ${n(x.views)} page view${x.views === 1 ? '' : 's'}`;
+  });
 }
 
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
