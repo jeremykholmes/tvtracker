@@ -814,15 +814,16 @@ const NEW_ON = [['netflix', 'Netflix'], ['hulu', 'Hulu'], ['disney-plus', 'Disne
 views.discover = () => {
   const d = meta.discover, stale = !d || now() - d.t > STALE;
   if (stale && !discoverLoading) discoverLoading = loadDiscover().catch(e => toast('Couldn\'t load premieres: ' + e.message)).finally(() => { discoverLoading = null; if (route().name === 'discover') render(); });
+  // Tiles, like Upcoming and My Shows: poster, then name, network/season/genres, premiere date and the Add buttons.
   const item = it => `<div class="row">${poster(it.show, '#/show/' + it.show.id)}
     <div class="info"><a href="#/show/${it.show.id}">${esc(it.show.name)}</a>
-      <div class="sub">${esc(channel(it.show.network, it.show.name))}${it.season > 1 ? ` · Season ${it.season}` : ''}${it.show.genres?.length ? ' · ' + esc(it.show.genres.slice(0, 2).join(', ')) : ''}</div></div>
-    <div class="when">${fmtDate({ airstamp: it.airstamp, airdate: it.airdate })}</div>
-    ${followBtn(it.show)}</div>`;
+      <div class="sub">${esc(channel(it.show.network, it.show.name))}${it.season > 1 ? ` · Season ${it.season}` : ''}${it.show.genres?.length ? ' · ' + esc(it.show.genres.slice(0, 2).join(', ')) : ''}</div>
+      <div class="when">${airTime(it) <= now() ? 'Premiered' : 'Premieres'} ${fmtDate({ airstamp: it.airstamp, airdate: it.airdate })}</div>
+      <div class="tilebtns">${followBtn(it.show)}</div></div></div>`;
   const fresh = d ? d.items.filter(i => i.season === 1) : [], back = d ? d.items.filter(i => i.season > 1) : [];
   const premieres = !d ? '<p class="loading">Pulling this week\'s premieres across networks &amp; streaming…</p>'
-    : `<h3 class="dsub">New series · ${fresh.length}</h3><div class="rows drows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
-       <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows drows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
+    : `<h3 class="dsub">New series · ${fresh.length}</h3><div class="rows urows drows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
+       <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows urows drows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
   app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Shows picked for you from what you watch</span>
       <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
     <div class="newsvcs"><h2 class="dhead">New this week on</h2>

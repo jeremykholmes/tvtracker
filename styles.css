@@ -537,3 +537,7 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .newsvc img { width: 32px; height: 32px; border-radius: 50%; object-fit: contain; background: #fff; }
 .newsvc.all { padding: 0 16px; background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .newsvc:hover { border-color: var(--muted); }
+
+/* Discover's premiere tiles: Add buttons under the date */
+.drows .row .tilebtns { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.drows .row .tilebtns .addbtns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
