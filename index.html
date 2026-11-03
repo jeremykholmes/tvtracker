@@ -8,6 +8,8 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
+    // The site owner's own devices aren't counted (app.js sets this once the admin account signs in on a device).
+    try { if (localStorage.getItem('tvt.noga')) window['ga-disable-G-7SHW9HZXCV'] = true; } catch (e) { }
 
     gtag('config', 'G-7SHW9HZXCV');
   </script>
