@@ -541,3 +541,12 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 /* Discover's premiere tiles: Add buttons under the date */
 .drows .row .tilebtns { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .drows .row .tilebtns .addbtns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+/* My Shows tiles: same size and type as Discover's and Upcoming's tiles */
+.grid .card { border-radius: 12px; }
+.grid .card .poster { width: 88px; border-radius: 8px; }
+.grid .card .poster .noimg { font-size: 16px; }
+.grid .card .title { font-size: 18px; font-weight: 650; }
+.grid .card .sub { font-size: 15px; }
+.grid .card .next { font-size: 14px; }
+.grid .card .watchbtn { font-size: 14px; padding: 7px 13px; }
