@@ -484,3 +484,19 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .taxis .tday { text-align: center; }
 .taxis { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin: 4px 0 12px; }
 .livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: middle; }
+
+/* admin page: more analytics */
+.msec { margin: 16px 0 8px; font-size: 15px; }
+.tstats.six { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 760px) { .tstats.six { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 420px) { .tstats.six { grid-template-columns: repeat(2, 1fr); } }
+.mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+@media (max-width: 560px) { .mgrid { grid-template-columns: minmax(0, 1fr); } }
+.mstat { background: var(--panel2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.mstat h4 { margin: 0 0 6px; font-size: 13px; }
+.mstat .sub { font-size: 12px; margin: 0; }
+.mrow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+.mname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mbar { height: 8px; background: color-mix(in srgb, var(--line) 70%, transparent); border-radius: 4px; overflow: hidden; }
+.mbar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.mrow b { font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }

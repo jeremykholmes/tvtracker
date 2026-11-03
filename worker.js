@@ -83,7 +83,7 @@ let gaToken = { token: '', until: 0 };
 async function googleToken(sa) {
   if (gaToken.token && Date.now() < gaToken.until) return gaToken.token;
   const now = Math.floor(Date.now() / 1000), enc = o => toB64url(new TextEncoder().encode(JSON.stringify(o)));
-  const unsigned = enc({ alg: 'RS256', typ: 'JWT' }) + '.' + enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/analytics.readonly',
+  const unsigned = enc({ alg: 'RS256', typ: 'JWT' }) + '.' + enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
     aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
   const pem = sa.private_key.replace(/-----[^-]+-----|\s/g, '');
   const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), c => c.charCodeAt(0)), RS256, false, ['sign']);
@@ -125,7 +125,69 @@ async function traffic(request, env) {
     out[name] = { users: num(row?.metricValues?.[0]), sessions: num(row?.metricValues?.[1]), views: num(row?.metricValues?.[2]) };
   }
   out.days = (daily.rows || []).map(r => ({ date: r.dimensionValues[0].value, users: num(r.metricValues[0]), views: num(r.metricValues[1]) }));
+  // The rest of the Admin page's analytics (last 30 days). Each part reports its own error so one can't blank the others.
+  [out.more, out.search] = await Promise.all([moreReports(ga, num).catch(e => ({ error: String(e?.message || e) })),
+    searchConsole(token).catch(e => ({ error: String(e?.message || e) }))]);
   return json(out);
+}
+
+// The app's pages, by the #/name part of the address.
+const PAGE_NAMES = { '': 'My Shows', shows: 'My Shows', show: 'Show pages', movie: 'Movie pages', upcoming: 'Upcoming', discover: 'Discover',
+  search: 'Add Show / search', account: 'Account', login: 'Sign in / sign up', admin: 'Admin', contact: 'Contact us' };
+const pageName = loc => {
+  try {
+    const u = new URL(loc), path = u.pathname.replace(/\/index\.html$/, '/');
+    if (path !== '/') return path.replace(/^\//, '').replace(/\.html$/, '').replace(/^./, c => c.toUpperCase()) + ' page';
+    const name = u.hash.replace(/^#\/?/, '').split('/')[0];
+    return PAGE_NAMES[name] || 'Other';
+  } catch { return 'Other'; }
+};
+const ACTIONS = ['sign_up', 'add_show', 'add_movie', 'episode_watched', 'recommend', 'app_install'];
+
+async function moreReports(ga, num) {
+  const last30 = [{ startDate: '29daysAgo', endDate: 'today' }], users = [{ name: 'activeUsers' }], count = [{ name: 'eventCount' }];
+  const by = (dim, limit, metrics = users, filter) => ({ dateRanges: last30, dimensions: [{ name: dim }], metrics, limit,
+    orderBys: [{ metric: { metricName: metrics[0].name }, desc: true }], ...(filter ? { dimensionFilter: filter } : {}) });
+  const isEvent = (...names) => ({ filter: { fieldName: 'eventName', inListFilter: { values: names } } });
+  const [a, b] = await Promise.all([
+    ga('batchRunReports', { requests: [by('sessionDefaultChannelGroup', 10), by('deviceCategory', 5), by('country', 8), by('city', 8), by('newVsReturning', 3)] }),
+    ga('batchRunReports', { requests: [by('eventName', 20, count, isEvent(...ACTIONS)), by('pageLocation', 250, count, isEvent('page_open')),
+      by('linkDomain', 10, count, isEvent('click')), by('sessionSource', 8)] })
+  ]);
+  const rows = r => (r.rows || []).map(x => ({ name: x.dimensionValues[0].value, n: num(x.metricValues[0]) }));
+  const [sources, devices, countries, cities, newVsReturning] = a.reports.map(rows);
+  const [events, pageRows, outbound, sites] = b.reports.map(rows);
+  const pages = {};
+  for (const r of pageRows) { const k = pageName(r.name); pages[k] = (pages[k] || 0) + r.n; }
+  return { sources, sites, devices, countries, cities: cities.filter(c => c.name !== '(not set)'), newVsReturning: newVsReturning.filter(r => r.name && r.name !== '(not set)'),
+    actions: Object.fromEntries(ACTIONS.map(k => [k, events.find(e => e.name === k)?.n || 0])),
+    pages: Object.entries(pages).map(([name, n]) => ({ name, n })).sort((x, y) => y.n - x.n).slice(0, 10),
+    outbound: outbound.filter(r => r.name && r.name !== '(not set)') };
+}
+
+// Google search results (Search Console): how often the site showed up, how many clicked, and for which searches.
+// Search Console's numbers run about 2-3 days behind. The service account must be a user on the Search Console property.
+async function searchConsole(token) {
+  const day = n => new Date(Date.now() - n * 86400e3).toISOString().slice(0, 10);
+  const range = { startDate: day(30), endDate: day(0) };
+  const q = async (site, body) => {
+    const r = await fetch(`https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
+      { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ ...range, ...body }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.error?.message || 'Search Console ' + r.status), { status: r.status });
+    return j.rows || [];
+  };
+  let site, totals, lastErr;
+  for (const s of ['sc-domain:tvtracker.us', 'https://tvtracker.us/', 'https://www.tvtracker.us/']) {
+    try { totals = await q(s, {}); site = s; break; } catch (e) { lastErr = e; }
+  }
+  if (!site) {
+    if (/has not been used|disabled/i.test(lastErr?.message || '')) throw lastErr;
+    return { needsAccess: true, error: lastErr?.message || '' };
+  }
+  const [queries, pages] = await Promise.all([q(site, { dimensions: ['query'], rowLimit: 10 }), q(site, { dimensions: ['page'], rowLimit: 5 })]);
+  const t = totals[0] || {}, row = r => ({ name: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position });
+  return { site, clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0, queries: queries.map(row), pages: pages.map(row) };
 }
 
 export default {
