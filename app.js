@@ -488,13 +488,10 @@ views.shows = () => {
       ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
-  // Up next order: every show with aired episodes not checked off yet comes first — shows not started at all, then one
-  // with an episode out today, then the rest, newest episode first. After them come caught-up shows whose next episode
-  // airs within the week, soonest first.
-  const today = new Date().toDateString(), outToday = p => new Date(p.latest).toDateString() === today;
+  // Up next order: every show with aired episodes not checked off yet comes first, newest episode first, then older by
+  // date. After them come caught-up shows whose next episode airs within the week, soonest first.
   const starting = rows.filter(r => airingSoon(r.p)).sort((a, b) => airTime(a.p.upcoming) - airTime(b.p.upcoming));
-  const ready = rows.filter(r => r.p?.next).sort((a, b) => (!b.p.watched - !a.p.watched) || (outToday(b.p) - outToday(a.p))
-    || b.p.latest - a.p.latest || b.p.last - a.p.last);
+  const ready = rows.filter(r => r.p?.next).sort((a, b) => b.p.latest - a.p.latest || b.p.last - a.p.last);
   const watching = ready.concat(starting);
   const caught = rows.filter(r => r.p && !r.p.next && !airingSoon(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
