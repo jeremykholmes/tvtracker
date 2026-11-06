@@ -744,6 +744,7 @@ views.show = arg => {
     <div class="meta"><h1>${esc(s.name)}</h1>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
+      ${starPicker(id)}
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
@@ -753,6 +754,7 @@ views.show = arg => {
           <button class="btn" data-act="follow-later" data-show="${id}" title="Save it for later — it moves to Up next when you check off an episode">🕒 Watch later</button>`}
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
+        <a class="btn ghost" href="https://www.rottentomatoes.com/search?search=${encodeURIComponent(s.name)}" target="_blank" rel="noopener" title="Search for this show on Rotten Tomatoes — opens in a new tab">Find on Rotten Tomatoes ↗</a>
       </div>
       ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> ${state.shows[id]?.rec ? `Recommended by ${esc(state.shows[id].rec)} — waiting under Recommended by friends` : 'On your Future watch list'} — check off an episode and it moves to Up next.</p>` : ''}
       ${f && !isKid() ? `<div class="actions">${isLater(id) ? `<button class="btn" data-act="later-off" data-show="${id}">▶ Start watching now</button>`
@@ -763,6 +765,19 @@ views.show = arg => {
     ${seasonHtml || '<p class="muted">No episodes listed yet.</p>'}
     <p class="sub">Tip: tap <b>Watched Up To Here</b> on an episode to mark it and everything before it as watched.</p>`;
 };
+
+// The signed-in person's own star rating of a show (cloud.js, setRating). Tapping the current rating clears it.
+let ratings = {};
+function onRatings(r) {
+  if (JSON.stringify(r) === JSON.stringify(ratings)) return;
+  ratings = r;
+  if (route().name === 'show') render();
+}
+function starPicker(id) {
+  const mine = ratings[id] || 0;
+  return `<div class="stars" role="group" aria-label="Your rating"><span class="sub">Your rating</span>${[1, 2, 3, 4, 5].map(n => `<button type="button" class="star${n <= mine ? ' on' : ''}" data-act="rate" data-show="${id}" data-val="${n}"
+    aria-label="${n} star${n === 1 ? '' : 's'}${n === mine ? ' (your rating, tap to clear)' : ''}" aria-pressed="${n === mine}">★</button>`).join('')}</div>`;
+}
 
 function epRow(sid, e) {
   const w = isWatched(e.id), a = aired(e);
@@ -2253,6 +2268,13 @@ function setLater(id, later) {
   toast(later ? `${s.name} moved to your Future watch list` : `${s.name} moved to Up next`, () => { s.later = !later; s.t = now(); queue('shows', id, s); persist(); });
 }
 const actions = {
+  rate(b) {
+    if (needsAccount()) { requireAccount(); return; }
+    const id = +b.dataset.show, n = +b.dataset.val, was = ratings[id] || 0, next = n === was ? 0 : n;
+    ratings = { ...ratings }; if (next) ratings[id] = next; else delete ratings[id];
+    render();
+    cloud.setRating(id, next).catch(x => { console.warn('rating', x); toast('Couldn\'t save your rating — try again'); });
+  },
   getapp() { getApp(); },
   'change-password'() { changePasswordDialog(); },
   'delete-account'() { deleteAccountDialog(); },
@@ -2671,6 +2693,6 @@ $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contac
   <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
-cloud.start({ onUser, onData, onError: onCloudError, onInbox })
+cloud.start({ onUser, onData, onError: onCloudError, onInbox, onRatings })
   .catch(e => { authReady = true; accountChip(); onCloudError(cloud.step(e, 'signing in')); render(true); });
 openRefresh();
