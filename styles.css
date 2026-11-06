@@ -94,6 +94,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .hero .summary { color: var(--muted); max-width: 720px; margin: 10px 0 14px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions + .actions { margin-top: 8px; }
+.watchnow { margin-bottom: 8px; }
+.watchico { width: 18px; height: 18px; margin-right: 6px; vertical-align: -4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .stars { display: flex; align-items: center; gap: 2px; margin: 10px 0; }
 .stars .sub { margin-right: 6px; font-size: 13px; }

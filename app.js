@@ -137,7 +137,7 @@ function trimShow(s) {
     network: s.network?.name || s.webChannel?.name || '', status: s.status || '',
     premiered: s.premiered || '', schedule: s.schedule || null, genres: s.genres || [],
     summary: strip(s.summary).slice(0, 700), updated: s.updated || 0, url: s.url || '',
-    imdb: s.externals?.imdb || '', tvdb: s.externals?.thetvdb || null, score: s.rating?.average || null
+    imdb: s.externals?.imdb || '', tvdb: s.externals?.thetvdb || null, score: s.rating?.average || null, site: s.officialSite || ''
   };
 }
 function trimEp(e) {
@@ -152,7 +152,7 @@ async function fetchShow(id) {
   const j = await api(`/shows/${id}?embed=episodes`);
   if (!j) {
     missing.add(id);
-    if (cache[id]) { cache[id].t = now(); cache[id].show.score ??= null; save(K.cache, cache); }
+    if (cache[id]) { cache[id].t = now(); cache[id].show.score ??= null; cache[id].show.site ??= ''; save(K.cache, cache); }
     return null;
   }
   const episodes = (j._embedded?.episodes || []).filter(e => e.number != null).map(trimEp);
@@ -703,6 +703,10 @@ function futureCard(s, p, from) {   // from: the friend who recommended it (Reco
       <div class="sub">${esc(channel(s.network, s.name))}</div>${info}${foot}</div></article>`;
 }
 
+// TVmaze's official link for a show, when it really goes to the show on Netflix (it's often a network's own site instead).
+function netflixLink(site) {
+  try { const u = new URL(site); return /^(www\.)?netflix\.com$/.test(u.hostname) && /^\/title\/\d+/.test(u.pathname) ? 'https://www.netflix.com' + u.pathname : ''; } catch { return ''; }
+}
 views.show = arg => {
   const id = +arg, c = cache[id];
   if (isKid()) {   // a kid only sees shows on its list, or within its rating limit
@@ -724,7 +728,7 @@ views.show = arg => {
       .catch(e => { app.innerHTML = `<p class="loading">Couldn't load: ${esc(e.message)}</p>`; });
     return;
   }
-  if (now() - c.t > STALE || c.show.score === undefined) fetchShow(id).then(() => { if (route().arg == id) render(); }).catch(() => {});   // no score: saved before scores were kept
+  if (now() - c.t > STALE || c.show.score === undefined || c.show.site === undefined) fetchShow(id).then(() => { if (route().arg == id) render(); }).catch(() => {});   // no score or site: saved before they were kept
   const s = c.show, f = isFollowed(id), p = progress(id);
   const seasons = new Map();
   for (const e of c.episodes) { if (!seasons.has(e.s)) seasons.set(e.s, []); seasons.get(e.s).push(e); }
@@ -763,6 +767,7 @@ views.show = arg => {
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
       ${s.summary ? `<p class="summary">${esc(s.summary)}</p>` : ''}
+      ${netflixLink(s.site) ? `<div class="actions watchnow"><a class="btn" href="${esc(netflixLink(s.site))}" target="_blank" rel="noopener" title="Opens this show on Netflix in a new tab"><img src="icons/netflix.svg" alt="" class="watchico">Watch on Netflix ↗</a></div>` : ''}
       <div class="actions">
         ${f || isKid() ? '' : `<button class="btn primary" data-act="follow" data-show="${id}">＋ Add to my shows</button>
           <button class="btn" data-act="follow-later" data-show="${id}" title="Save it for later — it moves to Up next when you check off an episode">🕒 Watch later</button>`}
