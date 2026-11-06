@@ -757,8 +757,8 @@ views.show = arg => {
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
       ${starPicker(id)}
-      ${everyoneRating(id)}
-      ${s.score ? `<div class="sub tvscore">TVmaze score <b>${s.score.toFixed(1)}</b>/10</div>` : ''}
+      <div class="scores">${everyoneRating(id)}${s.score ? `<div class="sub score">${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" title="TVmaze score — opens this show on TVmaze"><img class="tvmlogo" src="https://static.tvmaze.com/images/tvm-header-logo.png" alt="TVmaze score"></a>`
+        : '<img class="tvmlogo" src="https://static.tvmaze.com/images/tvm-header-logo.png" alt="TVmaze score">'}<span><b>${s.score.toFixed(1)}</b>/10</span></div>` : ''}</div>
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}
@@ -806,7 +806,7 @@ function everyoneRating(id) {
       if (route().name === 'show' && route().arg == id) render();
     }).catch(x => console.warn('rating total', x));
   }
-  return had?.n ? `<div class="sub everyone"><img src="icons/logo-text.svg" alt="TV Tracker rating" title="TV Tracker rating"><span><b>${(had.sum / had.n).toFixed(1)}</b>/5</span></div>` : '';
+  return had?.n ? `<div class="sub score"><img class="ttlogo" src="icons/logo-text.svg" alt="TV Tracker rating" title="TV Tracker rating"><span><b>${(had.sum / had.n).toFixed(1)}</b>/5</span></div>` : '';
 }
 
 function epRow(sid, e) {

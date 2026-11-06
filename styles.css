@@ -100,11 +100,12 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .star { width: 36px; height: 36px; padding: 0; border: 0; background: none; color: var(--line); font-size: 26px; line-height: 1; cursor: pointer; }
 .star.on { color: var(--accent); }
 @media (hover: hover) { .star:hover { color: var(--accent); } }
-.everyone { display: flex; align-items: center; gap: 8px; margin: -2px 0 8px; font-size: 15px; }
-.everyone img { width: 52px; height: 52px; }
-.everyone b { color: var(--text); }
-.tvscore { margin: -4px 0 10px; }
-.tvscore b { color: var(--text); }
+.scores { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; margin: -2px 0 8px; }
+.scores:empty { display: none; }
+.score { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.score b { color: var(--text); }
+.ttlogo { width: 52px; height: 52px; }
+.tvmlogo { display: block; height: 28px; width: auto; }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
 .netfilter { display: flex; flex-wrap: wrap; gap: 8px; }
 .checkrow { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
