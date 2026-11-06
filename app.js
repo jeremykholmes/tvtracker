@@ -745,6 +745,7 @@ views.show = arg => {
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
       ${starPicker(id)}
+      ${everyoneRating(id)}
       ${s.score ? `<div class="sub tvscore">TVmaze score <b>${s.score.toFixed(1)}</b>/10</div>` : ''}
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
@@ -778,6 +779,23 @@ function starPicker(id) {
   const mine = ratings[id] || 0;
   return `<div class="stars" role="group" aria-label="Your rating"><span class="sub">Your rating</span>${[1, 2, 3, 4, 5].map(n => `<button type="button" class="star${n <= mine ? ' on' : ''}" data-act="rate" data-show="${id}" data-val="${n}"
     aria-label="${n} star${n === 1 ? '' : 's'}${n === mine ? ' (your rating, tap to clear)' : ''}" aria-pressed="${n === mine}">★</button>`).join('')}</div>`;
+}
+
+// Everyone's star ratings of a show combined (cloud.js, ratingTotal), kept on this page for 10 minutes. Redraws if it changed.
+const totals = {};
+function everyoneRating(id) {
+  const had = totals[id];
+  if ((!had || now() - had.t > 6e5) && cloud.configured) {
+    totals[id] = { ...had, t: now() };
+    cloud.ratingTotal(id).then(r => {
+      if (r === undefined) { delete totals[id]; return; }   // the database wasn't ready: tried again on the next draw
+      totals[id] = { n: r?.n || 0, sum: r?.sum || 0, t: now() };
+      if ((had?.n || 0) === totals[id].n && (had?.sum || 0) === totals[id].sum) return;
+      if (route().name === 'show' && route().arg == id) render();
+    }).catch(x => console.warn('rating total', x));
+  }
+  const n = had?.n;
+  return n ? `<div class="sub tvscore">TV Tracker rating <b>${(had.sum / n).toFixed(1)}</b>/5 from ${n} ${n === 1 ? 'person' : 'people'} · updates hourly</div>` : '';
 }
 
 function epRow(sid, e) {
