@@ -1,0 +1,32 @@
+# Works out each show's combined star rating (email/rating-totals.mjs). Runs hourly, and on demand from the Actions tab
+# ("Run workflow"). Uses the FIREBASE_SERVICE_ACCOUNT secret, like the weekly email.
+name: Rating totals
+
+on:
+  schedule:
+    - cron: '11 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: rating-totals
+
+jobs:
+  totals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node rating-totals.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

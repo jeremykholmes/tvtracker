@@ -55,6 +55,14 @@ function watchRatings(uid) {
 }
 export const setRating = (id, stars) => F.setDoc(F.doc(db, 'users', auth.currentUser.uid), { ratings: { [id]: stars || F.deleteField() } }, { merge: true });
 
+// A show's combined star rating from everyone ({ n, sum }, worked out hourly by email/rating-totals.mjs); null if nobody has
+// rated it, undefined if the database isn't ready yet. Anyone can read these, signed in or not.
+export async function ratingTotal(id) {
+  if (!db) return undefined;
+  const snap = await F.getDoc(F.doc(db, 'showRatings', String(id)));
+  return snap.exists() ? snap.data() : null;
+}
+
 // Records when this account last opened the site signed in, for the Admin page's "Last login".
 // At most once an hour per device; only on an account that already has a document (so it never creates one).
 function noteLogin(user) {

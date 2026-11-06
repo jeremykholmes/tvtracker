@@ -16,6 +16,7 @@ rules_version = '2';
 // byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
 // only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
 // activity/{uid}: how many of each action an account did per day, for the Admin page. The account can only add to it; only the admin can read it.
+// showRatings/{showId}: each show's combined star rating ({ n, sum }), written only by email/rating-totals.mjs (which bypasses these rules). Anyone can read one show's totals; they can't be listed.
 // users/{uid}/inbox/{id} holds shows (and movies, kind 'movie') sent to that account: anyone signed in can add one as themselves (unless blocked
 // in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. A login made for someone else is listed
 // only once its owner gives it a real email (users/{owner}.logins.{uid}.email): the owner's app writes its directory and byName entries.
@@ -116,6 +117,10 @@ service cloud.firestore {
       allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['days']) && request.resource.data.days is map;
       allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['days']) && request.resource.data.days is map;
       allow delete: if isOwner(uid);
+    }
+
+    match /showRatings/{id} {
+      allow get: if true;
     }
 
     match /messages/{id} {
