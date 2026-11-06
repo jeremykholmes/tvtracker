@@ -137,7 +137,7 @@ function trimShow(s) {
     network: s.network?.name || s.webChannel?.name || '', status: s.status || '',
     premiered: s.premiered || '', schedule: s.schedule || null, genres: s.genres || [],
     summary: strip(s.summary).slice(0, 700), updated: s.updated || 0, url: s.url || '',
-    imdb: s.externals?.imdb || '', tvdb: s.externals?.thetvdb || null
+    imdb: s.externals?.imdb || '', tvdb: s.externals?.thetvdb || null, score: s.rating?.average || null
   };
 }
 function trimEp(e) {
@@ -712,7 +712,7 @@ views.show = arg => {
       .catch(e => { app.innerHTML = `<p class="loading">Couldn't load: ${esc(e.message)}</p>`; });
     return;
   }
-  if (now() - c.t > STALE) fetchShow(id).then(() => { if (route().arg == id) render(); }).catch(() => {});
+  if (now() - c.t > STALE || c.show.score === undefined) fetchShow(id).then(() => { if (route().arg == id) render(); }).catch(() => {});   // no score: saved before scores were kept
   const s = c.show, f = isFollowed(id), p = progress(id);
   const seasons = new Map();
   for (const e of c.episodes) { if (!seasons.has(e.s)) seasons.set(e.s, []); seasons.get(e.s).push(e); }
@@ -745,6 +745,7 @@ views.show = arg => {
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4), sched].filter(Boolean).map(esc).join(' · ')}</div>
       ${s.genres.length ? `<div class="chips">${s.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
       ${starPicker(id)}
+      ${s.score ? `<div class="sub tvscore">TVmaze score <b>${s.score.toFixed(1)}</b>/10</div>` : ''}
       ${p ? `<div class="stats"><div><b>${p.watched}/${p.total}</b><span>watched</span></div>
         <div><b>${p.unwatched}</b><span>left to watch</span></div>
         ${p.upcoming ? `<div><b>${code(p.upcoming)}</b><span>${fmtDate(p.upcoming, true)}</span></div>` : ''}</div>` : ''}

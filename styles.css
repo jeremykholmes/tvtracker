@@ -100,6 +100,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .star { width: 36px; height: 36px; padding: 0; border: 0; background: none; color: var(--line); font-size: 26px; line-height: 1; cursor: pointer; }
 .star.on { color: var(--accent); }
 @media (hover: hover) { .star:hover { color: var(--accent); } }
+.tvscore { margin: -4px 0 10px; }
+.tvscore b { color: var(--text); }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
 .netfilter { display: flex; flex-wrap: wrap; gap: 8px; }
 .checkrow { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
