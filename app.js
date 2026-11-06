@@ -1642,9 +1642,9 @@ const azLabel = day => new Date(day + 'T12:00Z').toLocaleDateString('en-US', { m
 const WHO = () => {
   const from = azLabel(cloud.azDay(ACTIVITY_FROM)), est = what => `From ${from} on, every one is counted. Before that, a number with ≈ is an estimate from the dates on their list: ${what}`;
   return {
-    sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
-    add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
-    add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
+    sign_up: { title: 'Signed up', tile: 'sign-ups', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
+    add_show: { title: 'Added shows', tile: 'shows added', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
+    add_movie: { title: 'Added movies', tile: 'movies added', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
     episode_watched: { title: 'Checked off episodes', one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile.` },
     recommend: { title: 'Recommended something', one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
     app_install: { title: 'Use the installed app', note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
@@ -1671,7 +1671,7 @@ function drawWho(action, rec) {
   box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
-    ${action === 'sign_up' && since === '2026-11-02' ? '<p class="sub">The tile only counts sign-ups from 9:42 PM on Nov 2, so anyone who signed up earlier that day is listed here but isn\'t on the tile.</p>' : ''}
+    ${w.tile && since === '2026-11-02' ? `<p class="sub">The tile only counts ${w.tile} from 9:42 PM on Nov 2, so any from earlier that day can be listed here without being on the tile.</p>` : ''}
     <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
 }
 
