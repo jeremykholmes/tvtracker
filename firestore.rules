@@ -6,7 +6,7 @@ rules_version = '2';
 // or an editor's app). A kid's checkmarks are their own, in their own account.
 // Only the owner can change who has access, their profile, or delete the account's data.
 // The site admin (one verified email address, below) can also read every account, for the Admin page.
-// Anyone can send a Contact us message (messages/{id}); only the admin can read or delete them.
+// Anyone can send a Contact us message (messages/{id}); only the admin can read, delete or note replies on them.
 // removals/{uid}: accounts the admin removed on the Admin page. From that moment the account can't read or change
 // any list; .github/workflows/remove-accounts.yml then deletes the sign-in and its data and marks the entry done.
 // emailPrefs/{uid}: email settings: off (the weekly email) and recsOff (emails when a friend recommends a show). The email
@@ -117,6 +117,7 @@ service cloud.firestore {
         && request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 5000
         && (request.resource.data.uid == '' || (signedIn() && request.resource.data.uid == request.auth.uid));
       allow read, delete: if isAdmin();
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies']) && request.resource.data.replies is list;
     }
   }
 }
