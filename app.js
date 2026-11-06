@@ -1617,7 +1617,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>More analytics · last 30 days</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
+    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', now() - 30 * DAY < CHECKOFFS_FROM ? 'Episode check-offs since Nov 5' : 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
     <div class="mgrid">
@@ -1631,13 +1631,13 @@ function drawMore(t) {
       ${bars(m.outbound, 'Clicks out to other sites', 'Nothing yet.', x => x)}
     </div>`}
     <h4 class="msec">Google search</h4>${searchPart}
-    <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026.</p>`;
+    <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026; episode check-offs count from Nov 5.</p>`;
 }
 
 // Admin page: who did an action. Google Analytics can't say (it isn't tied to people), so this comes from the accounts instead:
 // activity/{uid} from ACTIVITY_FROM on, and before that, for shows and movies, the dates on each list. Those dates are when an item
 // last changed, not when it was added, so they're shown as estimates. Goes back as far as the counts on the tiles, COUNTS_FROM.
-const COUNTS_FROM = Date.parse('2026-11-02T07:00Z'), ACTIVITY_FROM = Date.parse('2026-11-06T04:50Z');
+const COUNTS_FROM = Date.parse('2026-11-02T07:00Z'), CHECKOFFS_FROM = Date.parse('2026-11-05T07:00Z'), ACTIVITY_FROM = Date.parse('2026-11-06T04:50Z');
 const azLabel = day => new Date(day + 'T12:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const WHO = () => {
   const from = azLabel(cloud.azDay(ACTIVITY_FROM)), est = what => `From ${from} on, every one is counted. Before that, a number with ≈ is an estimate from the dates on their list: ${what}`;
@@ -1651,7 +1651,7 @@ const WHO = () => {
   };
 };
 function drawWho(action, rec) {
-  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
+  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, action === 'episode_watched' ? CHECKOFFS_FROM : COUNTS_FROM)), rows = [];
   for (const a of Object.values(adminAccounts)) {
     if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
     const r = rec[a.uid] || {};
@@ -1671,6 +1671,7 @@ function drawWho(action, rec) {
   box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
+    ${action === 'episode_watched' && since === '2026-11-05' ? '<p class="sub">The tile and this list both start on Nov 5, but names only start at 9:50 PM that day, so earlier check-offs that day are only on the tile.</p>' : ''}
     ${w.tile && since === '2026-11-02' ? `<p class="sub">The tile only counts ${w.tile} from 9:42 PM on Nov 2, so any from earlier that day can be listed here without being on the tile.</p>` : ''}
     <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
 }
