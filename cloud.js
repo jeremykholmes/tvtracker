@@ -10,13 +10,13 @@ export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebase
 const BUCKETS = 32;
 const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
 
-let A, F, appMod, auth, db, unsubs = [], inboxUnsub = null;
+let A, F, appMod, auth, db, unsubs = [], inboxUnsub = null, ratingsUnsub = null;
 let active = null, handlers = null;   // active: uid of the account whose list is open (yours, or the owner's for a login they made)
 let kid = false;                      // a kid login: the owner's shows come from its filtered copy, checkmarks from its own account
 export const activeUid = () => active;
 
-export async function start({ onUser, onData, onError, onInbox }) {
-  handlers = { onData, onError, onInbox };
+export async function start({ onUser, onData, onError, onInbox, onRatings }) {
+  handlers = { onData, onError, onInbox, onRatings };
   if (!configured) { onUser(null); return; }
   let authMod, fsMod;
   [appMod, authMod, fsMod] = await Promise.all([
@@ -34,18 +34,26 @@ export async function start({ onUser, onData, onError, onInbox }) {
   A.onAuthStateChanged(auth, async user => {
     unsubs.forEach(u => u()); unsubs = [];
     inboxUnsub?.(); inboxUnsub = null; handlers.onInbox?.([]);
+    ratingsUnsub?.(); ratingsUnsub = null; handlers.onRatings?.({});
     const u = user ? toUser(user) : null;
     if (u) u.linked = await linkedList(user.uid);   // a login made by a list's owner opens that list
     if ((auth.currentUser?.uid || null) !== (user?.uid || null)) return;   // signed in/out again meanwhile
     active = u ? u.linked?.uid || u.uid : null;
     kid = u?.linked?.role === 'kid';
     onUser(u);
-    if (u) { listen(active, onData, onError); noteLogin(user); }
+    if (u) { listen(active, onData, onError); noteLogin(user); watchRatings(user.uid); }
     // Shows sent to this account. A login made for someone else gets them too (once its owner gives it a real email,
     // so people can find it); a kid login never does.
     if (u && (u.linked ? u.linked.role !== 'kid' : !isLogin(u.email))) watchInbox(user.uid);
   });
 }
+
+// Star ratings: users/{uid}.ratings = { showId: 1-5 }. Always in the signed-in person's own document, even on a shared list,
+// so everyone keeps their own (a kid login's own document is the one thing it can write besides its checkmarks).
+function watchRatings(uid) {
+  ratingsUnsub = F.onSnapshot(F.doc(db, 'users', uid), snap => handlers.onRatings?.(snap.data()?.ratings || {}), e => console.warn('ratings', e));
+}
+export const setRating = (id, stars) => F.setDoc(F.doc(db, 'users', auth.currentUser.uid), { ratings: { [id]: stars || F.deleteField() } }, { merge: true });
 
 // Records when this account last opened the site signed in, for the Admin page's "Last login".
 // At most once an hour per device; only on an account that already has a document (so it never creates one).
@@ -464,6 +472,7 @@ export async function deleteAccount(password) {
   else await A.reauthenticateWithPopup(u, new A.GoogleAuthProvider());
   unsubs.forEach(x => x()); unsubs = [];        // stop listening, or the empty document would be recreated
   inboxUnsub?.(); inboxUnsub = null;
+  ratingsUnsub?.(); ratingsUnsub = null;
   const mine = await F.getDoc(F.doc(db, 'users', u.uid)).catch(() => null);
   const inbox = await F.getDocs(F.collection(db, 'users', u.uid, 'inbox')).catch(() => null);
   const dir = u.email ? await F.getDoc(F.doc(db, 'directory', dirId(u.email))).catch(() => null) : null;
