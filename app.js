@@ -806,8 +806,7 @@ function everyoneRating(id) {
       if (route().name === 'show' && route().arg == id) render();
     }).catch(x => console.warn('rating total', x));
   }
-  const n = had?.n;
-  return n ? `<div class="sub tvscore">TV Tracker rating <b>${(had.sum / n).toFixed(1)}</b>/5 from ${n} ${n === 1 ? 'person' : 'people'} · updates hourly</div>` : '';
+  return had?.n ? `<div class="sub everyone"><img src="icons/logo-text.svg" alt="TV Tracker rating" title="TV Tracker rating"><span><b>${(had.sum / had.n).toFixed(1)}</b>/5</span></div>` : '';
 }
 
 function epRow(sid, e) {
