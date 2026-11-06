@@ -84,7 +84,7 @@ One-time setup:
    Add them under **Variables and Secrets** at the top of Settings — **not** under *Build → Variables and secrets*, which the live site can't see.
 
 Below it, **More analytics · last 30 days** shows:
-- **What people did** — sign-ups, shows and movies added, episode check-offs, recommendations sent (in the app or by link) and app installs. `app.js` sends these to Google Analytics as events (`sign_up`, `add_show`, `add_movie`, `episode_watched`, `recommend`, `app_install`), recorded from Nov 2, 2026.
+- **What people did** — sign-ups, shows and movies added, episode check-offs, recommendations sent (in the app or by link) and app installs. `app.js` sends these to Google Analytics as events (`sign_up`, `add_show`, `add_movie`, `episode_watched`, `recommend`, `app_install`), recorded from Nov 2, 2026 (the episode check-offs number counts from Nov 5, 2026).
 - Where visitors come from, referring sites, devices, new vs. returning, countries and cities.
 - **Most-viewed pages** — from a `page_open` event sent on every page change in the app (its address includes the `#/…` page).
 - **Clicks out to other sites** — Google Analytics' automatic outbound-click events (Admin → Data streams → Enhanced measurement → Outbound clicks must be on, which it is by default).

@@ -166,24 +166,27 @@ const pageName = loc => {
   } catch { return 'Other'; }
 };
 const ACTIONS = ['sign_up', 'add_show', 'add_movie', 'episode_watched', 'recommend', 'app_install'];
+const CHECKOFFS_FROM = '2026-11-05';   // episode check-offs count from this day, or the last 30 days once that's shorter (same as app.js)
 
 async function moreReports(ga, num) {
   const last30 = [{ startDate: '29daysAgo', endDate: 'today' }], users = [{ name: 'activeUsers' }], count = [{ name: 'eventCount' }];
+  const day29 = new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10), checkoffsStart = day29 > CHECKOFFS_FROM ? '29daysAgo' : CHECKOFFS_FROM;
   const by = (dim, limit, metrics = users, filter) => ({ dateRanges: last30, dimensions: [{ name: dim }], metrics, limit,
     orderBys: [{ metric: { metricName: metrics[0].name }, desc: true }], ...(filter ? { dimensionFilter: filter } : {}) });
   const isEvent = (...names) => ({ filter: { fieldName: 'eventName', inListFilter: { values: names } } });
   const [a, b] = await Promise.all([
     ga('batchRunReports', { requests: [by('sessionDefaultChannelGroup', 10), by('deviceCategory', 5), by('country', 8), by('city', 8), by('newVsReturning', 3)] }),
     ga('batchRunReports', { requests: [by('eventName', 20, count, isEvent(...ACTIONS)), by('pageLocation', 250, count, isEvent('page_open')),
-      by('linkDomain', 10, count, isEvent('click')), by('sessionSource', 8)] })
+      by('linkDomain', 10, count, isEvent('click')), by('sessionSource', 8),
+      { ...by('eventName', 1, count, isEvent('episode_watched')), dateRanges: [{ startDate: checkoffsStart, endDate: 'today' }] }] })
   ]);
   const rows = r => (r.rows || []).map(x => ({ name: x.dimensionValues[0].value, n: num(x.metricValues[0]) }));
   const [sources, devices, countries, cities, newVsReturning] = a.reports.map(rows);
-  const [events, pageRows, outbound, sites] = b.reports.map(rows);
+  const [events, pageRows, outbound, sites, checkoffs] = b.reports.map(rows);
   const pages = {};
   for (const r of pageRows) { const k = pageName(r.name); pages[k] = (pages[k] || 0) + r.n; }
   return { sources, sites, devices, countries, cities: cities.filter(c => c.name !== '(not set)'), newVsReturning: newVsReturning.filter(r => r.name && r.name !== '(not set)'),
-    actions: Object.fromEntries(ACTIONS.map(k => [k, events.find(e => e.name === k)?.n || 0])),
+    actions: { ...Object.fromEntries(ACTIONS.map(k => [k, events.find(e => e.name === k)?.n || 0])), episode_watched: checkoffs[0]?.n || 0 },
     pages: Object.entries(pages).map(([name, n]) => ({ name, n })).sort((x, y) => y.n - x.n).slice(0, 10),
     outbound: outbound.filter(r => r.name && r.name !== '(not set)') };
 }
