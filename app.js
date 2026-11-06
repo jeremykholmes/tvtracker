@@ -1614,10 +1614,10 @@ function drawMore(t) {
       <div class="mgrid">${bars((g.queries || []).map(q => ({ name: q.name, n: q.clicks || q.impressions })), 'Top searches <span class="sub">(clicks, or times shown if none)</span>', 'No searches yet.', x => x)}
       ${bars((g.pages || []).map(q => ({ name: q.name.replace(/^https?:\/\/(www\.)?tvtracker\.us/, '') || '/', n: q.clicks })), 'Pages people clicked', 'No clicks yet.', x => x)}</div>
       <p class="sub">Google's search numbers run 2–3 days behind.</p>`;
-  box.innerHTML = `<h3>More analytics · last 30 days</h3>
+  box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', now() - 30 * DAY < CHECKOFFS_FROM ? 'Episode check-offs since Nov 5' : 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
+    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
     <div class="mgrid">
@@ -1631,27 +1631,28 @@ function drawMore(t) {
       ${bars(m.outbound, 'Clicks out to other sites', 'Nothing yet.', x => x)}
     </div>`}
     <h4 class="msec">Google search</h4>${searchPart}
-    <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026; episode check-offs count from Nov 5.</p>`;
+    <p class="sub">Visitors are counted per section (one person = 1). ${now() - 30 * DAY < COUNTS_FROM ? 'This section counts from Nov 5, 2026.' : ''}</p>`;
 }
 
 // Admin page: who did an action. Google Analytics can't say (it isn't tied to people), so this comes from the accounts instead:
 // activity/{uid} from ACTIVITY_FROM on, and before that, for shows and movies, the dates on each list. Those dates are when an item
 // last changed, not when it was added, so they're shown as estimates. Goes back as far as the counts on the tiles, COUNTS_FROM.
-const COUNTS_FROM = Date.parse('2026-11-02T07:00Z'), CHECKOFFS_FROM = Date.parse('2026-11-05T07:00Z'), ACTIVITY_FROM = Date.parse('2026-11-06T04:50Z');
+const COUNTS_FROM = Date.parse('2026-11-05T07:00Z'), ACTIVITY_FROM = Date.parse('2026-11-06T04:50Z');
+const moreTitle = () => `More analytics · ${now() - 30 * DAY < COUNTS_FROM ? 'since Nov 5' : 'last 30 days'}`;
 const azLabel = day => new Date(day + 'T12:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const WHO = () => {
   const from = azLabel(cloud.azDay(ACTIVITY_FROM)), est = what => `From ${from} on, every one is counted. Before that, a number with ≈ is an estimate from the dates on their list: ${what}`;
   return {
-    sign_up: { title: 'Signed up', tile: 'sign-ups', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
-    add_show: { title: 'Added shows', tile: 'shows added', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
-    add_movie: { title: 'Added movies', tile: 'movies added', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
-    episode_watched: { title: 'Checked off episodes', one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile.` },
-    recommend: { title: 'Recommended something', one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
-    app_install: { title: 'Use the installed app', note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
+    sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
+    add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
+    add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
+    episode_watched: { title: 'Checked off episodes', namesLate: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile.` },
+    recommend: { title: 'Recommended something', namesLate: true, one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
+    app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
   };
 };
 function drawWho(action, rec) {
-  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, action === 'episode_watched' ? CHECKOFFS_FROM : COUNTS_FROM)), rows = [];
+  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
   for (const a of Object.values(adminAccounts)) {
     if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
     const r = rec[a.uid] || {};
@@ -1671,8 +1672,7 @@ function drawWho(action, rec) {
   box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
-    ${action === 'episode_watched' && since === '2026-11-05' ? '<p class="sub">The tile and this list both start on Nov 5, but names only start at 9:50 PM that day, so earlier check-offs that day are only on the tile.</p>' : ''}
-    ${w.tile && since === '2026-11-02' ? `<p class="sub">The tile only counts ${w.tile} from 9:42 PM on Nov 2, so any from earlier that day can be listed here without being on the tile.</p>` : ''}
+    ${w.namesLate && since === cloud.azDay(COUNTS_FROM) ? '<p class="sub">The tile and this list both start on Nov 5, but names only start at 9:50 PM that day, so earlier ones that day are only on the tile.</p>' : ''}
     <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
 }
 
@@ -1785,7 +1785,7 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
       <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p>${(m.replies || []).map(msgReply).join('')}</div>`;
   app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others${removed.length ? ` · ${removed.length} removed` : ''}</span></div>
     <div class="panel" id="traffic"><h3>Website traffic</h3><p class="loading">Loading Google Analytics…</p></div>
-    <div class="panel" id="moreStats"><h3>More analytics · last 30 days</h3><p class="loading">Loading…</p></div>
+    <div class="panel" id="moreStats"><h3>${moreTitle()}</h3><p class="loading">Loading…</p></div>
     <div class="panel"><h3>Contact us messages · ${msgs.length}</h3>${msgErr ? `<p class="formerr">${esc(msgErr)}</p>` : msgs.map(msgRow).join('') || '<p>No messages yet.</p>'}</div>
     <div class="panel"><h3>Accounts · ${owners.length}</h3>${owners.sort(byRecent).map(row).join('') || '<p>None yet.</p>'}</div>
     ${logins.length ? `<div class="panel"><h3>Logins made for others · ${logins.length}</h3>${logins.sort(byRecent).map(row).join('')}</div>` : ''}
