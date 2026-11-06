@@ -90,6 +90,8 @@ Below it, **More analytics · last 30 days** shows:
 - **Clicks out to other sites** — Google Analytics' automatic outbound-click events (Admin → Data streams → Enhanced measurement → Outbound clicks must be on, which it is by default).
 - **Google search** (Search Console) — clicks from Google, times shown in results, click-through rate, average position, top searches and pages. Runs 2–3 days behind. One-time setup: in Google Cloud (same project as the service account) enable the **Google Search Console API**; in Search Console → **Settings → Users and permissions → Add user**, add the service account's email with **Restricted** permission.
 
+Tapping any of the **What people did** numbers lists the accounts behind it (name, email, count and last date). Analytics can't say who, so this comes from Firestore: `activity/{uid}` holds per-day counts for each action, written by the account's own app (`cloud.js`, `noteAction`; counts only, never titles), readable only by the admin (`firestore.rules`). `email/remove-accounts.mjs` (hourly) fills in `created` from Firebase sign-in and clears days older than 40. Sign-ups are exact back to Nov 2, 2026. Shows and movies before recording began are estimates from the dates on each list, marked ≈. Check-offs, recommendations and app use only exist from then on, and the panel says so.
+
 The site owner's own devices aren't counted: once the admin account signs in on a device, `app.js` turns Google Analytics off there (remembered as `tvt.noga`, checked in `index.html`).
 
 ## Show and movie pages for Google

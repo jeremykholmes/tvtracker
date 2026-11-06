@@ -342,8 +342,35 @@ export async function allAccounts() {
     const x = d.data();
     return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
       removed: !!x.listOf && !access[x.listOf]?.[d.id],   // a login whose owner took its access away (or deleted their account)
-      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0, findable: x.findable !== false };
+      shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0, findable: x.findable !== false,
+      showTimes: Object.values(x.shows || {}).filter(s => !s.removed).map(s => s.t || 0), movieTimes: Object.values(x.movies || {}).filter(m => !m.removed).map(m => m.t || 0) };
   });
+}
+
+/* ---------- who did what, for the Admin page ----------
+   activity/{uid}: { days: { 'YYYY-MM-DD': { add_show: 2, ... } }, created }. Counts per day only, never which show; only the
+   account itself can add to it and only the admin can read it. Days are Arizona time (no daylight saving), like the Admin page.
+   created (when the account signed up) and clearing out days past 40 are done by email/remove-accounts.mjs. */
+const ATTRIBUTED = ['sign_up', 'add_show', 'add_movie', 'episode_watched', 'recommend', 'app_install'];
+export const azDay = t => new Date(t - 7 * 3600e3).toISOString().slice(0, 10);
+let noted = {}, notedTimer = null;
+// Counts an action for the signed-in account. The site owner's aren't counted, the same as in Google Analytics.
+export function noteAction(name) {
+  if (!ATTRIBUTED.includes(name) || !auth?.currentUser || isAdmin()) return;
+  noted[name] = (noted[name] || 0) + 1;
+  notedTimer ||= setTimeout(flushActions, 2000);   // quick clicks and imports go up as one write
+}
+function flushActions() {
+  clearTimeout(notedTimer); notedTimer = null;
+  const u = auth?.currentUser, list = Object.entries(noted); noted = {};
+  if (!u || !list.length) return;
+  F.setDoc(F.doc(db, 'activity', u.uid), { days: { [azDay(Date.now())]: Object.fromEntries(list.map(([k, n]) => [k, F.increment(n)])) } }, { merge: true })
+    .catch(e => console.warn('activity', e));
+}
+window.addEventListener('pagehide', flushActions);
+export async function activity() {
+  const snap = await F.getDocs(F.collection(db, 'activity'));
+  return Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
 }
 
 // Accounts removed on the Admin page: { uid: { t, name, email, done } }. done is set once the sign-in and data are deleted.
@@ -450,10 +477,12 @@ export async function deleteAccount(password) {
   for (let i = 0; i < BUCKETS; i++) b.delete(F.doc(db, 'users', u.uid, 'watched', 'b' + i));
   b.delete(F.doc(db, 'users', u.uid));
   b.delete(F.doc(db, 'emailPrefs', u.uid));
+  b.delete(F.doc(db, 'activity', u.uid));
+  noted = {};
   await Promise.race([b.commit(), new Promise((_, no) => setTimeout(() => no({ code: 'auth/network-request-failed' }), 15000))]);
   await A.deleteUser(u);
 }
-export const signOut = () => A.signOut(auth);
+export const signOut = () => { flushActions(); return A.signOut(auth); };
 
 // The weekly "new episodes to watch" email (sent by email/weekly.mjs). On unless switched off.
 export const weeklyEmailEnabled = !!weeklyEmail;   // the site offers the switch only once the email is set up

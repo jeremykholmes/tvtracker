@@ -493,6 +493,15 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .tstats.six { grid-template-columns: repeat(6, 1fr); }
 @media (max-width: 760px) { .tstats.six { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 420px) { .tstats.six { grid-template-columns: repeat(2, 1fr); } }
+button.tstat { border: 1px solid transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.tstat:hover { border-color: var(--line); }
+button.tstat[aria-expanded="true"] { border-color: var(--accent); }
+.whohint { margin: -8px 0 12px; font-size: 12px; }
+.whodid { background: var(--panel2); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.whodid h4 { margin: 0 0 8px; font-size: 14px; }
+.whodid h4 .sub { font-weight: 400; font-size: 12px; }
+.whodid > .sub { font-size: 12px; margin: 10px 0 0; }
+.whodid .admeta b { color: var(--text); }
 .mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 @media (max-width: 560px) { .mgrid { grid-template-columns: minmax(0, 1fr); } }
 .mstat { background: var(--panel2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
