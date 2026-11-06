@@ -134,7 +134,7 @@ async function traffic(request, env) {
 }
 
 /* ---------- /api/reply ---------- */
-// The person's own answer goes to the site owner's inbox (reply_to). Plain text, with their message quoted underneath.
+// The person's own answer goes to support@tvtracker.us (reply_to), which Cloudflare Email Routing forwards to the site owner. Plain text, with their message quoted underneath.
 async function reply(request, env) {
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   if (!await isOwner(request).catch(() => false)) return json({ error: 'Only the site owner can send replies.' }, 403);
@@ -146,7 +146,7 @@ async function reply(request, env) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json', 'user-agent': 'TVTracker/1.0 (+https://tvtracker.us)' },
-    body: JSON.stringify({ from: 'TV Tracker <updates@tvtracker.us>', to, reply_to: ADMIN_EMAIL, subject: 'Re: your message to TV Tracker', text: text.trim() + quoted })
+    body: JSON.stringify({ from: 'TV Tracker <updates@tvtracker.us>', to, reply_to: 'support@tvtracker.us', subject: 'Re: your message to TV Tracker', text: text.trim() + quoted })
   });
   if (!r.ok) return json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 300)}` }, 502);
   return json({ ok: true });
