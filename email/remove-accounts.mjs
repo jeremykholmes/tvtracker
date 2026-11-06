@@ -33,6 +33,7 @@ if (todo.length) {
       }
       await db.recursiveDelete(db.doc(`users/${uid}`));   // their list, checkmarks, shows sent to them, kid copies
       await db.doc(`emailPrefs/${uid}`).delete();
+      await db.doc(`activity/${uid}`).delete();
       await r.ref.update({ done: true, doneAt: Date.now() });
       console.log(`removed ${uid}`);
     } catch (e) {
@@ -62,3 +63,23 @@ for (const d of (await db.collection('directory').get()).docs) {
   await d.ref.delete(); stale++;
 }
 console.log(`removed ${stale} search entr${stale === 1 ? 'y' : 'ies'} for accounts that no longer exist`);
+
+// The Admin page's "who did it" records (activity/{uid}): notes when recent accounts signed up (only Firebase sign-in knows),
+// clears out days older than 40 days, and removes the record of an account that no longer exists.
+const cutoff = Date.now() - 40 * 864e5, keepFrom = new Date(cutoff - 7 * 3600e3).toISOString().slice(0, 10);   // days are Arizona time
+const records = (await db.collection('activity').get()).docs, known = new Map(records.map(d => [d.id, d.data()])), accounts = new Set();
+let dated = 0, trimmed = 0, page;
+do {
+  page = await auth.listUsers(1000, page?.pageToken);
+  for (const u of page.users) {
+    accounts.add(u.uid);
+    const t = Date.parse(u.metadata.creationTime);
+    if (t >= cutoff && !known.get(u.uid)?.created) { await db.doc(`activity/${u.uid}`).set({ created: t }, { merge: true }); dated++; }
+  }
+} while (page.pageToken);
+for (const d of records) {
+  if (!accounts.has(d.id)) { await d.ref.delete(); trimmed++; continue; }
+  const old = Object.keys(d.data().days || {}).filter(k => k < keepFrom);
+  if (old.length) { await d.ref.update(Object.fromEntries(old.map(k => [`days.${k}`, FieldValue.delete()]))); trimmed++; }
+}
+console.log(`noted ${dated} sign-up date(s), tidied ${trimmed} activity record(s)`);

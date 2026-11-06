@@ -15,6 +15,7 @@ rules_version = '2';
 // Sending a show to another account: directory/{email} finds an account by its exact sign-in email (no listing);
 // byName/{key}/people/{uid} finds accounts by their exact full name (key = the name in lower case, spaces tidied), so
 // only someone who types the whole name reaches it — there's no listing or partial search (users/{uid}.findable: off).
+// activity/{uid}: how many of each action an account did per day, for the Admin page. The account can only add to it; only the admin can read it.
 // users/{uid}/inbox/{id} holds shows (and movies, kind 'movie') sent to that account: anyone signed in can add one as themselves (unless blocked
 // in users/{uid}.blocked, or a kid login); only the recipient can read or delete them. A login made for someone else is listed
 // only once its owner gives it a real email (users/{owner}.logins.{uid}.email): the owner's app writes its directory and byName entries.
@@ -108,6 +109,13 @@ service cloud.firestore {
       allow create: if isAdmin() && uid != request.auth.uid
         && request.resource.data.keys().hasOnly(['t', 'name', 'email']) && request.resource.data.t is int
         && str(request.resource.data.name, 100) && str(request.resource.data.email, 200);
+    }
+
+    match /activity/{uid} {
+      allow read: if isAdmin();
+      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['days']) && request.resource.data.days is map;
+      allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['days']) && request.resource.data.days is map;
+      allow delete: if isOwner(uid);
     }
 
     match /messages/{id} {

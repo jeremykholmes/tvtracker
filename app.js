@@ -63,7 +63,8 @@ const current = () => followed().filter(s => !isLater(s.id));   // the shows bei
 
 function persist() { save(stateKey(), state); }
 // Counts an action in Google Analytics (shown on the Admin page). Does nothing on the site owner's devices (see index.html).
-function track(name, params) { try { window.gtag?.('event', name, params || {}); } catch { } }
+// The same action is also counted against the signed-in account, so the Admin page can show who did it (cloud.js, noteAction).
+function track(name, params) { try { window.gtag?.('event', name, params || {}); } catch { } cloud.noteAction(name); }
 function setWatched(ids, w) {
   const t = now();
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
@@ -1604,6 +1605,8 @@ function drawMore(t) {
       <span class="mbar"><i style="width:${Math.max(2, Math.round(r.n / max * 100))}%"></i></span><b>${n(r.n)}</b></div>`).join('') : `<p class="sub">${empty}</p>`}</div>`;
   };
   const tile = (label, v) => `<div class="tstat"><span class="sub">${label}</span><b>${v}</b></div>`;
+  const whoTile = (key, label) => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b>${n(a[key])}</b></button>`;
+  adminActivity = null;
   const a = m.actions || {};
   const searchPart = g.error && !g.needsAccess ? `<p class="formerr">${esc(g.error)}</p>`
     : g.needsAccess ? `<p>Not connected yet. In <b>Search Console → Settings → Users and permissions → Add user</b>, add the service account's email (the <code>…iam.gserviceaccount.com</code> one) with <b>Restricted</b> permission, and turn on the <b>Google Search Console API</b> in Google Cloud for the same project.</p>`
@@ -1614,7 +1617,9 @@ function drawMore(t) {
   box.innerHTML = `<h3>More analytics · last 30 days</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats six">${tile('Sign-ups', n(a.sign_up))}${tile('Shows added', n(a.add_show))}${tile('Movies added', n(a.add_movie))}${tile('Episode check-offs', n(a.episode_watched))}${tile('Recommendations', n(a.recommend))}${tile('App installs', n(a.app_install))}</div>
+    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
+    <p class="sub whohint">Tap a number to see who did it.</p>
+    <div class="whodid" id="whoDid" hidden></div>
     <div class="mgrid">
       ${bars(m.sources, 'Where visitors come from')}
       ${bars(m.sites, 'Referring sites', 'Nothing yet.', x => x)}
@@ -1627,6 +1632,46 @@ function drawMore(t) {
     </div>`}
     <h4 class="msec">Google search</h4>${searchPart}
     <p class="sub">Visitors are counted per section (one person = 1). Actions and page counts started being recorded on Nov 2, 2026.</p>`;
+}
+
+// Admin page: who did an action. Google Analytics can't say (it isn't tied to people), so this comes from the accounts instead:
+// activity/{uid} from ACTIVITY_FROM on, and before that, for shows and movies, the dates on each list. Those dates are when an item
+// last changed, not when it was added, so they're shown as estimates. Goes back as far as the counts on the tiles, COUNTS_FROM.
+const COUNTS_FROM = Date.parse('2026-11-02T07:00Z'), ACTIVITY_FROM = Date.parse('2026-11-06T04:50Z');
+const azLabel = day => new Date(day + 'T12:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const WHO = () => {
+  const from = azLabel(cloud.azDay(ACTIVITY_FROM)), est = what => `From ${from} on, every one is counted. Before that, a number with ≈ is an estimate from the dates on their list: ${what}`;
+  return {
+    sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
+    add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
+    add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
+    episode_watched: { title: 'Checked off episodes', one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile.` },
+    recommend: { title: 'Recommended something', one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
+    app_install: { title: 'Use the installed app', note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
+  };
+};
+function drawWho(action, rec) {
+  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
+  for (const a of Object.values(adminAccounts)) {
+    if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
+    const r = rec[a.uid] || {};
+    let count = 0, last = '', estimated = 0;
+    if (action === 'sign_up' && r.created) { if (!a.listOf && cloud.azDay(r.created) >= since) { count = 1; last = cloud.azDay(r.created); } }
+    else for (const [day, c] of Object.entries(r.days || {})) if (day >= since && c[action]) { count += c[action]; if (day > last) last = day; }
+    for (const t of w.times ? a[w.times] : []) {
+      const day = cloud.azDay(t);
+      if (t < ACTIVITY_FROM && day >= since) { estimated++; if (day > last) last = day; }
+    }
+    if (count + estimated) rows.push({ a, n: count + estimated, estimated, last });
+  }
+  rows.sort((x, y) => (w.one ? y.n - x.n : 0) || y.last.localeCompare(x.last));
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  const person = r => `<div class="memrow"><span><b>${esc(r.a.name || '(no name)')}</b><br><span class="sub">${esc(r.a.listOf ? `Username: ${cloud.loginName(r.a.email)} · login for ${adminAccounts[r.a.listOf]?.name || 'a deleted account'}` : r.a.email || 'no email saved')}</span></span>
+    <span class="sub admeta">${w.one ? `<b>${r.estimated ? '≈' : ''}${r.n.toLocaleString()}</b> <span>${r.n === 1 ? w.one : w.many}</span><br><span>last ${esc(azLabel(r.last))}</span>` : `<span>${esc(azLabel(r.last))}</span>`}</span></div>`;
+  box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
+    ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
+    <p class="sub">${esc(w.note)}</p>
+    <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
 }
 
 /* ---------- import from Simkl, Trakt, Letterboxd (Account page) ----------
@@ -1701,6 +1746,7 @@ async function runImport(found, out) {
 
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
 let adminMessages = {};   // id -> Contact us message, from the last Admin page load (for its Reply buttons)
+let adminActivity = null;   // uid -> activity record, loaded the first time a stat is tapped
 const msgWhen = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const msgReply = r => `<div class="msgreply"><span class="sub">You replied · ${esc(msgWhen(r.t))}</span><p>${esc(r.text)}</p></div>`;
 views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
@@ -2069,6 +2115,10 @@ function onUser(u) {
   if (u?.isNew && !cloud.isLogin(u.email)) try {
     if (!localStorage.getItem('tvt.su.' + u.uid)) { localStorage.setItem('tvt.su.' + u.uid, '1'); track('sign_up', { method: cloud.usesPassword() ? 'email' : 'google' }); }
   } catch { }
+  // Opened as an installed app: counted once per device for this account (iPhones never fire appinstalled, nor does an install made while signed out).
+  if (u && installed()) try {
+    if (!localStorage.getItem('tvt.inst.' + u.uid)) { localStorage.setItem('tvt.inst.' + u.uid, '1'); cloud.noteAction('app_install'); }
+  } catch { }
   user = u; authReady = true; firstSnapshot = true; serverSynced = false; pending = null; kidLogins = {}; kidSent = {}; kidLimit = { maxRating: '', block: [] };
   if (u) waitForServer();
   forgetFullList();
@@ -2226,6 +2276,18 @@ const actions = {
       if (x.sent) { done({ t: now(), text }); toast(`Reply sent to ${m.email}, but it couldn't be saved here`); return; }
       err.textContent = cloud.friendlyError(x); err.hidden = false; b.disabled = false; b.textContent = 'Send reply';
     }
+  },
+  async 'admin-who'(b) {   // opens or closes the list of who did this action
+    const box = $('#whoDid'), open = b.getAttribute('aria-expanded') === 'true';
+    document.querySelectorAll('.twho[aria-expanded="true"]').forEach(x => x.setAttribute('aria-expanded', 'false'));
+    box.hidden = open;
+    if (open) return;
+    b.setAttribute('aria-expanded', 'true');
+    if (!adminActivity) box.innerHTML = '<p class="loading">Loading…</p>';
+    try {
+      adminActivity ||= await cloud.activity();
+      if (b.getAttribute('aria-expanded') === 'true') drawWho(b.dataset.action, adminActivity);
+    } catch (x) { if (b.getAttribute('aria-expanded') === 'true') box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading who did what')))}</p>`; }
   },
   async 'admin-remove'(b) {
     const a = adminAccounts[b.dataset.uid]; if (!a) return;
@@ -2565,7 +2627,7 @@ let installPrompt = null;
 const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function appButton() { $('#getapp').hidden = installed(); }
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; appButton(); });
-window.addEventListener('appinstalled', () => { track('app_install'); installPrompt = null; $('#appDialog').close?.(); $('#getapp').hidden = true; toast('TV Tracker added to your device'); });
+window.addEventListener('appinstalled', () => { track('app_install'); try { if (user) localStorage.setItem('tvt.inst.' + user.uid, '1'); } catch { } installPrompt = null; $('#appDialog').close?.(); $('#getapp').hidden = true; toast('TV Tracker added to your device'); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 function installSteps() {
   const ua = navigator.userAgent;
