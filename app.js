@@ -1700,6 +1700,9 @@ async function runImport(found, out) {
 }
 
 let adminAccounts = {};   // uid -> account, from the last Admin page load (for its Remove buttons)
+let adminMessages = {};   // id -> Contact us message, from the last Admin page load (for its Reply buttons)
+const msgWhen = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const msgReply = r => `<div class="msgreply"><span class="sub">You replied · ${esc(msgWhen(r.t))}</span><p>${esc(r.text)}</p></div>`;
 views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page up while it reloads
   if (!user) { if (cloud.configured && !authReady) { app.innerHTML = SPLASH; return; } location.hash = '#/login'; return; }
   if (!cloud.isAdmin()) {
@@ -1727,9 +1730,11 @@ views.admin = async (arg, quiet) => {   // quiet: pull-to-refresh keeps the page
     <span class="sub admeta">${a.listOf ? '' : `<span>${a.shows} show${a.shows === 1 ? '' : 's'}</span>${a.logins ? ` · <span>${a.logins} login${a.logins === 1 ? '' : 's'}</span>` : ''}<br>`}<span>Last login</span> <span>${whenAz(a.lastLogin)}</span>${a.uid !== user.uid && !a.removed && !gone[a.uid] ? `<br><button class="btn xs danger" data-act="admin-remove" data-uid="${esc(a.uid)}">Remove</button>` : ''}</span></div>`;
   const byRecent = (a, b) => (b.lastLogin || b.updated) - (a.lastLogin || a.updated);   // most recently logged in first
   adminAccounts = Object.fromEntries(list.map(a => [a.uid, a]));
+  adminMessages = Object.fromEntries(msgs.map(m => [m.id, m]));
   const msgRow = m => `<div class="msg"><div class="msghead"><span><b>${esc(m.name || '(no name)')}</b> ${m.email ? `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="sub">no email</span>'}</span>
-      <span class="sub">${esc(new Date(m.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}
-      <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p></div>`;
+      <span class="sub">${esc(msgWhen(m.t))}
+      ${m.email ? `<button class="btn xs" data-act="msg-reply" data-id="${esc(m.id)}">Reply</button>` : ''}
+      <button class="btn xs" data-act="del-msg" data-id="${esc(m.id)}">Delete</button></span></div><p>${esc(m.message)}</p>${(m.replies || []).map(msgReply).join('')}</div>`;
   app.innerHTML = `<div class="toolbar"><h1>Admin</h1><span class="sub">${list.length} account${list.length === 1 ? '' : 's'} · ${owners.length} with their own list · ${logins.length} login${logins.length === 1 ? '' : 's'} made for others${removed.length ? ` · ${removed.length} removed` : ''}</span></div>
     <div class="panel" id="traffic"><h3>Website traffic</h3><p class="loading">Loading Google Analytics…</p></div>
     <div class="panel" id="moreStats"><h3>More analytics · last 30 days</h3><p class="loading">Loading…</p></div>
@@ -2202,6 +2207,25 @@ const actions = {
   async 'del-msg'(b) {
     if (!confirm('Delete this message?')) return;
     try { await cloud.deleteMessage(b.dataset.id); b.closest('.msg').remove(); } catch (x) { toast(cloud.friendlyError(x)); }
+  },
+  'msg-reply'(b) {   // opens or closes the reply box under a Contact us message
+    const box = b.closest('.msg'), open = box.querySelector('.replyform');
+    if (open) { open.remove(); return; }
+    const m = adminMessages[b.dataset.id]; if (!m) return;
+    box.insertAdjacentHTML('beforeend', `<div class="replyform stack"><div class="field"><label>Reply to ${esc(m.email)}</label><textarea rows="5" maxlength="5000"></textarea></div>
+      <p class="formerr" hidden></p><div class="actions"><button class="btn primary" data-act="msg-send" data-id="${esc(m.id)}">Send reply</button><button class="btn" data-act="msg-reply" data-id="${esc(m.id)}">Cancel</button></div></div>`);
+    box.querySelector('.replyform textarea').focus();
+  },
+  async 'msg-send'(b) {
+    const m = adminMessages[b.dataset.id], form = b.closest('.replyform'), area = form.querySelector('textarea'), err = form.querySelector('.formerr');
+    const text = area.value.trim(); if (!m || !text) { area.focus(); return; }
+    b.disabled = true; b.textContent = 'Sending…'; err.hidden = true;
+    const done = sent => { form.insertAdjacentHTML('beforebegin', msgReply(sent)); form.remove(); };
+    try { done(await cloud.replyToMessage(m, text)); toast(`Reply sent to ${m.email}`); }
+    catch (x) {
+      if (x.sent) { done({ t: now(), text }); toast(`Reply sent to ${m.email}, but it couldn't be saved here`); return; }
+      err.textContent = cloud.friendlyError(x); err.hidden = false; b.disabled = false; b.textContent = 'Send reply';
+    }
   },
   async 'admin-remove'(b) {
     const a = adminAccounts[b.dataset.uid]; if (!a) return;

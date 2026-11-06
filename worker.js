@@ -7,6 +7,8 @@
 //   /api/traffic         Website traffic from Google Analytics for the Admin page (site owner only: send the Firebase
 //                        ID token as "Authorization: Bearer …"). Needs two Worker secrets, set in the Cloudflare
 //                        dashboard: GA_PROPERTY_ID and GA_SERVICE_ACCOUNT (see "Website traffic" in README.md).
+//   /api/reply           Emails the site owner's answer to a Contact us message through Resend (site owner only, same
+//                        token as above). Needs the Worker secret RESEND_API_KEY (see "Replying to messages" in README.md).
 const json = (body, status = 200, cache = 'no-store') =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cache } });
 
@@ -131,6 +133,25 @@ async function traffic(request, env) {
   return json(out);
 }
 
+/* ---------- /api/reply ---------- */
+// The person's own answer goes to the site owner's inbox (reply_to). Plain text, with their message quoted underneath.
+async function reply(request, env) {
+  if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405);
+  if (!await isOwner(request).catch(() => false)) return json({ error: 'Only the site owner can send replies.' }, 403);
+  if (!env.RESEND_API_KEY) return json({ error: 'Replies aren\'t set up yet: add the RESEND_API_KEY secret to the Worker in Cloudflare (see "Replying to messages" in README.md).' }, 503);
+  const { to, text, message } = await request.json().catch(() => ({}));
+  if (typeof to !== 'string' || to.length > 200 || !/^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>"]+$/.test(to)) return json({ error: 'That email address doesn\'t look right.' }, 400);
+  if (typeof text !== 'string' || !text.trim() || text.length > 5000) return json({ error: 'Write a reply of up to 5000 characters.' }, 400);
+  const quoted = typeof message === 'string' && message ? `\n\n---\nYou wrote:\n${message.slice(0, 5000).replace(/^/gm, '> ')}` : '';
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json', 'user-agent': 'TVTracker/1.0 (+https://tvtracker.us)' },
+    body: JSON.stringify({ from: 'TV Tracker <updates@tvtracker.us>', to, reply_to: ADMIN_EMAIL, subject: 'Re: your message to TV Tracker', text: text.trim() + quoted })
+  });
+  if (!r.ok) return json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 300)}` }, 502);
+  return json({ ok: true });
+}
+
 // The app's pages, by the #/name part of the address.
 const PAGE_NAMES = { '': 'My Shows', shows: 'My Shows', show: 'Show pages', movie: 'Movie pages', upcoming: 'Upcoming', discover: 'Discover',
   search: 'Add Show / search', account: 'Account', login: 'Sign in / sign up', admin: 'Admin', contact: 'Contact us' };
@@ -207,6 +228,10 @@ export default {
     }
     if (url.pathname === '/api/traffic') {
       try { return await traffic(request, env); }
+      catch (e) { return json({ error: String(e?.message || e) }, 502); }
+    }
+    if (url.pathname === '/api/reply') {
+      try { return await reply(request, env); }
       catch (e) { return json({ error: String(e?.message || e) }, 502); }
     }
     const page = await seo(request, ctx);

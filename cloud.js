@@ -287,6 +287,17 @@ export async function messages() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 export const deleteMessage = id => F.deleteDoc(F.doc(db, 'messages', id));
+// Emails the admin's reply (through the Worker, worker.js, /api/reply). Throws { sent: true } if it went out but couldn't be noted on the message.
+export async function replyToMessage(m, text) {
+  const r = await fetch('/api/reply', { method: 'POST', headers: { authorization: 'Bearer ' + await auth.currentUser.getIdToken(), 'content-type': 'application/json' },
+    body: JSON.stringify({ to: m.email, text, message: m.message }) });
+  const j = await r.json().catch(() => ({ error: 'The reply couldn\'t be sent (' + r.status + ').' }));
+  if (j.error) throw new Error(j.error);
+  const sent = { t: Date.now(), text };
+  try { await F.updateDoc(F.doc(db, 'messages', m.id), { replies: F.arrayUnion(sent) }); }
+  catch (x) { throw Object.assign(x, { sent: true }); }
+  return sent;
+}
 
 /* ---------- admin ---------- */
 // Verified email only: Google confirms it on Google sign-in, so nobody can claim the address with a password sign-up.
