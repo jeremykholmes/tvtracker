@@ -188,6 +188,9 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .rcard .rposter:hover { outline: 2px solid var(--accent); }
 .rcard .rname { background: none; border: 0; padding: 0; text-align: left; font: inherit; font-weight: 650; color: var(--text); cursor: pointer; }
 .rcard .rname:hover { text-decoration: underline; }
+a.rposter, a.rname { text-decoration: none; }
+.rcard .addbtns { justify-content: flex-start; margin-top: auto; }
+.rcard .addbtns .btn { margin-top: 0; }
 .rcard .rname { font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rcard .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rcard .btn { align-self: flex-start; margin-top: auto; }
