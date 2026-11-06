@@ -144,9 +144,17 @@ function trimEp(e) {
   return { id: e.id, s: e.season, n: e.number, name: e.name || 'TBA', airdate: e.airdate || '',
     airstamp: e.airstamp || '', runtime: e.runtime || null, summary: strip(e.summary).slice(0, 450) };
 }
+// Shows TVmaze says don't exist any more: not asked for again on this visit, or pages that fetch missing shows would redraw
+// and retry forever. Checked once more on the next visit or a manual refresh. A saved copy keeps working, with its check date moved on.
+const missing = new Set();
+const unfetched = id => !cache[id] && !missing.has(id);
 async function fetchShow(id) {
   const j = await api(`/shows/${id}?embed=episodes`);
-  if (!j) return null;
+  if (!j) {
+    missing.add(id);
+    if (cache[id]) { cache[id].t = now(); cache[id].show.score ??= null; save(K.cache, cache); }
+    return null;
+  }
   const episodes = (j._embedded?.episodes || []).filter(e => e.number != null).map(trimEp);
   cache[id] = { t: now(), show: trimShow(j), episodes };
   save(K.cache, cache);
@@ -532,7 +540,7 @@ views.shows = () => {
   const caught = rows.filter(r => r.p && !r.p.next && !airingSoon(r.p) && (r.p.upcoming || !/ended/i.test(r.s.status || '')))
     .sort((a, b) => (a.p.upcoming ? airTime(a.p.upcoming) : Infinity) - (b.p.upcoming ? airTime(b.p.upcoming) : Infinity));
   const done = rows.filter(r => r.p && !r.p.next && !r.p.upcoming && /ended/i.test(r.s.status || ''));
-  const loading = rows.filter(r => !r.p);
+  const loading = rows.filter(r => !r.p && !missing.has(r.s.id)), gone = rows.filter(r => !r.p && missing.has(r.s.id));
   const futureSec = future.length ? `<h2>Future watch list · ${future.length}</h2>
     <p class="sub futurehint">Shows you plan to watch. Check off the first episode and the show moves to Up next.</p>
     <div class="grid">${future.map(r => futureCard(r.s, r.p)).join('')}</div>` : '';
@@ -546,7 +554,7 @@ views.shows = () => {
       ${isKid() ? '' : '<button type="button" class="btn sm" data-act="add-show">＋ Add a Show</button>'}</div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${moviesSection(netChip)}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${sec('No longer available', gone)}${moviesSection(netChip)}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -657,6 +665,9 @@ async function shareLink(s, movie) {
 // Caught up, with the next episode airing today or within the next 7 days.
 const airingSoon = p => !!(p && !p.next && p.upcoming && airTime(p.upcoming) < new Date().setHours(0, 0, 0, 0) + 8 * DAY);
 const airsToday = e => new Date(airTime(e)).toDateString() === new Date().toDateString();
+// A show card with no episodes yet: still loading, or TVmaze doesn't have the show any more.
+const noEpisodes = id => !missing.has(id) ? '<div class="sub">Loading episodes…</div>'
+  : `<div class="sub">TVmaze no longer lists this show</div>${isKid() ? '' : `<button class="btn sm" data-act="unfollow" data-show="${id}">Remove</button>`}`;
 function card(s, p) {
   const id = s.id, pct = p && p.total ? Math.round(p.watched / p.total * 100) : 0;
   let foot = '';
@@ -671,14 +682,14 @@ function card(s, p) {
     <div class="body"><a class="title" href="#/show/${id}">${esc(s.name)}</a>
       <div class="sub">${esc(channel(s.network, s.name))}</div>
       ${p ? `<div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="sub">${p.watched}/${p.total} watched${p.unwatched ? ` · <b>${p.unwatched} left</b>` : ''}</div>` : '<div class="sub">Loading episodes…</div>'}
+      <div class="sub">${p.watched}/${p.total} watched${p.unwatched ? ` · <b>${p.unwatched} left</b>` : ''}</div>` : noEpisodes(id)}
       ${foot}</div></article>`;
 }
 
 // A show on the Future watch list: where it starts, and a Watched button for its first episode once that's out.
 function futureCard(s, p, from) {   // from: the friend who recommended it (Recommended by friends section)
   const id = s.id, seasons = p ? new Set((cache[id]?.episodes || []).filter(aired).map(e => e.s)).size : 0;
-  let info = '<div class="sub">Loading episodes…</div>', foot = '';
+  let info = noEpisodes(id), foot = '';
   if (p) {
     info = `<div class="sub">${p.total ? `${p.total} episode${p.total === 1 ? '' : 's'} out${seasons > 1 ? ` · ${seasons} seasons` : ''}` : 'Not out yet'}</div>`;
     if (p.next) foot = `<div class="next">Start with: ${twoLines(p.next)}</div>
@@ -840,7 +851,7 @@ views.upcoming = () => {
       : `<div class="empty"><p>Add some shows to see their schedule here.</p><a class="btn primary" href="#/search">＋ Add a show</a></div>`) : ''}
     ${recent.length ? `<h2>Airing this week</h2><div class="rows urows">${recent.map(r => row(r, true)).join('')}</div>` : ''}
     ${list.length ? `<h2>Coming up</h2>${soon.length ? `<div class="rows urows">${days}</div>` : '<p class="muted">Nothing scheduled yet for your shows.</p>'}` : ''}`;
-  if (followed().some(f => !cache[f.id])) refreshAll(false);
+  if (followed().some(f => unfetched(f.id))) refreshAll(false);
 };
 
 // Discover: rows of recommendations from what you watch, then this week's premieres.
@@ -2240,7 +2251,7 @@ function openList() {
   state = norm(load(stateKey(), null));
   accountChip(); syncStatus(); render(true); refreshMissing();
 }
-function refreshMissing() { if (followed().some(f => !cache[f.id])) refreshAll(false); }
+function refreshMissing() { if (followed().some(f => unfetched(f.id))) refreshAll(false); }
 
 /* ---------- UI helpers ---------- */
 function syncStatus(text, err) {
