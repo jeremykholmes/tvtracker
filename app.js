@@ -1671,6 +1671,7 @@ function drawWho(action, rec) {
   box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
+    ${action === 'sign_up' && since === '2026-11-02' ? '<p class="sub">The tile only counts sign-ups from 9:42 PM on Nov 2, so anyone who signed up earlier that day is listed here but isn\'t on the tile.</p>' : ''}
     <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
 }
 
