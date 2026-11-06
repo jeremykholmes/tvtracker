@@ -486,12 +486,14 @@ const FOLDER_ICO = {
   closed: '<svg class="folderico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.6l2.2 2.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/></svg>',
   open: '<svg class="folderico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.6l2.2 2.4H18a2 2 0 0 1 2 2V10H7.4a2 2 0 0 0-1.9 1.4L3 18.6z" fill="currentColor"/><path d="M7.4 11.5H21a1 1 0 0 1 1 1.3l-2 6a2 2 0 0 1-1.9 1.2H3.7l1.9-7.1a1.9 1.9 0 0 1 1.8-1.4z" fill="currentColor"/></svg>'
 };
-function folderTabs(page) {
-  if (isKid() || !config.tmdbKey) return '<h1>My Shows</h1>';
+// On Discover (which has its own heading) they switch between its shows and movies instead.
+function folderTabs(page, discover) {
+  if (isKid() || !config.tmdbKey) return discover ? '' : '<h1>My Shows</h1>';
+  const tag = discover ? 'span' : 'h1';
   const tab = (id, label, href) => id === page
-    ? `<h1 class="folder on">${FOLDER_ICO.open}${label}</h1>`
+    ? `<${tag} class="folder on"${discover ? ' aria-current="page"' : ''}>${FOLDER_ICO.open}${label}</${tag}>`
     : `<a class="folder" href="${href}">${FOLDER_ICO.closed}${label}</a>`;
-  return `<nav class="folders" aria-label="My lists">${tab('shows', 'My Shows', '#/')}${tab('movies', 'My Movies', '#/movies')}</nav>`;
+  return `<nav class="folders" aria-label="${discover ? 'Discover shows or movies' : 'My lists'}">${tab('shows', 'My Shows', discover ? '#/discover' : '#/')}${tab('movies', 'My Movies', discover ? '#/discover/movies' : '#/movies')}</nav>`;
 }
 // Nothing on this device yet and the account hasn't answered: don't claim the list is empty.
 function waitingForAccount() {
@@ -878,7 +880,16 @@ let discoverLoading = null;
 // "New this week on <service>" pages (seo.js), linked from Discover and the home page.
 const NEW_ON = [['netflix', 'Netflix'], ['hulu', 'Hulu'], ['disney-plus', 'Disney+'], ['max', 'HBO Max'], ['prime-video', 'Prime Video'],
   ['apple-tv', 'Apple TV+'], ['peacock', 'Peacock'], ['paramount-plus', 'Paramount+']];
-views.discover = () => {
+views.discover = arg => {
+  const movies = arg === 'movies' && !!config.tmdbKey;
+  const top = `<div class="toolbar"><h1>Discover</h1><span class="sub">${movies ? 'Movies picked for you from My Movies' : 'Shows picked for you from what you watch'}</span>
+      <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
+    ${folderTabs(movies ? 'movies' : 'shows', true)}
+    <div class="newsvcs"><h2 class="dhead">New this week on</h2>
+      <div class="newsvc-row">${NEW_ON.map(([slug, name]) => { const ic = netIcon(name);
+        return `<a class="newsvc" href="/new/${slug}">${ic ? `<img src="${esc(ic)}" alt="" loading="lazy">` : ''}<span>${esc(name)}</span></a>`; }).join('')}
+        <a class="newsvc all" href="/new"><span>All streaming</span></a></div></div>`;
+  if (movies) { app.innerHTML = top + movieDiscover(); return; }
   const d = meta.discover, stale = !d || now() - d.t > STALE;
   if (stale && !discoverLoading) discoverLoading = loadDiscover().catch(e => toast('Couldn\'t load premieres: ' + e.message)).finally(() => { discoverLoading = null; if (route().name === 'discover') render(); });
   // Tiles, like Upcoming and My Shows: poster, then name, network/season/genres, premiere date and the Add buttons.
@@ -891,12 +902,7 @@ views.discover = () => {
   const premieres = !d ? '<p class="loading">Pulling this week\'s premieres across networks &amp; streaming…</p>'
     : `<h3 class="dsub">New series · ${fresh.length}</h3><div class="rows urows drows">${fresh.map(item).join('') || '<p class="muted">None found.</p>'}</div>
        <h3 class="dsub">Returning seasons · ${back.length}</h3><div class="rows urows drows">${back.map(item).join('') || '<p class="muted">None found.</p>'}</div>`;
-  app.innerHTML = `<div class="toolbar"><h1>Discover</h1><span class="sub">Shows picked for you from what you watch</span>
-      <button class="btn sm" data-act="discover-refresh">↻ Refresh</button></div>
-    <div class="newsvcs"><h2 class="dhead">New this week on</h2>
-      <div class="newsvc-row">${NEW_ON.map(([slug, name]) => { const ic = netIcon(name);
-        return `<a class="newsvc" href="/new/${slug}">${ic ? `<img src="${esc(ic)}" alt="" loading="lazy">` : ''}<span>${esc(name)}</span></a>`; }).join('')}
-        <a class="newsvc all" href="/new"><span>All streaming</span></a></div></div>
+  app.innerHTML = `${top}
     ${recsSection()}
     <h2 class="dhead">Premiering this week</h2>
     ${premieres}`;
@@ -1028,6 +1034,61 @@ const mid = v => /^\d+$/.test(String(v)) ? +v : String(v);   // a TMDB id, or 'c
 function trimMovie(m) {
   return { id: m.id, name: m.title || m.name || '', image: m.poster_path ? TMDB_IMG + m.poster_path : '',
     year: (m.release_date || '').slice(0, 4), date: m.release_date || '', summary: (m.overview || '').slice(0, 700), pop: m.popularity || 0 };
+}
+/* Discover's My Movies folder: picks from TMDB's "people who liked this also liked" for the movies on My Movies, then what's
+   trending and in US theaters. Kept on the device: recommendation lists for a week, trending and theaters for a day. */
+const K_DMOV = 'tvt.discoverMovies.v1', dm = Object.assign({ t: 0, trending: [], theaters: [], recs: {} }, load(K_DMOV, {}));
+const MOVIE_SEEDS = 12, MOVIE_ROWS = 5;
+let dmLoading = null, dmError = '', dmAt = 0;   // dmAt: last load, so lookups that failed aren't retried in a loop
+const dmSlim = list => (list || []).filter(r => r.original_language === 'en').map(r => ({ ...trimMovie(r), summary: '' }));
+// The movies picks are based on: the newest on My Movies that TMDB knows.
+const movieSeeds = () => myMovies().filter(m => !m.custom && typeof m.id === 'number').sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, MOVIE_SEEDS);
+const dmFind = id => [...dm.trending, ...dm.theaters, ...Object.values(dm.recs).flatMap(x => x.list)].find(m => m.id === id);
+const dmSeedStale = m => !dm.recs[m.id] || now() - dm.recs[m.id].t > 7 * DAY;
+function loadMovieDiscover() {
+  if (dmLoading) return dmLoading;
+  dmAt = now();
+  dmLoading = (async () => {
+    dmError = '';
+    try {
+      busy('Finding movies you might like…');
+      if (now() - dm.t > DAY) {
+        const [week, playing] = await Promise.all([tmdb('/trending/movie/week?language=en-US'), tmdb('/movie/now_playing?language=en-US&region=US&page=1')]);
+        dm.trending = dmSlim(week?.results); dm.theaters = dmSlim(playing?.results); dm.t = now();
+        if (route().name === 'discover') redrawSoon();
+      }
+      await inFours(movieSeeds().filter(dmSeedStale), async m => {
+        const j = await tmdb(`/movie/${m.id}/recommendations?language=en-US&page=1`);
+        dm.recs[m.id] = { t: now(), list: dmSlim(j?.results).slice(0, 20) };
+        if (route().name === 'discover') redrawSoon();   // rows fill in as they arrive
+      });
+      save(K_DMOV, dm);
+    } catch (e) { dmError = e.message; console.warn('movie recs', e); }
+    finally { busy(false); dmLoading = null; if (route().name === 'discover') render(); }
+  })();
+  return dmLoading;
+}
+const movieRecCard = m => `<div class="rcard"><a class="rposter" href="#/movie/${m.id}" title="${esc(m.name)}">${m.image
+    ? `<img src="${esc(m.image)}" alt="" loading="lazy">` : `<span class="noimg">${esc(m.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</span>`}</a>
+    <a class="rname" href="#/movie/${m.id}">${esc(m.name)}</a><span class="sub">${esc([m.year, m.because?.slice(0, 2).join(', ')].filter(Boolean).join(' · ')) || '&nbsp;'}</span>
+    ${movieBtn(m)}</div>`;
+function movieDiscover() {
+  const seeds = movieSeeds();
+  if ((now() - dm.t > DAY || seeds.some(dmSeedStale)) && now() - dmAt > 5 * 60e3) loadMovieDiscover();
+  const row = (title, list) => list.length ? `<h2 class="dhead">${title}</h2><div class="rrow">${list.map(movieRecCard).join('')}</div>` : '';
+  const score = {};
+  for (const f of seeds) (dm.recs[f.id]?.list || []).forEach((m, i, list) => {
+    if (hasMovie(m.id)) return;
+    const x = score[m.id] || (score[m.id] = { ...m, score: 0, because: [] });
+    x.score += 1 + (list.length - i) / list.length;
+    x.because.push(f.name);
+  });
+  const top = Object.values(score).sort((a, b) => b.score - a.score || b.pop - a.pop).slice(0, 15);
+  const rows = seeds.slice(0, MOVIE_ROWS).map(f => row(`Because you added ${esc(f.name)}`, (dm.recs[f.id]?.list || []).filter(m => !hasMovie(m.id)).slice(0, 12))).join('');
+  const picks = !myMovies().length ? `<div class="empty"><p>Add a few movies you like and we'll recommend more like them here.</p><button type="button" class="btn primary" data-act="add-movie">＋ Add a Movie</button></div>`
+    : row('Top picks for you', top) + rows;
+  const rest = row('Trending this week', dm.trending) + row('In theaters now', dm.theaters);
+  return picks + rest + (rest ? '' : `<p class="muted">${dmError ? `Couldn't load movies: ${esc(dmError)}` : 'Finding movies you might like…'}</p>`);
 }
 // "Starz Amazon Channel" and "Starz Apple TV channel" are both just Starz.
 const serviceName = n => n.replace(/\s+(amazon|apple tv|roku premium|prime video)?\s*channel$/i, '').trim() || n;
@@ -2453,7 +2514,7 @@ const actions = {
   },
   'movie-add'(b, e, seen) {
     if (!requireAccount(true)) return;
-    const id = +b.dataset.movie, m = lastImdb.find(x => x.tm?.id === id)?.tm || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || movieCache[id] || state.movies[id];
+    const id = +b.dataset.movie, m = lastImdb.find(x => x.tm?.id === id)?.tm || lastMovies.find(x => x.id === id) || svcHit?.list.find(x => x.id === id) || movieCache[id] || state.movies[id] || dmFind(id);
     if (!m) return;
     const from = linkFrom(id, 'movie');   // opened from a friend's recommendation link: remember who
     if (state.movies[id]) setMovie(id, { removed: false, w: !!seen, ...(from ? { rec: from } : {}) }); else addMovie(m, seen, from);
@@ -2525,7 +2586,7 @@ const actions = {
   // Back to the page this show was opened from; opened straight from a link, go to My Shows.
   back() { if (navDepth > 0) { restoreScroll = true; history.back(); } else location.hash = '#/'; },
   'older-seasons'(b) { showOldSeasons.add(+b.dataset.show); render(); },
-  'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; render(); },
+  'discover-refresh'() { delete meta.discover; for (const id in tm.recs) tm.recs[id].t = 0; recsAt = 0; dm.t = 0; dm.recs = {}; dmAt = 0; render(); },
   async 'rec-open'(b) { const s = await recShow(b); if (s) { showLookup[s.id] = s; location.hash = '#/show/' + s.id; } },
   async 'rec-add'(b) {
     if (!requireAccount(true)) return;
