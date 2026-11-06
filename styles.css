@@ -474,7 +474,9 @@ details.moviesdone[open] > summary h2::after { content: ' ▾'; }
 .where { margin: 10px 0 0; font-size: 14px; }
 
 /* My Movies: its own part at the bottom of My Shows */
-.mymovies { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); }
+.mymovies { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); scroll-margin-top: 64px; }   /* clear of the sticky header */
+.titlepair { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 14px; }
+.moviesjump { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 26px; font-weight: 700; letter-spacing: -.02em; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; cursor: pointer; }
 .card .sub.stream { color: var(--text); }
 
 /* admin page: website traffic */
