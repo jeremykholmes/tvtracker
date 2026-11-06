@@ -476,24 +476,43 @@ const movieService = n => { n = (n || '').trim(); const k = n.toLowerCase(); ret
 // Where a movie on My Movies streams (from its card details, or what was typed in for one added by hand).
 const movieServices = m => [...new Set((m.custom ? (m.where ? [m.where] : []) : (movieDetails[m.id]?.stream || [])).map(movieService).filter(Boolean))];
 const netIcon = n => { const d = NET_SITES[n.toLowerCase()]; return !d ? '' : d.startsWith('icons/') ? d + new URL(import.meta.url).search : `https://www.google.com/s2/favicons?domain=${d}&sz=128`; };
+// Like the day buttons: the service (its logo, or its name over the count) and how many of your shows or movies are on it.
+const netChip = (n, label, c, act, cur, what) => { const ic = n && netIcon(n), shows = `${c} ${what}${c === 1 ? '' : 's'}`;
+  return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === cur ? ' on' : ''}" data-act="${act}" data-net="${esc(n)}" aria-pressed="${n === cur}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
+    ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
+// The two folders at the top of My Shows and My Movies: the open one is the page's heading, the closed one is a link to the other.
+// Kid logins (and a site without movies) have no My Movies, so they get the plain heading.
+const FOLDER_ICO = {
+  closed: '<svg class="folderico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.6l2.2 2.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/></svg>',
+  open: '<svg class="folderico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4.6l2.2 2.4H18a2 2 0 0 1 2 2V10H7.4a2 2 0 0 0-1.9 1.4L3 18.6z" fill="currentColor"/><path d="M7.4 11.5H21a1 1 0 0 1 1 1.3l-2 6a2 2 0 0 1-1.9 1.2H3.7l1.9-7.1a1.9 1.9 0 0 1 1.8-1.4z" fill="currentColor"/></svg>'
+};
+function folderTabs(page) {
+  if (isKid() || !config.tmdbKey) return '<h1>My Shows</h1>';
+  const tab = (id, label, href) => id === page
+    ? `<h1 class="folder on">${FOLDER_ICO.open}${label}</h1>`
+    : `<a class="folder" href="${href}">${FOLDER_ICO.closed}${label}</a>`;
+  return `<nav class="folders" aria-label="My lists">${tab('shows', 'My Shows', '#/')}${tab('movies', 'My Movies', '#/movies')}</nav>`;
+}
+// Nothing on this device yet and the account hasn't answered: don't claim the list is empty.
+function waitingForAccount() {
+  if (followed().length || myMovies().length || !user || serverSynced) return false;
+  app.innerHTML = slowServer
+    ? `<div class="empty"><h1>Can't reach your account</h1>
+      <p>Your shows are saved in your account, but this browser can't connect to it right now. If you use an ad blocker or privacy extension, allow this site and reload. Otherwise check your connection and reload.</p>
+      <p class="sub">Signed in as ${esc(user.email)}</p></div>`
+    : SPLASH;
+  return true;
+}
 views.shows = () => {
   if (needsAccount()) return views.landing();
   const list = followed(), movies = myMovies();
-  if (!list.length && !movies.length && user && !serverSynced) {
-    // Nothing on this device yet and the account hasn't answered: don't claim the list is empty.
-    app.innerHTML = slowServer
-      ? `<div class="empty"><h1>Can't reach your account</h1>
-      <p>Your shows are saved in your account, but this browser can't connect to it right now. If you use an ad blocker or privacy extension, allow this site and reload. Otherwise check your connection and reload.</p>
-      <p class="sub">Signed in as ${esc(user.email)}</p></div>`
-      : SPLASH;
-    return;
-  }
+  if (waitingForAccount()) return;
   if (!list.length && isKid()) {
     app.innerHTML = `<div class="empty"><h1>No shows yet</h1><p>${esc(sharedOpen().name)} hasn't added any shows for you yet.</p></div>`;
     return;
   }
   if (!list.length && !movies.length) {
-    app.innerHTML = `${inboxSection()}<div class="empty"><h1>Start your watchlist</h1>
+    app.innerHTML = `${config.tmdbKey ? folderTabs('shows') : ''}${inboxSection()}<div class="empty"><h1>Start your watchlist</h1>
       <p>Add the shows you're watching from any network or streaming service, then check off episodes as you go.</p>
       <a class="btn primary" href="#/search">＋ Add a show</a> <a class="btn" href="#/discover">See what's premiering</a>
       ${user ? `<p class="sub" style="margin-top:18px">Signed in as ${esc(cloud.loginName(user.email))}${sharedOpen() ? ` · viewing ${esc(sharedOpen().name)}'s list` : ''}</p>` : ''}
@@ -525,12 +544,8 @@ views.shows = () => {
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
-  // Like the day buttons: the service (its logo, or its name over the count) and how many of your shows are on it.
-  const netChip = (n, label, c, act = 'net', cur = net, what = 'show') => { const ic = n && netIcon(n), shows = `${c} ${what}${c === 1 ? '' : 's'}`;
-    return `<button type="button" class="nchip${ic ? ' logo' : ' stack'}${n ? '' : ' allchip'}${n === cur ? ' on' : ''}" data-act="${act}" data-net="${esc(n)}" aria-pressed="${n === cur}" title="${esc(label)}" aria-label="${esc(label)}, ${shows}">${ic
-      ? `<img src="${esc(ic)}" alt="${esc(label)}" data-name="${esc(label)}">` : esc(label)}<span>${shows}</span></button>`; };
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
-    ${netChip('', 'All', all.length)}${nets.map(n => netChip(n, n, counts[n])).join('')}</div>` : '';
+    ${netChip('', 'All', all.length, 'net', net, 'show')}${nets.map(n => netChip(n, n, counts[n], 'net', net, 'show')).join('')}</div>` : '';
   // Up next order: every show with aired episodes not checked off yet comes first, by the date of the next episode to
   // watch (the one on its card), newest first. After them come caught-up shows whose next episode airs within the week,
   // soonest first.
@@ -548,13 +563,13 @@ views.shows = () => {
     <p class="sub futurehint">Recommendations you added. Check off the first episode and the show moves to Up next.</p>
     <div class="grid">${fromFriends.map(r => futureCard(r.s, r.p, (state.shows[r.s.id].rec || '').trim().split(/\s+/)[0] || 'Friend')).join('')}</div>` : '';
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
-  app.innerHTML = `<div class="toolbar"><div class="titlepair"><h1>My Shows</h1>
-      ${isKid() || !config.tmdbKey ? '' : '<button type="button" class="moviesjump" data-act="to-movies">My Movies</button>'}</div>
+  app.innerHTML = `${folderTabs('shows')}<div class="toolbar">
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
       ${isKid() ? '' : '<button type="button" class="btn sm" data-act="add-show">＋ Add a Show</button>'}</div>
     ${inboxSection()}${filterBar}${dayBar}
     ${sec('Up next', watching)}${sec('Caught up — waiting for new episodes', caught)}
-    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${sec('No longer available', gone)}${moviesSection(netChip)}`;
+    ${futureSec}${friendsSec}${sec('Loading', loading)}${sec('Finished', done)}${sec('No longer available', gone)}
+    ${list.length ? '' : '<div class="empty"><p>No shows on your list yet.</p></div>'}`;
   if (loading.length || list.some(s => recheck(s.id))) refreshAll(false);
 };
 
@@ -575,7 +590,7 @@ function inboxSection() {
   const movies = inbox.some(isMovieRec), shows = inbox.some(m => !isMovieRec(m));
   return `<section class="inbox"><h2>${movies ? (shows ? '' : 'Movies ') : 'Shows '}recommended by friends · ${inbox.length}</h2>
     <p class="sub futurehint">${viewOnly ? `Ask ${esc(sharedOpen().name)} to add the ones you want.` : [shows && 'Add a show and it waits under Recommended by friends until you watch the first episode, then moves to Up next.',
-      movies && 'Add a movie and it goes on My Movies, at the bottom of this page.'].filter(Boolean).join(' ')}</p>${inbox.map(row).join('')}</section>`;
+      movies && 'Add a movie and it goes on My Movies.'].filter(Boolean).join(' ')}</p>${inbox.map(row).join('')}</section>`;
 }
 function onInbox(items) {
   inbox = items.filter(m => {   // already on your list and started (or a movie already watched): nothing to recommend
@@ -996,7 +1011,7 @@ async function recShow(b) {
 }
 
 /* ---------- movies (TMDB) ----------
-   Search can switch to Movies. Added movies are listed under My Movies at the bottom of My Shows (To watch) and checked
+   Search can switch to Movies. Added movies are listed on the My Movies page (To watch) and checked
    off once watched, which moves them to Watched. Kept in state.movies, keyed by TMDB id. Kid logins don't see movies. */
 // Titles corrected from IMDb (TMDB id -> { name, year }), so the movie page shows them too. Kept on the device.
 const K_RENAME = 'tvt.movieRename.v1', renamed = load(K_RENAME, {});
@@ -1079,10 +1094,12 @@ function movieCard(m) {
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}
       ${m.custom ? `<button class="btn ghost sm" data-act="movie-remove" data-movie="${m.id}">Remove</button>` : ''}</div></article>`;
 }
-// My Movies: its own part at the bottom of My Shows, with a heading like My Shows' and a way to add one.
-// netChip: My Shows' Where to watch button maker, reused for My Movies' own filter (remembered separately on this device).
-function moviesSection(netChip) {
-  if (isKid() || !config.tmdbKey) return '';
+// My Movies: its own page (#/movies), opened from the folders at the top of My Shows. Its Where to watch filter is
+// remembered separately from My Shows' on this device.
+views.movies = () => {
+  if (needsAccount()) return views.landing();
+  if (isKid() || !config.tmdbKey) { location.hash = '#/'; return; }
+  if (waitingForAccount()) return;
   const every = myMovies().sort((a, b) => (b.t || 0) - (a.t || 0));
   const counts = {};
   for (const m of every) for (const n of movieServices(m)) counts[n] = (counts[n] || 0) + 1;
@@ -1090,7 +1107,7 @@ function moviesSection(netChip) {
   let net = load(K_MNET, '');
   if (net && !counts[net]) net = '';
   const all = net ? every.filter(m => movieServices(m).includes(net)) : every;
-  const bar = netChip && nets.length > 1 ? `<div class="flabel" id="fl-mnet">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-mnet">
+  const bar = nets.length > 1 ? `<div class="flabel" id="fl-mnet">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-mnet">
     ${netChip('', 'All', every.length, 'mnet', net, 'movie')}${nets.map(n => netChip(n, n, counts[n], 'mnet', net, 'movie')).join('')}</div>` : '';
   const toWatch = all.filter(m => !m.w), seen = all.filter(m => m.w);
   // Cards without details yet (or a week old): look them up once, then redraw.
@@ -1099,15 +1116,16 @@ function moviesSection(netChip) {
     todo.forEach(m => detailsAsked.add(m.id));
     inFours(todo, async m => { const x = movieCache[m.id] || await fetchMovie(m.id).catch(() => null);
       if (x) movieDetails[m.id] = { runtime: x.runtime, rating: x.rating, genres: x.genres.slice(0, 3), stream: x.stream.slice(0, 3), rent: x.rent.slice(0, 2), t: now() }; })
-      .then(() => { save(K_MDET, movieDetails); if (route().name === 'shows') render(); });
+      .then(() => { save(K_MDET, movieDetails); if (route().name === 'movies') render(); });
   }
-  return `<section class="mymovies"><div class="toolbar"><h1>My Movies</h1>
+  app.innerHTML = `${folderTabs('movies')}<div class="toolbar">
       <span class="sub">${all.length ? `${toWatch.length} to watch · ${seen.length} watched` : 'Keep track of movies you want to see.'}</span>
       <button type="button" class="btn sm" data-act="add-movie">＋ Add a Movie</button></div>
     ${bar}
     ${toWatch.length ? `<h2>To watch · ${toWatch.length}</h2><div class="grid">${toWatch.map(movieCard).join('')}</div>` : ''}
-    ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}</section>`;
-}
+    ${seen.length ? `<details class="moviesdone"><summary><h2>Watched · ${seen.length}</h2></summary><div class="grid">${seen.map(movieCard).join('')}</div></details>` : ''}
+    ${every.length ? '' : '<div class="empty"><p>No movies on your list yet.</p></div>'}`;
+};
 views.movie = arg => {
   const id = +arg;
   if (isKid()) { location.hash = '#/'; return; }
@@ -1139,7 +1157,7 @@ views.movie = arg => {
         <button class="btn" data-act="movie-recommend" data-movie="${id}">↗ Recommend to a friend</button>
         <a class="btn ghost" href="https://www.themoviedb.org/movie/${id}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TMDB in a new tab">ⓘ More info on this movie ↗</a>
       </div>
-      ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched in My Movies.' : 'On your My Movies list, at the bottom of My Shows.'}</p>
+      ${on ? `<p class="laternote"><span aria-hidden="true">${seen ? '✓' : '🎬'}</span> ${seen ? 'You\'ve watched this — it\'s under Watched in My Movies.' : 'On your My Movies list.'}</p>
         <div class="actions"><button class="btn danger" data-act="movie-remove" data-movie="${id}"><span aria-hidden="true">🗑️</span> Remove from my movies</button></div>` : ''}
     </div></section>`;
 };
@@ -2412,7 +2430,6 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
-  'to-movies'() { document.querySelector('.mymovies')?.scrollIntoView(); },   // the link beside My Shows' heading
   'add-show'() {   // My Shows' button: Add Show, switched to TV shows
     try { sessionStorage.setItem('tvt.qmode', 'tv'); } catch { }
     if (location.hash === '#/search') render(true); else location.hash = '#/search';
@@ -2633,7 +2650,7 @@ function render(fromRoute) {
   const label = isKid() ? '<span class="ico">⌕</span>Search' : st.dataset.label;
   if (st.innerHTML !== label) st.innerHTML = label;
   if (isKid() && r.name === 'discover') { location.hash = '#/'; return; }
-  const tab = r.name === 'show' || r.name === 'movie' ? 'shows' : r.name === 'login' ? 'account' : r.name;
+  const tab = r.name === 'show' || r.name === 'movie' || r.name === 'movies' ? 'shows' : r.name === 'login' ? 'account' : r.name;
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   document.body.classList.remove('landing');
   document.documentElement.classList.toggle('ptr-on', r.name in PTR_PAGES);   // our pull-to-refresh replaces the browser's here
