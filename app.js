@@ -540,7 +540,8 @@ views.shows = () => {
     <p class="sub futurehint">Recommendations you added. Check off the first episode and the show moves to Up next.</p>
     <div class="grid">${fromFriends.map(r => futureCard(r.s, r.p, (state.shows[r.s.id].rec || '').trim().split(/\s+/)[0] || 'Friend')).join('')}</div>` : '';
   const sec = (title, arr) => arr.length ? `<h2>${title} · ${arr.length}</h2><div class="grid">${arr.map(r => card(r.s, r.p)).join('')}</div>` : '';
-  app.innerHTML = `<div class="toolbar"><h1>My Shows</h1>
+  app.innerHTML = `<div class="toolbar"><div class="titlepair"><h1>My Shows</h1>
+      ${isKid() || !config.tmdbKey ? '' : '<button type="button" class="moviesjump" data-act="to-movies">My Movies</button>'}</div>
       <span class="sub">Updated ${ago(meta.lastRefresh)}</span>
       ${isKid() ? '' : '<button type="button" class="btn sm" data-act="add-show">＋ Add a Show</button>'}</div>
     ${inboxSection()}${filterBar}${dayBar}
@@ -2396,6 +2397,7 @@ const actions = {
     unfollow(id); render();
     toast(`Removed ${name}`, () => { const s = state.shows[id]; s.removed = false; s.t = now(); persist(); });
   },
+  'to-movies'() { document.querySelector('.mymovies')?.scrollIntoView(); },   // the link beside My Shows' heading
   'add-show'() {   // My Shows' button: Add Show, switched to TV shows
     try { sessionStorage.setItem('tvt.qmode', 'tv'); } catch { }
     if (location.hash === '#/search') render(true); else location.hash = '#/search';
