@@ -62,6 +62,9 @@ The repo is public, so its Actions logs are too: the job never prints anyone's e
 
 To switch it on: do steps 1–3 of [Weekly email](#weekly-email) (Resend and the two secrets), then set `recEmail = true` in `firebase-config.js` (shows the Account page switch), and add a line about Resend to `privacy.html`. Actions → **Recommendation emails → Run workflow** checks it right away.
 
+## Welcome email
+**Status: on.** `.github/workflows/welcome-email.yml` runs `email/welcome-send.mjs` every 15 minutes. It sends each new account a one-time welcome email (subject "Welcome to TV Tracker, <first name>!"; content in `email/welcome.mjs`) and marks it `emailPrefs/{uid}.welcomed`. Only accounts created in the last 2 days get one, so older accounts never do; logins made for someone else are skipped. Uses the same Resend and Firebase secrets as the recommendation emails. Preview it with `node email/welcome.mjs > preview.html`; Actions → **Welcome email → Run workflow** (test) emails the site owner a sample.
+
 ## Removing accounts
 The Admin page has a **Remove** button on every account and every login made for others (not your own). It locks the account out straight away (the database rules refuse any account listed in `removals/{uid}`), and `.github/workflows/remove-accounts.yml` runs `email/remove-accounts.mjs` hourly to delete its sign-in and data, then marks it done. Needs the `FIREBASE_SERVICE_ACCOUNT` secret (see Weekly email) and the latest `firestore.rules` published. To finish a removal right away: Actions → **Remove accounts → Run workflow**.
 

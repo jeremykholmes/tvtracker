@@ -1,0 +1,41 @@
+# Welcome email for new accounts (email/welcome-send.mjs), every 15 minutes and on demand from the Actions tab.
+# Sends nothing until the RESEND_API_KEY secret is set (see "Welcome email" in README.md).
+name: Welcome email
+
+on:
+  schedule:
+    - cron: '12,27,42,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = send the site owner a sample, send = the normal run'
+        type: choice
+        options: [test, send]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency: welcome-email   # never two runs at once, so nobody gets the email twice
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node welcome-send.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MODE: ${{ inputs.mode || 'send' }}
+          TEST_TO: jeremykholmes@gmail.com
