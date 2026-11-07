@@ -65,6 +65,9 @@ To switch it on: do steps 1–3 of [Weekly email](#weekly-email) (Resend and the
 ## Welcome email
 **Status: on.** `.github/workflows/welcome-email.yml` runs `email/welcome-send.mjs` every 15 minutes. It sends each new account a one-time welcome email (subject "Welcome to TV Tracker, <first name>!"; content in `email/welcome.mjs`) and marks it `emailPrefs/{uid}.welcomed`. Only accounts created in the last 2 days get one, so older accounts never do; logins made for someone else are skipped. Uses the same Resend and Firebase secrets as the recommendation emails. Preview it with `node email/welcome.mjs > preview.html`; Actions → **Welcome email → Run workflow** (test) emails the site owner a sample.
 
+## Reminder email
+**Status: on.** `.github/workflows/reminder-email.yml` runs `email/reminder-send.mjs` daily. Any account at least 2 weeks old (older accounts included) that still has no shows or movies and no episodes checked off gets a one-time reminder (subject "<first name>, your TV Tracker list is waiting"; content in `email/reminder.mjs`). Each account is checked once and marked `emailPrefs/{uid}.reminded`, so nobody gets it twice and accounts already using the site never do. Skips logins made for others, removed accounts and anyone who switched emails off. Preview with `node email/reminder.mjs > preview.html`; Actions → **Reminder email → Run workflow** (test) emails the site owner a sample.
+
 ## Removing accounts
 The Admin page has a **Remove** button on every account and every login made for others (not your own). It locks the account out straight away (the database rules refuse any account listed in `removals/{uid}`), and `.github/workflows/remove-accounts.yml` runs `email/remove-accounts.mjs` hourly to delete its sign-in and data, then marks it done. Needs the `FIREBASE_SERVICE_ACCOUNT` secret (see Weekly email) and the latest `firestore.rules` published. To finish a removal right away: Actions → **Remove accounts → Run workflow**.
 

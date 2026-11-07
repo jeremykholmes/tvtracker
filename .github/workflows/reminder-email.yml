@@ -1,0 +1,41 @@
+# One-time reminder for accounts 2+ weeks old with an empty list (email/reminder-send.mjs), daily at 10:23am Arizona and on demand from the Actions tab.
+# Sends nothing until the RESEND_API_KEY secret is set (see "Reminder email" in README.md).
+name: Reminder email
+
+on:
+  schedule:
+    - cron: '23 17 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = send the site owner a sample, send = the normal run'
+        type: choice
+        options: [test, send]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency: reminder-email   # never two runs at once, so nobody gets it twice
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node reminder-send.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MODE: ${{ inputs.mode || 'send' }}
+          TEST_TO: jeremykholmes@gmail.com
