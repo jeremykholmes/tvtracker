@@ -790,7 +790,6 @@ views.show = arg => {
           <button class="btn" data-act="follow-later" data-show="${id}" title="Save it for later — it moves to Up next when you check off an episode">🕒 Watch later</button>`}
         <button class="btn" data-act="recommend" data-show="${id}">↗ Recommend to a friend</button>
         ${s.url ? `<a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener" title="Cast, crew and full details — opens TVmaze in a new tab">ⓘ More info on this show ↗</a>` : ''}
-        <a class="btn ghost" href="https://www.rottentomatoes.com/search?search=${encodeURIComponent(s.name)}" target="_blank" rel="noopener" title="Search for this show on Rotten Tomatoes — opens in a new tab">Find on Rotten Tomatoes ↗</a>
       </div>
       ${f && isLater(id) ? `<p class="laternote"><span aria-hidden="true">🕒</span> ${state.shows[id]?.rec ? `Recommended by ${esc(state.shows[id].rec)} — waiting under Recommended by friends` : 'On your Future watch list'} — check off an episode and it moves to Up next.</p>` : ''}
       ${f && !isKid() ? `<div class="actions">${isLater(id) ? `<button class="btn" data-act="later-off" data-show="${id}">▶ Start watching now</button>`
