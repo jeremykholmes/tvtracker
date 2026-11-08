@@ -1736,6 +1736,8 @@ function drawMore(t) {
   const whoTile = (key, label) => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b>${n(a[key])}</b></button>`;
   adminActivity = null;
   const a = m.actions || {};
+  // People who have rated: exact, from the accounts (their star ratings), all time rather than the last 30 days.
+  const raters = Object.values(adminAccounts).filter(x => x.rated && x.uid !== user.uid).length;
   const searchPart = g.error && !g.needsAccess ? `<p class="formerr">${esc(g.error)}</p>`
     : g.needsAccess ? `<p>Not connected yet. In <b>Search Console → Settings → Users and permissions → Add user</b>, add the service account's email (the <code>…iam.gserviceaccount.com</code> one) with <b>Restricted</b> permission, and turn on the <b>Google Search Console API</b> in Google Cloud for the same project.</p>`
     : `<div class="tstats">${tile('Clicks from Google', n(g.clicks))}${tile('Times shown in results', n(g.impressions))}${tile('Click-through rate', ((g.ctr || 0) * 100).toFixed(1) + '%')}${tile('Average position', g.position ? g.position.toFixed(1) : '—')}</div>
@@ -1745,7 +1747,8 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats six">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}</div>
+    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+      <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
     <div class="mgrid">
@@ -1779,7 +1782,17 @@ const WHO = () => {
     app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
   };
 };
+// Everyone who has given a show stars, with how many shows. From the accounts, so it's exact and all time.
+function drawRaters() {
+  const rows = Object.values(adminAccounts).filter(a => a.rated && a.uid !== user.uid).sort((x, y) => y.rated - x.rated || (y.lastLogin || 0) - (x.lastLogin || 0));
+  const total = rows.reduce((s, a) => s + a.rated, 0);
+  document.getElementById('whoDid').innerHTML = `<h4>Rated shows <span class="sub">all time · ${rows.length} account${rows.length === 1 ? '' : 's'} · ${total.toLocaleString()} rating${total === 1 ? '' : 's'}</span></h4>
+    ${rows.map(a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b><br><span class="sub">${esc(a.listOf ? `Username: ${cloud.loginName(a.email)} · login for ${adminAccounts[a.listOf]?.name || 'a deleted account'}` : a.email || 'no email saved')}</span></span>
+      <span class="sub admeta"><b>${a.rated.toLocaleString()}</b> <span>show${a.rated === 1 ? '' : 's'} rated</span></span></div>`).join('') || '<p class="sub">Nobody yet.</p>'}
+    <p class="sub">Exact, from each account's star ratings, and counts ratings they still have (a rating that was cleared isn't counted). Only shows can be rated for now, not movies. Your own ratings aren't counted.</p>`;
+}
 function drawWho(action, rec) {
+  if (action === 'rated') return drawRaters();
   const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
   for (const a of Object.values(adminAccounts)) {
     if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
@@ -2420,6 +2433,7 @@ const actions = {
     box.hidden = open;
     if (open) return;
     b.setAttribute('aria-expanded', 'true');
+    if (b.dataset.action === 'rated') { drawRaters(); return; }   // from the accounts already loaded, no activity needed
     if (!adminActivity) box.innerHTML = '<p class="loading">Loading…</p>';
     try {
       adminActivity ||= await cloud.activity();

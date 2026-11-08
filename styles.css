@@ -515,6 +515,9 @@ a.folder:hover { color: var(--text); }
 .tstats.six { grid-template-columns: repeat(6, 1fr); }
 @media (max-width: 760px) { .tstats.six { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 420px) { .tstats.six { grid-template-columns: repeat(2, 1fr); } }
+.tstats.seven { grid-template-columns: repeat(7, 1fr); }
+@media (max-width: 900px) { .tstats.seven { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 420px) { .tstats.seven { grid-template-columns: repeat(2, 1fr); } }
 button.tstat { border: 1px solid transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 button.tstat:hover { border-color: var(--line); }
 button.tstat[aria-expanded="true"] { border-color: var(--accent); }
