@@ -359,6 +359,7 @@ export async function allAccounts() {
     return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
       removed: !!x.listOf && !access[x.listOf]?.[d.id],   // a login whose owner took its access away (or deleted their account)
       shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0, findable: x.findable !== false,
+      rated: Object.values(x.ratings || {}).filter(Boolean).length,   // how many shows they've given stars
       showTimes: Object.values(x.shows || {}).filter(s => !s.removed).map(s => s.t || 0), movieTimes: Object.values(x.movies || {}).filter(m => !m.removed).map(m => m.t || 0) };
   });
 }
