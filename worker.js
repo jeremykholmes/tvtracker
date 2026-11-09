@@ -178,14 +178,19 @@ async function moreReports(ga, num) {
   const [a, b] = await Promise.all([
     ga('batchRunReports', { requests: [by('sessionDefaultChannelGroup', 10), by('deviceCategory', 5), by('country', 8), by('city', 8), by('newVsReturning', 3)] }),
     ga('batchRunReports', { requests: [by('eventName', 20, count, isEvent(...ACTIONS)), by('pageLocation', 250, count, isEvent('page_open')),
-      by('linkDomain', 10, count, isEvent('click')), by('sessionSource', 8)] })
+      by('linkDomain', 10, count, isEvent('click')), by('sessionSource', 25), by('sessionSource', 25, count, isEvent('sign_up'))] })
   ]);
   const rows = r => (r.rows || []).map(x => ({ name: x.dimensionValues[0].value, n: num(x.metricValues[0]) }));
   const [sources, devices, countries, cities, newVsReturning] = a.reports.map(rows);
-  const [events, pageRows, outbound, sites] = b.reports.map(rows);
+  const [events, pageRows, outbound, sites, signupRows] = b.reports.map(rows);
+  // Visitors and sign-ups side by side for each source: the busiest sources, plus any that brought a sign-up.
+  const signups = Object.fromEntries(signupRows.map(r => [r.name, r.n]));
+  const bySource = [...new Set([...sites.slice(0, 8), ...signupRows].map(r => r.name))].filter(x => x && x !== '(not set)')
+    .map(name => ({ name, visitors: sites.find(r => r.name === name)?.n || 0, signups: signups[name] || 0 }))
+    .sort((x, y) => y.signups - x.signups || y.visitors - x.visitors);
   const pages = {};
   for (const r of pageRows) { const k = pageName(r.name); pages[k] = (pages[k] || 0) + r.n; }
-  return { sources, sites, devices, countries, cities: cities.filter(c => c.name !== '(not set)'), newVsReturning: newVsReturning.filter(r => r.name && r.name !== '(not set)'),
+  return { sources, sites: sites.slice(0, 8), bySource, devices, countries, cities: cities.filter(c => c.name !== '(not set)'), newVsReturning: newVsReturning.filter(r => r.name && r.name !== '(not set)'),
     actions: Object.fromEntries(ACTIONS.map(k => [k, events.find(e => e.name === k)?.n || 0])),
     pages: Object.entries(pages).map(([name, n]) => ({ name, n })).sort((x, y) => y.n - x.n).slice(0, 10),
     outbound: outbound.filter(r => r.name && r.name !== '(not set)') };
