@@ -1761,8 +1761,53 @@ function drawMore(t) {
       ${bars(m.pages, 'Most-viewed pages', 'Nothing yet.', x => x)}
       ${bars(m.outbound, 'Clicks out to other sites', 'Nothing yet.', x => x)}
     </div>`}
+    <h4 class="msec">Growth</h4><div id="growth"><p class="loading">Loading…</p></div>
     <h4 class="msec">Google search</h4>${searchPart}
     <p class="sub">Visitors are counted per section (one person = 1). ${now() - 30 * DAY < COUNTS_FROM ? 'This section counts from Nov 5, 2026.' : ''}</p>`;
+  drawGrowth(m);
+}
+
+// Admin page, Growth: how visitors become users (the sign-up funnel), which sources bring sign-ups, and whether people keep coming
+// back. Visitors and sources come from Google Analytics; the rest from the accounts (exact): when each signed up (activity/{uid}.created),
+// what's on their lists, their episode check-offs (activity) and their last visit (users/{uid}.lastLogin, noted at most hourly).
+async function drawGrowth(m) {
+  const box = document.getElementById('growth'); if (!box) return;
+  try { adminActivity ||= await cloud.activity(); }
+  catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading sign-up dates')))}</p>`; return; }
+  if (!document.contains(box)) return;
+  const rec = adminActivity, pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—', n = v => Math.round(v || 0).toLocaleString();
+  const since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM));
+  // People with their own list (not logins made for others), other than the site owner.
+  const people = Object.values(adminAccounts).filter(a => !a.listOf && a.uid !== user.uid).map(a => ({ ...a, created: rec[a.uid]?.created || 0, days: rec[a.uid]?.days || {} }));
+  const joined = people.filter(a => a.created && cloud.azDay(a.created) >= since);
+  const added = joined.filter(a => a.shows || a.movieTimes.length);
+  const ticked = joined.filter(a => Object.values(a.days).some(d => d.episode_watched));
+  const back = joined.filter(a => a.lastLogin && cloud.azDay(a.lastLogin) > cloud.azDay(a.created));
+  const visitors = (m.newVsReturning || []).find(r => r.name === 'new')?.n || 0;
+  const step = (label, v, note) => `<div class="mrow"><span class="mname">${label}</span><span class="mbar"><i style="width:${Math.max(2, Math.round(v / Math.max(1, visitors, joined.length) * 100))}%"></i></span>
+    <b>${n(v)}</b></div>${note ? `<p class="sub fnote">${note}</p>` : ''}`;
+  const funnel = `<div class="mstat"><h4>Sign-up funnel <span class="sub">(since ${esc(azLabel(since))})</span></h4>
+    ${m.error ? '' : step('New visitors', visitors)}
+    ${step('Signed up', joined.length, m.error ? '' : `${pct(joined.length, visitors)} of new visitors`)}
+    ${step('Added a show or movie', added.length, `${pct(added.length, joined.length)} of sign-ups`)}
+    ${step('Checked off an episode', ticked.length, `${pct(ticked.length, joined.length)} of sign-ups`)}
+    ${step('Came back another day', back.length, `${pct(back.length, joined.length)} of sign-ups`)}</div>`;
+  const src = (m.bySource || []).filter(r => r.visitors || r.signups);
+  const sources = `<div class="mstat"><h4>Sign-ups by source <span class="sub">(since ${esc(azLabel(since))})</span></h4>
+    ${m.error ? `<p class="sub">Needs Google Analytics.</p>` : src.length ? `<table class="srctab"><thead><tr><th>Source</th><th>Visitors</th><th>Sign-ups</th><th>Rate</th></tr></thead><tbody>
+      ${src.map(r => `<tr><td>${esc(r.name === '(direct)' ? 'Direct (typed or bookmarked)' : r.name)}</td><td>${n(r.visitors)}</td><td>${n(r.signups)}</td><td>${r.visitors ? pct(r.signups, r.visitors) : '—'}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="sub">Nothing yet.</p>'}
+    <p class="sub fnote">From Google Analytics, by where the visit that signed up came from. Rate is sign-ups per visitor from that source.</p></div>`;
+  // Retention: of people who signed up at least a week (a month) ago, how many still opened the site a week (a month) after.
+  const kept = d => { const old = people.filter(a => a.created && a.created <= now() - d * DAY); return { of: old.length, n: old.filter(a => a.lastLogin >= a.created + d * DAY).length }; };
+  const active = d => people.filter(a => a.lastLogin >= now() - d * DAY).length;
+  const wk = kept(7), mo = kept(30), dated = people.filter(a => a.created).length;
+  const tile = (label, v, sub) => `<div class="tstat"><span class="sub">${label}</span><b>${v}</b>${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  const retention = `<div class="tstats">${tile('Active this week', n(active(7)), `of ${n(people.length)} people`)}${tile('Active this month', n(active(30)), `of ${n(people.length)} people`)}
+    ${tile('Still using after a week', pct(wk.n, wk.of), wk.of ? `${n(wk.n)} of ${n(wk.of)}` : 'nobody a week old yet')}${tile('Still using after a month', pct(mo.n, mo.of), mo.of ? `${n(mo.n)} of ${n(mo.of)}` : 'nobody a month old yet')}</div>
+    <p class="sub">Retention: of people who signed up at least a week (or a month) ago, how many opened the site signed in a week (or a month) or more later. People here are accounts with their own list, not logins made for others, and not you.${dated < people.length ? ` Sign-up dates are still being filled in for ${n(people.length - dated)} older account${people.length - dated === 1 ? '' : 's'} (within the hour); until then they're left out of the after-a-week and after-a-month numbers.` : ''}</p>`;
+  box.innerHTML = `<div class="mgrid">${funnel}${sources}</div>${retention}
+    <p class="sub">Funnel steps count sign-ups since ${esc(azLabel(since))} that have done each thing so far, at any time. Episode check-offs are counted from Nov 5, 9:50 PM on.</p>`;
 }
 
 // Admin page: who did an action. Google Analytics can't say (it isn't tied to people), so this comes from the accounts instead:

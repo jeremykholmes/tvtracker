@@ -537,6 +537,11 @@ button.tstat[aria-expanded="true"] { border-color: var(--accent); }
 .mbar { height: 8px; background: color-mix(in srgb, var(--line) 70%, transparent); border-radius: 4px; overflow: hidden; }
 .mbar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .mrow b { font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }
+.mstat .fnote { margin: -2px 0 4px; font-size: 11px; }
+.srctab { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
+.srctab th { text-align: right; font-weight: 600; font-size: 12px; color: var(--muted, inherit); padding: 2px 4px; }
+.srctab td { text-align: right; padding: 3px 4px; font-variant-numeric: tabular-nums; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.srctab th:first-child, .srctab td:first-child { text-align: left; overflow-wrap: anywhere; }
 
 /* landing page: movies section (visual on the left on wide screens) */
 .lp-movies .lp-visual { order: -1; }
