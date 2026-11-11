@@ -14,7 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
-const PAGE_VERSION = 4;
+const PAGE_VERSION = 5;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -103,7 +103,15 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
     .seo .nwc .tag { align-self: flex-start; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 11px; border-radius: 6px; padding: 2px 7px; }
     .newlinks { margin-top: 6px; }
     @media (max-width: 640px) { .seo .nwgrid { grid-template-columns: repeat(2, 1fr); } }
+    .seo .crumbs { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+    .seo .crumbs a { color: inherit; }
+    .seo-hero.ep { grid-template-columns: 320px 1fr; }
+    .seo-hero.ep img { aspect-ratio: 16 / 9; }
+    .seo .sub2 { display: block; font-size: 20px; font-weight: 500; color: var(--muted); margin-top: 4px; }
+    .seo .epnav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 18px 0 0; }
+    .seo li.cur { font-weight: 700; }
     @media (max-width: 640px) { .seo-hero { grid-template-columns: 110px 1fr; gap: 14px; } .seo h1 { font-size: 24px; } }
+    @media (max-width: 640px) { .seo-hero.ep { grid-template-columns: 1fr; } }
   </style>
   <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
 </head>
@@ -160,13 +168,14 @@ async function showPage(id, slug, rec) {
     const list = eps.filter(e => e.season === x.number);
     const range = list[0]?.airdate ? `${shortDate(list[0].airdate)}${list.length > 1 && list[list.length - 1].airdate ? ' – ' + shortDate(list[list.length - 1].airdate) : ''}` : '';
     return `<details${x.number === latest ? ' open' : ''}><summary>Season ${x.number} <span>· ${list.length} episode${list.length === 1 ? '' : 's'}${range ? ' · ' + range : ''}</span></summary>
-      <ol>${list.map(e => `<li value="${e.number}">${esc(e.name || `Episode ${e.number}`)} <time datetime="${esc(e.airdate || '')}">${shortDate(e.airdate)}</time></li>`).join('')}</ol></details>`;
+      <ol>${list.map(e => `<li value="${e.number}"><a href="${epPath(id, want, e)}">${esc(e.name || `Episode ${e.number}`)}</a> <time datetime="${esc(e.airdate || '')}">${shortDate(e.airdate)}</time></li>`).join('')}</ol></details>`;
   }).join('');
   const image = s.image?.original || s.image?.medium || '';
   // People search for the season they're on ("severance season 2 release date"), so shows still airing name the
   // newest season. Ended shows with several seasons say how many; one-season and other shows keep the general title.
   const airing = ['Running', 'To Be Determined', 'In Development'].includes(s.status);
-  const title = airing && latest ? `${s.name} Season ${latest} – Episodes & Release Dates | TV Tracker`
+  const title = airing && latest && next?.airdate ? `${s.name} Season ${next.season || latest} Release Schedule – Next Episode ${monthDay(next.airdate)} | TV Tracker`
+    : airing && latest ? `${s.name} Season ${latest} – Episodes & Release Dates | TV Tracker`
     : s.status === 'Ended' && nSeasons > 1 ? `${s.name} – All ${nSeasons} Seasons, Episodes & Air Dates | TV Tracker`
     : `${s.name} – Episodes, Seasons & Air Dates | TV Tracker`;
   const body = `<div class="seo-hero">${image ? `<img src="${esc(s.image.medium || image)}" alt="${esc(s.name)} poster" width="210" height="295">` : '<div></div>'}
@@ -186,6 +195,66 @@ async function showPage(id, slug, rec) {
     ...(seasons.length ? { containsSeason: seasons.map(x => { const list = eps.filter(e => e.season === x.number);
       return { '@type': 'TVSeason', seasonNumber: x.number, name: `Season ${x.number}`, numberOfEpisodes: list.length, ...(list[0]?.airdate ? { startDate: list[0].airdate } : {}) }; }) } : {}) };
   return html(page({ title, description, path: `/show/${id}-${want}`, image, imageAlt: `${s.name} poster`, jsonLd, body, appHash: `show/${id}`, rec }), 200, rec ? 600 : 6 * HOUR);
+}
+
+/* ---------- episode pages ---------- */
+// /show/<id>-<name>/season-<n>/episode-<n>: one page per episode, for searches like "<show> season 5 episode 7" or
+// "<show> s5e7". Built from the same TVmaze answer as the show page (so it's usually already cached).
+const monthDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const epPath = (id, slug, e) => `/show/${id}-${slug}/season-${e.season}/episode-${e.number}`;
+const isNamed = e => !!e?.name && !/^episode\s*\d+$/i.test(e.name.trim());
+const daysFromNow = d => d ? (new Date(d + 'T12:00:00Z') - Date.now()) / 864e5 : Infinity;
+async function episodePage(id, slug, season, number, rec) {
+  const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=episodes&embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
+  if (!s) return notFound('Show');
+  const want = slugify(s.name);
+  const eps = (s._embedded?.episodes || []).filter(e => e.season && e.number != null);
+  const i = eps.findIndex(e => e.season === season && e.number === number);
+  if (i < 0) return notFound('Episode');
+  const e = eps[i], path = epPath(id, want, e);
+  if (slug !== want) return Response.redirect(`${SITE}${path}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
+  const prev = eps[i - 1], nextEp = eps[i + 1];
+  const where = s.webChannel?.name || s.network?.name || '';
+  const aired = e.airdate && daysFromNow(e.airdate) < 0.5;
+  const named = isNamed(e);
+  const summary = plain(e.summary);
+  const code = `S${e.season}E${e.number}`;
+  const when = e.airdate ? `${aired ? 'aired' : 'airs'} ${longDate(e.airdate)}${where ? ` on ${where}` : ''}` : `doesn't have an air date yet${where ? ` (${where})` : ''}`;
+  const about = summary || `Season ${e.season}, episode ${e.number} of ${s.name} ${when}.`;
+  const title = `${s.name} Season ${e.season} Episode ${e.number}${named ? ` – “${e.name}”` : ''}${e.airdate ? ` (${shortDate(e.airdate)})` : ''} | TV Tracker`;
+  const description = clip(`${s.name} ${code}${named ? ` “${e.name}”` : ''} ${when}. ${summary || 'Air date, episode guide and what\'s next.'}`, 160);
+  const facts = [where, code, e.airdate ? (aired ? 'Aired ' : 'Airs ') + longDate(e.airdate) : 'Air date TBA', e.runtime ? `${e.runtime} min` : '', e.rating?.average ? `★ ${e.rating.average}/10` : ''].filter(Boolean);
+  const still = e.image?.original || e.image?.medium || '', poster = s.image?.original || s.image?.medium || '';
+  const showUrl = `/show/${id}-${want}`;
+  const seasonEps = eps.filter(x => x.season === e.season);
+  const upcoming = s._embedded?.nextepisode;
+  const body = `<p class="crumbs"><a href="${showUrl}">${esc(s.name)}</a> › Season ${e.season} › Episode ${e.number}</p>
+    <div class="seo-hero${still ? ' ep' : ''}">${still ? `<img src="${esc(e.image.medium || still)}" alt="${esc(s.name)} ${code} still" width="250" height="140">`
+      : poster ? `<img src="${esc(s.image.medium || poster)}" alt="${esc(s.name)} poster" width="210" height="295">` : '<div></div>'}
+    <div><h1>${esc(s.name)} Season ${e.season} Episode ${e.number}${named ? `<span class="sub2">“${esc(e.name)}”</span>` : ''}</h1>
+      <p class="facts">${facts.map(esc).join(' · ')}</p>
+      <p class="summary">${esc(about)}</p>
+      ${upcoming && upcoming.id !== e.id ? `<p><b>Next new episode:</b> <a href="${epPath(id, want, upcoming)}">S${upcoming.season} E${upcoming.number}${isNamed(upcoming) ? ` “${esc(upcoming.name)}”` : ''}</a> — ${longDate(upcoming.airdate)}</p>` : ''}
+      <div class="cta"><a class="btn primary" href="/#/show/${id}">＋ Track ${esc(s.name)} free</a><a class="btn" href="${showUrl}">All episodes</a></div>
+      <p class="note">Check off episodes as you watch and see when the next one is out. Free, no ads.</p></div></div>
+    <nav class="epnav">${prev ? `<a class="btn" href="${epPath(id, want, prev)}">‹ S${prev.season} E${prev.number}${isNamed(prev) ? ': ' + esc(clip(prev.name, 40)) : ''}</a>` : '<span></span>'}
+      ${nextEp ? `<a class="btn" href="${epPath(id, want, nextEp)}">S${nextEp.season} E${nextEp.number}${isNamed(nextEp) ? ': ' + esc(clip(nextEp.name, 40)) : ''} ›</a>` : ''}</nav>
+    <h2>${esc(s.name)} season ${e.season} episodes</h2>
+    <ol>${seasonEps.map(x => `<li value="${x.number}"${x.id === e.id ? ' class="cur"' : ''}>${x.id === e.id ? esc(x.name || `Episode ${x.number}`) : `<a href="${epPath(id, want, x)}">${esc(x.name || `Episode ${x.number}`)}</a>`} <time datetime="${esc(x.airdate || '')}">${shortDate(x.airdate)}</time></li>`).join('')}</ol>`;
+  const jsonLd = [{ '@context': 'https://schema.org', '@type': 'TVEpisode', name: named ? e.name : `Episode ${e.number}`, url: SITE + path,
+    episodeNumber: e.number, ...(e.airdate ? { datePublished: e.airdate } : {}), ...(summary ? { description: clip(summary, 500) } : {}),
+    ...(still || poster ? { image: still || poster } : {}), ...(e.runtime ? { timeRequired: `PT${e.runtime}M` } : {}),
+    partOfSeason: { '@type': 'TVSeason', seasonNumber: e.season, name: `Season ${e.season}` },
+    partOfSeries: { '@type': 'TVSeries', name: s.name, url: SITE + showUrl } },
+    { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: s.name, item: SITE + showUrl },
+      { '@type': 'ListItem', position: 2, name: `Season ${e.season}` },
+      { '@type': 'ListItem', position: 3, name: `Episode ${e.number}`, item: SITE + path }] }];
+  // Old episodes with no summary would be near-empty pages, so Google is asked to skip them; recent and upcoming ones
+  // (what people are searching for) are always indexable.
+  const noindex = !summary && Math.abs(daysFromNow(e.airdate)) > 60;
+  return html(page({ title, description, path, image: still || poster, imageAlt: `${s.name} ${code}`, jsonLd, body, appHash: `show/${id}`, rec, noindex }),
+    200, rec ? 600 : 6 * HOUR);
 }
 
 /* ---------- movie pages ---------- */
@@ -322,6 +391,7 @@ function sitemapIndex() {
   return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${at('/sitemaps/site.xml')}
+${at('/sitemaps/episodes.xml')}
 ${Array.from({ length: SHOW_PAGES }, (_, i) => at(`/sitemaps/shows-${i}.xml`)).join('\n')}
 ${Array.from({ length: MOVIE_PAGES }, (_, i) => at(`/sitemaps/movies-${i + 1}.xml`)).join('\n')}
 </sitemapindex>`);
@@ -334,6 +404,18 @@ async function showSitemap(n) {
   const list = n < SHOW_PAGES ? await getJson(`${TVMAZE}/shows?page=${n}`, DAY).catch(() => null) || [] : [];
   return urlset(list.filter(s => (s.weight || 0) >= 80 && s.name)
     .map(s => ({ loc: `${SITE}/show/${s.id}-${slugify(s.name)}`, lastmod: s.updated ? new Date(s.updated * 1000).toISOString().slice(0, 10) : '' })));
+}
+// Episodes of popular shows that came out in the last week or come out in the next week: the ones people search for.
+async function episodeSitemap() {
+  const now = Date.now(), days = Array.from({ length: 15 }, (_, i) => new Date(now + (i - 7) * 864e5).toISOString().slice(0, 10));
+  const lists = await Promise.all(days.flatMap(d => [getJson(`${TVMAZE}/schedule/web?date=${d}`, 6 * HOUR), getJson(`${TVMAZE}/schedule?country=US&date=${d}`, 6 * HOUR)].map(p => p.catch(() => []))));
+  const seen = new Set(), urls = [];
+  for (const e of lists.flat()) {
+    const s = e?._embedded?.show || e?.show;
+    if (!s?.name || !e.season || e.number == null || (s.weight || 0) < 70 || seen.has(e.id)) continue;
+    seen.add(e.id); urls.push({ loc: SITE + epPath(s.id, slugify(s.name), e) });
+  }
+  return urlset(urls);
 }
 // TMDB's most popular movies, 20 a page (25 pages = the top 500), plus the current top-rated ones on the first page.
 async function movieSitemap(n) {
@@ -356,11 +438,13 @@ export async function seo(request, ctx) {
   let m;
   const rec = (url.searchParams.get('r') || '').trim().slice(0, 40);
   let make;
-  if ((m = url.pathname.match(/^\/show\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => showPage(m[1], m[2] || '', rec);
+  if ((m = url.pathname.match(/^\/show\/(\d+)(?:-([a-z0-9-]*?))?\/season-(\d+)\/episode-(\d+)\/?$/))) make = () => episodePage(m[1], m[2] || '', +m[3], +m[4], rec);
+  else if ((m = url.pathname.match(/^\/show\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => showPage(m[1], m[2] || '', rec);
   else if ((m = url.pathname.match(/^\/movie\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => moviePage(m[1], m[2] || '', rec);
   else if ((m = url.pathname.match(/^\/new(?:\/([a-z0-9-]+))?\/?$/))) make = () => newPage(m[1] || '');
   else if (url.pathname === '/sitemap.xml') return sitemapIndex();
   else if (url.pathname === '/sitemaps/site.xml') return urlset([{ loc: SITE + '/' }, { loc: SITE + '/privacy.html' }, { loc: SITE + '/new' }, ...SERVICES.map(s => ({ loc: `${SITE}/new/${s.slug}` }))]);
+  else if (url.pathname === '/sitemaps/episodes.xml') make = () => episodeSitemap();
   else if ((m = url.pathname.match(/^\/sitemaps\/shows-(\d+)\.xml$/))) make = () => showSitemap(+m[1]);
   else if ((m = url.pathname.match(/^\/sitemaps\/movies-(\d+)\.xml$/))) make = () => movieSitemap(+m[1]);
   else return null;
