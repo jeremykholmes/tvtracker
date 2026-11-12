@@ -1440,7 +1440,7 @@ async function serviceMovies(hit) {
 // Angel Studios' whole US catalog, so its movies turn up in a normal title search (first, even when TMDB's own
 // results bury them under other movies of the same name). Up to 600 movies, kept on the device for a day.
 const K_ANGEL = 'tvt.angel.v2';
-let angelCat = load(K_ANGEL, null), angelLoading = null;
+let angelCat = load(K_ANGEL, null), angelLoading = null, angelRetryAt = 0;
 function angelCatalog() {
   if (angelCat?.list && now() - angelCat.t < DAY) return Promise.resolve(angelCat.list);
   return angelLoading ||= (async () => {
@@ -1519,7 +1519,12 @@ async function doSearch(q) {
         }
       }
       lastImdb.sort((a, b) => a.rank - b.rank);
-      if (!(angelCat?.list && now() - angelCat.t < DAY)) angelCatalog().then(() => { if (seq === searchSeq && searchMode() === 'movie') doSearch(q); });   // first time: search again once it's here
+      // First time: search again once the Angel catalog is here. Only once per 10 minutes, and only if it actually loaded,
+      // or a failed or empty catalog would make doSearch call itself (and /api/imdb) forever.
+      if (!(angelCat?.list && now() - angelCat.t < DAY) && now() - angelRetryAt > 10 * 60e3) {
+        angelRetryAt = now();
+        angelCatalog().then(list => { if (list.length && seq === searchSeq && searchMode() === 'movie') doSearch(q); });
+      }
       drawResults();
     } catch (e) { toast(e.message); }
     return;
