@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+# Episode pages and /api/ run the Worker on every visit, which counts toward Cloudflare's daily request limit.
+Disallow: /show/*/season-
+Disallow: /api/
 
 Sitemap: https://tvtracker.us/sitemap.xml
