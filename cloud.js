@@ -58,14 +58,14 @@ export async function start({ onUser, onData, onError, onInbox, onRatings }) {
   });
 }
 
-// Star ratings: users/{uid}.ratings = { showId: 1-5 }. Always in the signed-in person's own document, even on a shared list,
+// Star ratings: users/{uid}.ratings = { showId: 1-5, m<tmdbId>: 1-5 for a movie }. Always in the signed-in person's own document, even on a shared list,
 // so everyone keeps their own (a kid login's own document is the one thing it can write besides its checkmarks).
 function watchRatings(uid) {
   ratingsUnsub = F.onSnapshot(F.doc(db, 'users', uid), snap => handlers.onRatings?.(snap.data()?.ratings || {}), e => console.warn('ratings', e));
 }
 export const setRating = (id, stars) => F.setDoc(F.doc(db, 'users', auth.currentUser.uid), { ratings: { [id]: stars || F.deleteField() } }, { merge: true });
 
-// A show's combined star rating from everyone ({ n, sum }, worked out hourly by email/rating-totals.mjs); null if nobody has
+// A show's or movie's combined star rating from everyone ({ n, sum }, worked out hourly by email/rating-totals.mjs); null if nobody has
 // rated it, undefined if the database isn't ready yet. Anyone can read these, signed in or not.
 export async function ratingTotal(id) {
   if (!db) return undefined;
@@ -370,7 +370,7 @@ export async function allAccounts() {
     return { uid: d.id, name: x.profile?.name || '', email: x.profile?.email || '', listOf: x.listOf || null,
       removed: !!x.listOf && !access[x.listOf]?.[d.id],   // a login whose owner took its access away (or deleted their account)
       shows: Object.values(x.shows || {}).filter(s => !s.removed).length, logins: Object.keys(x.logins || {}).length, updated: x.updated || 0, lastLogin: x.lastLogin || 0, findable: x.findable !== false,
-      rated: Object.values(x.ratings || {}).filter(Boolean).length,   // how many shows they've given stars
+      rated: Object.values(x.ratings || {}).filter(Boolean).length,   // how many shows and movies they've given stars
       showTimes: Object.values(x.shows || {}).filter(s => !s.removed).map(s => s.t || 0), movieTimes: Object.values(x.movies || {}).filter(m => !m.removed).map(m => m.t || 0) };
   });
 }

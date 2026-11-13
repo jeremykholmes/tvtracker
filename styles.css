@@ -108,6 +108,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: v
 .score b { color: var(--text); }
 .ttlogo { width: 52px; height: 52px; }
 .tvmlogo { display: block; height: 28px; width: auto; }
+.tmdbscore { display: block; padding: 3px 9px; border-radius: 6px; background: linear-gradient(90deg, #90cea1, #01b4e4); color: #0d253f;
+  font-weight: 800; font-size: 14px; letter-spacing: .5px; text-decoration: none; }
 .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
 .netfilter { display: flex; flex-wrap: wrap; gap: 8px; }
 .checkrow { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
