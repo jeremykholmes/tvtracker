@@ -27,3 +27,8 @@ export const weeklyEmail = false;
 // "A friend recommended a show" emails: true shows their on/off switch on the Account page. The emails themselves
 // start once the RESEND_API_KEY repo secret is set (see "Recommendation emails" in README.md).
 export const recEmail = true;
+
+// Firebase App Check: proves requests to Firebase come from this site, not a script. This is the public reCAPTCHA
+// (Fraud Defense) site key registered in Firebase console → App Check → Apps. Empty: App Check is off. Turn on
+// enforcement in the console only after its metrics show nearly all requests as verified.
+export const appCheckKey = '6Le_pB0uAAAAAKREUwBR-3slhPKSjvg-sogFlewA';
