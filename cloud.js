@@ -2,10 +2,19 @@
 // users/{uid}            — profile + followed shows (small)
 // users/{uid}/watched/bN — episode checkmarks, spread over BUCKETS small documents so no single
 //                          document grows huge (big documents make every save slow).
-const { firebaseConfig, adminEmail, contactEmailKey, weeklyEmail, recEmail } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
+const { firebaseConfig, adminEmail, contactEmailKey, weeklyEmail, recEmail, appCheckKey } = await import('./firebase-config.js' + new URL(import.meta.url).search);   // same fresh version as the app
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 export const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId);
+
+// App Check (see appCheckKey in firebase-config.js): every Firebase app instance attaches a reCAPTCHA-backed token.
+async function protect(app) {
+  if (!appCheckKey) return;
+  try {
+    const AC = await import(`${SDK}/firebase-app-check.js`);
+    AC.initializeAppCheck(app, { provider: new AC.ReCaptchaEnterpriseProvider(appCheckKey), isTokenAutoRefreshEnabled: true });
+  } catch (e) { console.warn('App Check unavailable', e); }
+}
 
 const BUCKETS = 32;
 const bucketOf = epId => 'b' + (Math.abs(parseInt(epId, 10) || 0) % BUCKETS);
@@ -24,6 +33,7 @@ export async function start({ onUser, onData, onError, onInbox, onRatings }) {
   ]);
   A = authMod; F = fsMod;
   const app = appMod.initializeApp(firebaseConfig);
+  await protect(app);
   auth = A.getAuth(app);
   // Keep a copy of the database on the device (IndexedDB). Saves land there instantly and
   // are queued to upload in the background — they survive closing the tab or going offline.
@@ -158,6 +168,7 @@ export async function addLogin(name, username, password, role, kidCopy) {
   const owner = auth.currentUser;
   // Created in a separate, throwaway Firebase instance so the owner stays signed in here.
   const helper = appMod.initializeApp(firebaseConfig, 'login-' + Date.now());
+  await protect(helper);
   try {
     const a2 = A.initializeAuth(helper, { persistence: A.inMemoryPersistence });
     const cred = await A.createUserWithEmailAndPassword(a2, loginEmail(username), password);

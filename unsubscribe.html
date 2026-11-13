@@ -32,10 +32,15 @@
     const q = new URLSearchParams(location.search), uid = q.get('u'), token = q.get('k');
     try {
       if (!uid || !token) throw new Error('missing');
-      const { firebaseConfig } = await import('./firebase-config.js');
+      const { firebaseConfig, appCheckKey } = await import('./firebase-config.js');
       const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
       const [{ initializeApp }, F] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-firestore.js`)]);
-      const db = F.getFirestore(initializeApp(firebaseConfig));
+      const app = initializeApp(firebaseConfig);
+      if (appCheckKey) {
+        const AC = await import(`${SDK}/firebase-app-check.js`);
+        AC.initializeAppCheck(app, { provider: new AC.ReCaptchaEnterpriseProvider(appCheckKey), isTokenAutoRefreshEnabled: true });
+      }
+      const db = F.getFirestore(app);
       if (q.get('e') === 'recs') {
         await F.updateDoc(F.doc(db, 'emailPrefs', uid), { recsOff: true, unsubToken: token });
         show('You\'re unsubscribed', 'You won\'t get an email when someone recommends a show any more. They still appear at the top of My Shows, and you can switch the emails back on from your <a href="./#/account">Account page</a>.');
