@@ -801,12 +801,16 @@ views.show = arg => {
     <p class="sub">Tip: tap <b>Watched Up To Here</b> on an episode to mark it and everything before it as watched.</p>`;
 };
 
-// The signed-in person's own star rating of a show (cloud.js, setRating). Tapping the current rating clears it.
+// The signed-in person's own star rating of a show or movie (cloud.js, setRating). Tapping the current rating clears it.
+// Ratings are keyed by the show's TVmaze id, or by "m" and the TMDB id for a movie (ids from the two can be the same number).
 let ratings = {};
+const movieKey = id => 'm' + id;
+// The rating key of the show or movie page that's open, if any.
+const pageKey = () => { const r = route(); return r.name === 'show' ? String(r.arg) : r.name === 'movie' ? movieKey(+r.arg) : null; };
 function onRatings(r) {
   if (JSON.stringify(r) === JSON.stringify(ratings)) return;
   ratings = r;
-  if (route().name === 'show') render();
+  if (pageKey()) render();
 }
 function starPicker(id) {
   const mine = ratings[id] || 0;
@@ -814,7 +818,7 @@ function starPicker(id) {
     aria-label="${n} star${n === 1 ? '' : 's'}${n === mine ? ' (your rating, tap to clear)' : ''}" aria-pressed="${n === mine}">★</button>`).join('')}</div>`;
 }
 
-// Everyone's star ratings of a show combined (cloud.js, ratingTotal), kept on this page for 10 minutes. Redraws if it changed.
+// Everyone's star ratings of a show or movie combined (cloud.js, ratingTotal), kept on this page for 10 minutes. Redraws if it changed.
 const totals = {};
 function everyoneRating(id) {
   const had = totals[id];
@@ -824,7 +828,7 @@ function everyoneRating(id) {
       if (r === undefined) { delete totals[id]; return; }   // the database wasn't ready: tried again on the next draw
       totals[id] = { n: r?.n || 0, sum: r?.sum || 0, t: now() };
       if ((had?.n || 0) === totals[id].n && (had?.sum || 0) === totals[id].sum) return;
-      if (route().name === 'show' && route().arg == id) render();
+      if (pageKey() === String(id)) render();
     }).catch(x => console.warn('rating total', x));
   }
   return had?.n ? `<div class="sub score"><img class="ttlogo" src="icons/logo-text.svg" alt="TV Tracker rating" title="TV Tracker rating"><span><b>${(had.sum / had.n).toFixed(1)}</b>/5</span></div>` : '';
@@ -1098,6 +1102,7 @@ async function fetchMovie(id) {
   const prov = j['watch/providers']?.results?.US || {};
   const m = { ...trimMovie(j), ...(renamed[id] || {}), runtime: j.runtime || 0, genres: (j.genres || []).map(g => g.name),
     rating: us?.release_dates?.map(d => d.certification).find(Boolean) || '', tagline: j.tagline || '', imdb: j.external_ids?.imdb_id || '',
+    score: j.vote_count >= 10 ? j.vote_average || 0 : 0,   // TMDB's user score out of 10, once enough people have voted
     stream: [...new Set((prov.flatrate || []).map(x => serviceName(x.provider_name)))], rent: (prov.rent || prov.buy || []).map(x => x.provider_name).slice(0, 4), link: prov.link || '' };
   // On My Movies under another name: that's IMDb's newer title (TMDB still had a working title), saved with the movie
   // so every device shows it. Same for its poster.
@@ -1206,6 +1211,9 @@ views.movie = arg => {
     <div class="meta"><h1>${esc(m.name)}</h1>
       <div class="sub">${['Movie', m.year, hrs, m.rating].filter(Boolean).map(esc).join(' · ')}</div>
       ${m.genres.length ? `<div class="chips">${m.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
+      ${starPicker(movieKey(id))}
+      <div class="scores">${everyoneRating(movieKey(id))}${m.score ? `<div class="sub score"><a class="tmdbscore" href="https://www.themoviedb.org/movie/${id}" target="_blank" rel="noopener"
+        title="TMDB user score — opens this movie on TMDB">TMDB</a><span><b>${m.score.toFixed(1)}</b>/10</span></div>` : ''}</div>
       ${m.tagline ? `<p class="sub"><i>${esc(m.tagline)}</i></p>` : ''}
       ${m.summary ? `<p class="summary">${esc(m.summary)}</p>` : ''}
       ${where}
@@ -1838,7 +1846,7 @@ function drawRaters() {
   const total = rows.reduce((s, a) => s + a.rated, 0);
   document.getElementById('whoDid').innerHTML = `<h4>Rated shows <span class="sub">all time · ${rows.length} account${rows.length === 1 ? '' : 's'} · ${total.toLocaleString()} rating${total === 1 ? '' : 's'}</span></h4>
     ${rows.map(a => `<div class="memrow"><span><b>${esc(a.name || '(no name)')}</b><br><span class="sub">${esc(a.listOf ? `Username: ${cloud.loginName(a.email)} · login for ${adminAccounts[a.listOf]?.name || 'a deleted account'}` : a.email || 'no email saved')}</span></span>
-      <span class="sub admeta"><b>${a.rated.toLocaleString()}</b> <span>show${a.rated === 1 ? '' : 's'} rated</span></span></div>`).join('') || '<p class="sub">Nobody yet.</p>'}
+      <span class="sub admeta"><b>${a.rated.toLocaleString()}</b> <span>title${a.rated === 1 ? '' : 's'} rated</span></span></div>`).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">Exact, from each account's star ratings, and counts ratings they still have (a rating that was cleared isn't counted). Only shows can be rated for now, not movies. Your own ratings aren't counted.</p>`;
 }
 function drawWho(action, rec) {
@@ -2446,7 +2454,7 @@ function setLater(id, later) {
 const actions = {
   rate(b) {
     if (needsAccount()) { requireAccount(); return; }
-    const id = +b.dataset.show, n = +b.dataset.val, was = ratings[id] || 0, next = n === was ? 0 : n;
+    const id = b.dataset.show, n = +b.dataset.val, was = ratings[id] || 0, next = n === was ? 0 : n;
     ratings = { ...ratings }; if (next) ratings[id] = next; else delete ratings[id];
     render();
     cloud.setRating(id, next).catch(x => { console.warn('rating', x); toast('Couldn\'t save your rating — try again'); });

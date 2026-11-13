@@ -1,4 +1,5 @@
-// Works out each show's combined star rating for its page (showRatings/{showId} = { n, sum }), run hourly by
+// Works out each show's and movie's combined star rating for its page (showRatings/{showId} = { n, sum }; a movie's is
+// showRatings/m{tmdbId}), run hourly by
 // .github/workflows/rating-totals.yml. Each person's rating stays private in their own document; only these totals are
 // public, and only this job can write them, so a rating counts once and nobody can alter the result.
 // The repo is public, so its Actions logs are too: the log shows counts only.
@@ -13,7 +14,7 @@ const totals = new Map();
 for (const u of (await db.collection('users').select('ratings').get()).docs) {
   if (removed.has(u.id)) continue;
   for (const [id, stars] of Object.entries(u.data().ratings || {})) {
-    if (!/^\d+$/.test(id) || ![1, 2, 3, 4, 5].includes(stars)) continue;   // people can write anything to their own document
+    if (!/^m?\d+$/.test(id) || ![1, 2, 3, 4, 5].includes(stars)) continue;   // people can write anything to their own document
     const t = totals.get(id) || { n: 0, sum: 0 };
     t.n++; t.sum += stars;
     totals.set(id, t);
@@ -30,4 +31,4 @@ for (const [id, t] of totals) {
   await db.doc(`showRatings/${id}`).set(t);
   changed++;
 }
-console.log(`${totals.size} rated show(s): ${changed} updated, ${cleared} cleared`);
+console.log(`${totals.size} rated show(s) and movie(s): ${changed} updated, ${cleared} cleared`);
