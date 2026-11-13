@@ -1,6 +1,14 @@
+# Google and Bing may crawl episode pages (they're what bring in search clicks). A Cloudflare rule lets verified
+# search engines through to them and gives everyone else a quick browser check, so scrapers can't use up the
+# Worker's daily request limit.
+User-agent: Googlebot
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+
+# Other crawlers: episode pages and /api/ run the Worker on every visit, which counts toward Cloudflare's daily request limit.
 User-agent: *
 Allow: /
-# Episode pages and /api/ run the Worker on every visit, which counts toward Cloudflare's daily request limit.
 Disallow: /show/*/season-
 Disallow: /api/
 
