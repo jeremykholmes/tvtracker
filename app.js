@@ -1155,6 +1155,7 @@ function movieCard(m) {
       ${d?.genres?.length ? `<div class="sub">${esc(d.genres.join(', '))}</div>` : ''}
       ${d?.stream?.length ? `<div class="sub stream">On ${esc([...new Set(d.stream.map(movieService))].join(', '))}</div>` : d?.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''}
       ${m.rec ? `<div class="sub">From ${esc(m.rec)}</div>` : ''}
+      <div class="push" aria-hidden="true"></div>
       ${seen ? `<div class="next muted">Watched</div><button class="btn ghost sm" data-act="movie-unwatch" data-movie="${m.id}">Mark unwatched</button>`
         : `<button class="btn primary sm watchbtn" data-act="movie-watch" data-movie="${m.id}"><span class="wbox"></span>Watched</button>`}
       ${m.custom ? `<button class="btn ghost sm" data-act="movie-remove" data-movie="${m.id}">Remove</button>` : ''}</div></article>`;

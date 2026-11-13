@@ -477,6 +477,8 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }   /* My Shows,
 .ownmovie { margin: 22px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 .ownmovie .sub { margin: 0 0 8px; }
 .card.movie.seen { opacity: .8; }
+/* Pushes each movie card's Watched button to the bottom, so they line up across a row. */
+.card.movie .push { flex: 1 0 3px; }
 details.moviesdone > summary { list-style: none; cursor: pointer; }
 details.moviesdone > summary::-webkit-details-marker { display: none; }
 details.moviesdone > summary h2 { display: inline-block; }
