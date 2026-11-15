@@ -34,7 +34,16 @@ async function getJson(url, ttl) {
 }
 const html = (body, status = 200, maxAge = HOUR) =>
   new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': `public, max-age=${maxAge}` } });
-const xml = body => new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+const xml = (body, maxAge = DAY) => new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': `public, max-age=${maxAge}` } });
+// One season's episodes. Pages fetch a season (or single episodes) rather than a show's whole history: the free
+// Workers plan allows 10ms of CPU per request, and parsing thousands of episodes of a daily show goes well over it.
+async function fetchSeason(seasonId) {
+  return ((await getJson(`${TVMAZE}/seasons/${seasonId}/episodes`, 6 * HOUR)) || []).filter(e => e.season && e.number != null);
+}
+// A day's schedule: US streaming, global streaming (Netflix, Prime Video, Apple TV+…) and US TV. Asking for every
+// country's streaming at once is several times bigger and too slow to parse on the free plan.
+const daySchedules = d => [`${TVMAZE}/schedule/web?date=${d}&country=US`, `${TVMAZE}/schedule/web?date=${d}&country=`,
+  `${TVMAZE}/schedule?country=US&date=${d}`].map(u => getJson(u, 6 * HOUR).catch(() => []));
 
 // The page around the content: the site's look, Google Analytics (skipped on the owner's devices, as in index.html),
 // link-preview tags and Google's structured data.
@@ -148,23 +157,40 @@ async function similarShows(s) {
 const similarCard = t => `<a class="nwc" href="/show/${t.id}-${slugify(t.name)}">${t.image?.medium ? `<img src="${esc(t.image.medium)}" alt="${esc(t.name)} poster" loading="lazy" width="210" height="295">` : '<span class="noimg"></span>'}
   <b>${esc(t.name)}</b><span>${esc([serviceOf(t), year(t.premiered)].filter(Boolean).join(' · '))}</span></a>`;
 async function showPage(id, slug, rec) {
-  const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=episodes&embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
+  const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
   if (!s) return notFound('Show');
   const want = slugify(s.name);
   if (slug !== want) return Response.redirect(`${SITE}/show/${id}-${want}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
-  const similar = await similarShows(s);
-  const eps = (s._embedded?.episodes || []).filter(e => e.season && e.number != null);
-  const seasons = (s._embedded?.seasons || []).filter(x => x.number && eps.some(e => e.season === x.number));
+  // Shows with up to 300 episodes list every one. Longer ones list the recent seasons (about 150 episodes, at least the
+  // latest season) in full, and older seasons as a count, dates and a link to their first episode.
+  const allSeasons = (s._embedded?.seasons || []).filter(x => x.number).sort((a, b) => a.number - b.number);
+  const small = allSeasons.reduce((n, x) => n + (x.episodeOrder || 0), 0) <= 300 && allSeasons.every(x => x.episodeOrder || !x.premiereDate);
+  const recent = small ? allSeasons : (() => {
+    const c = allSeasons.filter(x => x.premiereDate || x.episodeOrder), out = [];
+    let n = 0;
+    for (let k = c.length - 1; k >= 0 && out.length < 3; k--) {
+      if (out.length && n + (c[k].episodeOrder || 0) > 150) break;
+      out.unshift(c[k]); n += c[k].episodeOrder || 0;
+    }
+    return out;
+  })();
+  const full = new Set(recent.map(x => x.number));
+  const [similar, eps] = await Promise.all([similarShows(s),
+    small ? getJson(`${TVMAZE}/shows/${id}/episodes`, 6 * HOUR).then(l => (l || []).filter(e => e.season && e.number != null))
+      : Promise.all(recent.map(x => fetchSeason(x.id).catch(() => []))).then(l => l.flat())]);
+  const seasons = allSeasons.filter(x => full.has(x.number) ? eps.some(e => e.season === x.number) : x.episodeOrder > 0 && x.premiereDate);
   const next = s._embedded?.nextepisode;
   const where = s.webChannel?.name || s.network?.name || '';
   const years = s.premiered ? year(s.premiered) + (s.status === 'Ended' ? (s.ended && year(s.ended) !== year(s.premiered) ? '–' + year(s.ended) : '') : '–') : '';
   const summary = plain(s.summary);
-  const nSeasons = seasons.length, nEps = eps.length;
+  const nSeasons = seasons.length, nEps = eps.length + seasons.filter(x => !full.has(x.number)).reduce((n, x) => n + x.episodeOrder, 0);
   const description = clip(`${s.name}${where ? ` (${where}${years ? ', ' + years : ''})` : ''}: ${nSeasons ? `${nSeasons} season${nSeasons === 1 ? '' : 's'}, ${nEps} episodes. ` : ''}${next ? `Next episode ${shortDate(next.airdate)}. ` : ''}${summary || 'Episode guide, air dates and where to watch.'}`, 160);
   const facts = [where, years, s.status === 'Running' ? 'Airing now' : s.status === 'Ended' ? 'Ended' : s.status === 'To Be Determined' ? 'Status TBD' : s.status,
     ...(s.genres || []).slice(0, 3), s.rating?.average ? `★ ${s.rating.average}/10` : ''].filter(Boolean);
   const latest = seasons.length ? seasons[seasons.length - 1].number : 0;
   const seasonList = seasons.map(x => {
+    if (!full.has(x.number)) return `<details><summary>Season ${x.number} <span>· ${x.episodeOrder} episodes${x.premiereDate ? ' · ' + shortDate(x.premiereDate) + (x.endDate ? ' – ' + shortDate(x.endDate) : '') : ''}</span></summary>
+      <ol><li value="1"><a href="${epPath(id, want, { season: x.number, number: 1 })}">Episode 1</a> <time datetime="${esc(x.premiereDate || '')}">${shortDate(x.premiereDate)}</time></li></ol></details>`;
     const list = eps.filter(e => e.season === x.number);
     const range = list[0]?.airdate ? `${shortDate(list[0].airdate)}${list.length > 1 && list[list.length - 1].airdate ? ' – ' + shortDate(list[list.length - 1].airdate) : ''}` : '';
     return `<details${x.number === latest ? ' open' : ''}><summary>Season ${x.number} <span>· ${list.length} episode${list.length === 1 ? '' : 's'}${range ? ' · ' + range : ''}</span></summary>
@@ -192,28 +218,48 @@ async function showPage(id, slug, rec) {
     ...(s.genres?.length ? { genre: s.genres } : {}), numberOfSeasons: nSeasons, numberOfEpisodes: nEps,
     // The network or streamer isn't the production company, and schema.org has no field for it, so it's left out here.
     ...(s.externals?.imdb ? { sameAs: [`https://www.imdb.com/title/${s.externals.imdb}/`] } : {}),
-    ...(seasons.length ? { containsSeason: seasons.map(x => { const list = eps.filter(e => e.season === x.number);
-      return { '@type': 'TVSeason', seasonNumber: x.number, name: `Season ${x.number}`, numberOfEpisodes: list.length, ...(list[0]?.airdate ? { startDate: list[0].airdate } : {}) }; }) } : {}) };
+    ...(seasons.length ? { containsSeason: seasons.map(x => { const list = eps.filter(e => e.season === x.number), start = full.has(x.number) ? list[0]?.airdate : x.premiereDate;
+      return { '@type': 'TVSeason', seasonNumber: x.number, name: `Season ${x.number}`, numberOfEpisodes: full.has(x.number) ? list.length : x.episodeOrder, ...(start ? { startDate: start } : {}) }; }) } : {}) };
   return html(page({ title, description, path: `/show/${id}-${want}`, image, imageAlt: `${s.name} poster`, jsonLd, body, appHash: `show/${id}`, rec }), 200, rec ? 600 : 6 * HOUR);
 }
 
 /* ---------- episode pages ---------- */
 // /show/<id>-<name>/season-<n>/episode-<n>: one page per episode, for searches like "<show> season 5 episode 7" or
-// "<show> s5e7". Built from the same TVmaze answer as the show page (so it's usually already cached).
+// "<show> s5e7". Fetches only this season's episodes; for long or unknown-length seasons (daily shows like Wheel of
+// Fortune have ~190 a season) just this episode and its neighbours, to stay within the free plan's CPU limit.
 const monthDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const epPath = (id, slug, e) => `/show/${id}-${slug}/season-${e.season}/episode-${e.number}`;
 const isNamed = e => !!e?.name && !/^episode\s*\d+$/i.test(e.name.trim());
 const daysFromNow = d => d ? (new Date(d + 'T12:00:00Z') - Date.now()) / 864e5 : Infinity;
 async function episodePage(id, slug, season, number, rec) {
-  const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=episodes&embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
+  const s = await getJson(`${TVMAZE}/shows/${id}?embed[]=seasons&embed[]=nextepisode`, 6 * HOUR);
   if (!s) return notFound('Show');
   const want = slugify(s.name);
-  const eps = (s._embedded?.episodes || []).filter(e => e.season && e.number != null);
-  const i = eps.findIndex(e => e.season === season && e.number === number);
-  if (i < 0) return notFound('Episode');
-  const e = eps[i], path = epPath(id, want, e);
+  const allSeasons = (s._embedded?.seasons || []).filter(x => x.number).sort((a, b) => a.number - b.number);
+  const si = allSeasons.findIndex(x => x.number === season);
+  if (si < 0) return notFound('Episode');
+  const eo = allSeasons[si].episodeOrder || 0, big = !(eo > 0 && eo <= 60);
+  let seasonEps, e, prev, nextEp;
+  if (big) {
+    const one = (sn, n) => getJson(`${TVMAZE}/shows/${id}/episodebynumber?season=${sn}&number=${n}`, 6 * HOUR).catch(() => null);
+    const prevS = allSeasons[si - 1], nextS = allSeasons[si + 1];
+    [prev, e, nextEp] = await Promise.all([
+      number > 1 ? one(season, number - 1) : prevS?.episodeOrder ? one(prevS.number, prevS.episodeOrder) : null,
+      one(season, number),
+      one(season, number + 1).then(x => x || (nextS ? one(nextS.number, 1) : null))]);
+    if (!e || e.number == null) return notFound('Episode');
+    seasonEps = [prev, e, nextEp].filter(x => x && x.season === season && x.number != null);
+  } else {
+    seasonEps = await fetchSeason(allSeasons[si].id);
+    const i = seasonEps.findIndex(x => x.number === number);
+    if (i < 0) return notFound('Episode');
+    e = seasonEps[i];
+    [prev, nextEp] = await Promise.all([
+      i > 0 ? seasonEps[i - 1] : si > 0 ? fetchSeason(allSeasons[si - 1].id).then(l => l[l.length - 1]).catch(() => undefined) : undefined,
+      i < seasonEps.length - 1 ? seasonEps[i + 1] : si < allSeasons.length - 1 ? fetchSeason(allSeasons[si + 1].id).then(l => l[0]).catch(() => undefined) : undefined]);
+  }
+  const path = epPath(id, want, e);
   if (slug !== want) return Response.redirect(`${SITE}${path}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
-  const prev = eps[i - 1], nextEp = eps[i + 1];
   const where = s.webChannel?.name || s.network?.name || '';
   const aired = e.airdate && daysFromNow(e.airdate) < 0.5;
   const named = isNamed(e);
@@ -226,7 +272,6 @@ async function episodePage(id, slug, season, number, rec) {
   const facts = [where, code, e.airdate ? (aired ? 'Aired ' : 'Airs ') + longDate(e.airdate) : 'Air date TBA', e.runtime ? `${e.runtime} min` : '', e.rating?.average ? `★ ${e.rating.average}/10` : ''].filter(Boolean);
   const still = e.image?.original || e.image?.medium || '', poster = s.image?.original || s.image?.medium || '';
   const showUrl = `/show/${id}-${want}`;
-  const seasonEps = eps.filter(x => x.season === e.season);
   const upcoming = s._embedded?.nextepisode;
   const body = `<p class="crumbs"><a href="${showUrl}">${esc(s.name)}</a> › Season ${e.season} › Episode ${e.number}</p>
     <div class="seo-hero${still ? ' ep' : ''}">${still ? `<img src="${esc(e.image.medium || still)}" alt="${esc(s.name)} ${code} still" width="250" height="140">`
@@ -239,7 +284,7 @@ async function episodePage(id, slug, season, number, rec) {
       <p class="note">Check off episodes as you watch and see when the next one is out. Free, no ads.</p></div></div>
     <nav class="epnav">${prev ? `<a class="btn" href="${epPath(id, want, prev)}">‹ S${prev.season} E${prev.number}${isNamed(prev) ? ': ' + esc(clip(prev.name, 40)) : ''}</a>` : '<span></span>'}
       ${nextEp ? `<a class="btn" href="${epPath(id, want, nextEp)}">S${nextEp.season} E${nextEp.number}${isNamed(nextEp) ? ': ' + esc(clip(nextEp.name, 40)) : ''} ›</a>` : ''}</nav>
-    <h2>${esc(s.name)} season ${e.season} episodes</h2>
+    <h2>${big ? `More from ${esc(s.name)} season ${e.season}` : `${esc(s.name)} season ${e.season} episodes`}</h2>
     <ol>${seasonEps.map(x => `<li value="${x.number}"${x.id === e.id ? ' class="cur"' : ''}>${x.id === e.id ? esc(x.name || `Episode ${x.number}`) : `<a href="${epPath(id, want, x)}">${esc(x.name || `Episode ${x.number}`)}</a>`} <time datetime="${esc(x.airdate || '')}">${shortDate(x.airdate)}</time></li>`).join('')}</ol>`;
   const jsonLd = [{ '@context': 'https://schema.org', '@type': 'TVEpisode', name: named ? e.name : `Episode ${e.number}`, url: SITE + path,
     episodeNumber: e.number, ...(e.airdate ? { datePublished: e.airdate } : {}), ...(summary ? { description: clip(summary, 500) } : {}),
@@ -323,7 +368,7 @@ const rangeText = days => {
 };
 // Every episode released this week (streaming, plus US TV for services that carry a network's shows), grouped by show.
 async function weekShows(days) {
-  const lists = await Promise.all(days.flatMap(d => [getJson(`${TVMAZE}/schedule/web?date=${d}`, 6 * HOUR), getJson(`${TVMAZE}/schedule?country=US&date=${d}`, 6 * HOUR)].map(p => p.catch(() => []))));
+  const lists = await Promise.all(days.flatMap(daySchedules));
   const shows = new Map();
   for (const e of lists.flat()) {
     const s = e?._embedded?.show || e?.show; if (!s || !e.airdate || e.number == null) continue;
@@ -396,19 +441,20 @@ ${Array.from({ length: SHOW_PAGES }, (_, i) => at(`/sitemaps/shows-${i}.xml`)).j
 ${Array.from({ length: MOVIE_PAGES }, (_, i) => at(`/sitemaps/movies-${i + 1}.xml`)).join('\n')}
 </sitemapindex>`);
 }
-const urlset = urls => xml(`<?xml version="1.0" encoding="UTF-8"?>
+const urlset = (urls, maxAge) => xml(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(u => `<url><loc>${esc(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}</url>`).join('\n')}
-</urlset>`);
+</urlset>`, maxAge);
+// Kept for a week: each one parses 250 shows, which is costly, and the list of popular shows changes slowly.
 async function showSitemap(n) {
-  const list = n < SHOW_PAGES ? await getJson(`${TVMAZE}/shows?page=${n}`, DAY).catch(() => null) || [] : [];
+  const list = n < SHOW_PAGES ? await getJson(`${TVMAZE}/shows?page=${n}`, 7 * DAY).catch(() => null) || [] : [];
   return urlset(list.filter(s => (s.weight || 0) >= 80 && s.name)
-    .map(s => ({ loc: `${SITE}/show/${s.id}-${slugify(s.name)}`, lastmod: s.updated ? new Date(s.updated * 1000).toISOString().slice(0, 10) : '' })));
+    .map(s => ({ loc: `${SITE}/show/${s.id}-${slugify(s.name)}`, lastmod: s.updated ? new Date(s.updated * 1000).toISOString().slice(0, 10) : '' })), 7 * DAY);
 }
-// Episodes of popular shows that came out in the last week or come out in the next week: the ones people search for.
+// Episodes of popular shows from the last 4 days and the next 3: the ones people search for.
 async function episodeSitemap() {
-  const now = Date.now(), days = Array.from({ length: 15 }, (_, i) => new Date(now + (i - 7) * 864e5).toISOString().slice(0, 10));
-  const lists = await Promise.all(days.flatMap(d => [getJson(`${TVMAZE}/schedule/web?date=${d}`, 6 * HOUR), getJson(`${TVMAZE}/schedule?country=US&date=${d}`, 6 * HOUR)].map(p => p.catch(() => []))));
+  const now = Date.now(), days = Array.from({ length: 8 }, (_, i) => new Date(now + (i - 4) * 864e5).toISOString().slice(0, 10));
+  const lists = await Promise.all(days.flatMap(daySchedules));
   const seen = new Set(), urls = [];
   for (const e of lists.flat()) {
     const s = e?._embedded?.show || e?.show;
