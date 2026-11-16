@@ -223,9 +223,23 @@ async function searchConsole(token) {
 
 import { seo } from './seo.js';   // show and movie pages for Google, and the sitemaps
 
+// /api/imdb and /api/angel fetch other sites for the app, so they only answer the app's own pages: otherwise anyone
+// could use them as a free proxy. Browsers mark same-site requests with Sec-Fetch-Site; older ones still send a
+// Referer. (A script can fake these headers, but casual scrapers and hotlinkers are turned away.)
+const SITE_HOSTS = /^(www\.)?tvtracker\.us$|^tvtracker\.[a-z0-9-]+\.workers\.dev$|^[a-z0-9-]+\.tvtracker\.[a-z0-9-]+\.workers\.dev$|^(localhost|127\.0\.0\.1)$/;
+function fromSite(request) {
+  const site = request.headers.get('sec-fetch-site');
+  if (site) return site === 'same-origin';
+  try { return SITE_HOSTS.test(new URL(request.headers.get('origin') || request.headers.get('referer') || '').hostname); }
+  catch { return false; }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if ((url.pathname === '/api/imdb' || url.pathname === '/api/angel') && !fromSite(request)) {
+      return json({ error: 'This address is only for TV Tracker (tvtracker.us).' }, 403);
+    }
     if (url.pathname === '/api/imdb') {
       try { return await imdb(url.searchParams.get('q') || ''); }
       catch (e) { return json({ d: [], error: String(e?.message || e) }, 502); }
