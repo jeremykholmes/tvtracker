@@ -1761,7 +1761,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs', '<span class="sub" id="epCount">… episodes</span>')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}<button type="button" class="tstat twho" data-act="admin-who" data-action="episode_watched" aria-expanded="false" aria-controls="whoDid"><span class="sub">Episode check-offs</span><b id="epTaps">…</b><span class="sub" id="epCount">… episodes</span></button>${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
       <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
@@ -1787,14 +1787,23 @@ function drawMore(t) {
 async function drawGrowth(m) {
   const box = document.getElementById('growth'); if (!box) return;
   try { adminActivity ||= await cloud.activity(); }
-  catch (x) { box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading sign-up dates')))}</p>`; return; }
+  catch (x) {
+    box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading sign-up dates')))}</p>`;
+    for (const id of ['epTaps', 'epCount']) { const el = document.getElementById(id); if (el) el.textContent = id === 'epTaps' ? '—' : 'couldn\'t load'; }
+    return;
+  }
   if (!document.contains(box)) return;
   const rec = adminActivity, pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—', n = v => Math.round(v || 0).toLocaleString();
   const since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM));
-  // Under the Episode check-offs tile: how many episodes those check-offs covered (from the accounts, not counting yours).
-  const eps = Object.entries(rec).filter(([uid]) => uid !== user.uid)
-    .reduce((s, [, r]) => s + Object.entries(r.days || {}).reduce((t, [day, c]) => t + (day >= since ? c.episodes || 0 : 0), 0), 0);
-  const epBox = document.getElementById('epCount');
+  // The Episode check-offs tile: check-offs and the episodes they covered, from the accounts (exact, the same as the list
+  // the tile opens), not Google Analytics, which misses people who block it. Your own aren't counted.
+  let taps = 0, eps = 0;
+  for (const a of Object.values(adminAccounts)) {
+    if (a.uid === user.uid) continue;
+    for (const [day, c] of Object.entries(rec[a.uid]?.days || {})) if (day >= since && c.episode_watched) { taps += c.episode_watched; eps += c.episodes || 0; }
+  }
+  const tapBox = document.getElementById('epTaps'), epBox = document.getElementById('epCount');
+  if (tapBox) tapBox.textContent = n(taps);
   if (epBox) epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`;
   // People with their own list (not logins made for others), other than the site owner.
   const people = Object.values(adminAccounts).filter(a => !a.listOf && a.uid !== user.uid).map(a => ({ ...a, created: rec[a.uid]?.created || 0, days: rec[a.uid]?.days || {} }));
@@ -1841,7 +1850,7 @@ const WHO = () => {
     sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
     add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
     add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
-    episode_watched: { title: 'Checked off episodes', namesLate: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile. Episodes counts every episode those check-offs covered, each one once, leaving out any that were already checked; unchecking one and checking it again counts it again. Episodes are only counted from Nov 18 on.` },
+    episode_watched: { title: 'Checked off episodes', fromAccounts: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile. Episodes counts every episode those check-offs covered, each one once, leaving out any that were already checked; unchecking one and checking it again counts it again. Episodes are only counted from Nov 18 on.` },
     recommend: { title: 'Recommended something', namesLate: true, one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
     app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
   };
@@ -1878,7 +1887,7 @@ function drawWho(action, rec) {
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
     ${w.namesLate && since === cloud.azDay(COUNTS_FROM) ? '<p class="sub">The tile and this list both start on Nov 5, but names only start at 9:50 PM that day, so earlier ones that day are only on the tile.</p>' : ''}
-    <p class="sub">The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won't always match this list. Your own actions aren't on either.</p>`;
+    <p class="sub">${w.fromAccounts ? 'The number on the tile comes from the same accounts, so it matches this list. Your own actions aren\'t on either.' : 'The number on the tile comes from Google Analytics. It includes signed-out visitors and misses anyone who blocks it, so it won\'t always match this list. Your own actions aren\'t on either.'}</p>`;
 }
 
 /* ---------- import from Simkl, Trakt, Letterboxd (Account page) ----------
