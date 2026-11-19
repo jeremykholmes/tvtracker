@@ -1763,7 +1763,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats seven">${acctTile('sign_up', 'Sign-ups')}${acctTile('add_show', 'Shows added')}${acctTile('add_movie', 'Movies added')}${acctTile('episode_watched', 'Episode check-offs', '<span class="sub" id="epCount" hidden></span>')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+    <div class="tstats seven">${acctTile('sign_up', 'Sign-ups')}${acctTile('add_show', 'Shows added')}${acctTile('add_movie', 'Movies added')}${acctTile('episode_watched', 'Episode check-offs', '<span class="sub" id="epCount" hidden></span>')}${whoTile('recommend', 'Recommendations')}${acctTile('app_install', 'App installs')}
       <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
@@ -1854,7 +1854,7 @@ const WHO = () => {
     add_movie: { title: 'Added movies', fromAccounts: true, one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
     episode_watched: { title: 'Checked off episodes', fromAccounts: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile. Episodes counts every episode those check-offs covered, each one once, leaving out any that were already checked; unchecking one and checking it again counts it again. Episodes are only counted from Nov 18 on.` },
     recommend: { title: 'Recommended something', namesLate: true, one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
-    app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
+    app_install: { title: 'Use the installed app', fromAccounts: true, one: 'device', many: 'devices', note: `Only from ${from} on. Each device counts the first time someone opens the installed app on it while signed in, so they may have installed it earlier. iPhones are counted too.` }
   };
 };
 // Everyone who has given a show stars, with how many shows. From the accounts, so it's exact and all time.
