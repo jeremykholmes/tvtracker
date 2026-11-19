@@ -379,13 +379,15 @@ export async function allAccounts() {
    activity/{uid}: { days: { 'YYYY-MM-DD': { add_show: 2, ... } }, created }. Counts per day only, never which show; only the
    account itself can add to it and only the admin can read it. Days are Arizona time (no daylight saving), like the Admin page.
    created (when the account signed up) and clearing out days past 40 are done by email/remove-accounts.mjs. */
-const ATTRIBUTED = ['sign_up', 'add_show', 'add_movie', 'episode_watched', 'recommend', 'app_install'];
+// episodes: how many episodes went from unchecked to checked (a whole season ticked at once counts every episode in it),
+// next to episode_watched, which counts check-off actions (a whole season at once is one).
+const ATTRIBUTED = ['sign_up', 'add_show', 'add_movie', 'episode_watched', 'episodes', 'recommend', 'app_install'];
 export const azDay = t => new Date(t - 7 * 3600e3).toISOString().slice(0, 10);
 let noted = {}, notedTimer = null;
 // Counts an action for the signed-in account. The site owner's aren't counted, the same as in Google Analytics.
-export function noteAction(name) {
-  if (!ATTRIBUTED.includes(name) || !auth?.currentUser || isAdmin()) return;
-  noted[name] = (noted[name] || 0) + 1;
+export function noteAction(name, by = 1) {
+  if (!ATTRIBUTED.includes(name) || !(by > 0) || !auth?.currentUser || isAdmin()) return;
+  noted[name] = (noted[name] || 0) + by;
   notedTimer ||= setTimeout(flushActions, 2000);   // quick clicks and imports go up as one write
 }
 function flushActions() {

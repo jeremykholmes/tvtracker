@@ -66,11 +66,11 @@ function persist() { save(stateKey(), state); }
 // The same action is also counted against the signed-in account, so the Admin page can show who did it (cloud.js, noteAction).
 function track(name, params) { try { window.gtag?.('event', name, params || {}); } catch { } cloud.noteAction(name); }
 function setWatched(ids, w) {
-  const t = now();
+  const t = now(), fresh = w ? ids.filter(id => !isWatched(id)).length : 0;   // episodes that weren't already checked
   ids.forEach(id => { state.watched[id] = { w, t }; queue('watched', id, state.watched[id]); });
   const moved = w ? startShows(ids) : [];
   if (w) startRecommended(ids);
-  if (w) track('episode_watched', { episodes: ids.length });
+  if (w) { track('episode_watched', { episodes: ids.length, new_episodes: fresh }); cloud.noteAction('episodes', fresh); }
   persist();
   if (w) collapseFinished(ids);
   return moved;   // ids of shows that just left the Future watch list
@@ -1747,7 +1747,7 @@ function drawMore(t) {
       <span class="mbar"><i style="width:${Math.max(2, Math.round(r.n / max * 100))}%"></i></span><b>${n(r.n)}</b></div>`).join('') : `<p class="sub">${empty}</p>`}</div>`;
   };
   const tile = (label, v) => `<div class="tstat"><span class="sub">${label}</span><b>${v}</b></div>`;
-  const whoTile = (key, label) => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b>${n(a[key])}</b></button>`;
+  const whoTile = (key, label, extra = '') => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b>${n(a[key])}</b>${extra}</button>`;
   adminActivity = null;
   const a = m.actions || {};
   // People who have rated: exact, from the accounts (their star ratings), all time rather than the last 30 days.
@@ -1761,7 +1761,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}${whoTile('episode_watched', 'Episode check-offs', '<span class="sub" id="epCount">… episodes</span>')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
       <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
@@ -1791,6 +1791,11 @@ async function drawGrowth(m) {
   if (!document.contains(box)) return;
   const rec = adminActivity, pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—', n = v => Math.round(v || 0).toLocaleString();
   const since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM));
+  // Under the Episode check-offs tile: how many episodes those check-offs covered (from the accounts, not counting yours).
+  const eps = Object.entries(rec).filter(([uid]) => uid !== user.uid)
+    .reduce((s, [, r]) => s + Object.entries(r.days || {}).reduce((t, [day, c]) => t + (day >= since ? c.episodes || 0 : 0), 0), 0);
+  const epBox = document.getElementById('epCount');
+  if (epBox) epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`;
   // People with their own list (not logins made for others), other than the site owner.
   const people = Object.values(adminAccounts).filter(a => !a.listOf && a.uid !== user.uid).map(a => ({ ...a, created: rec[a.uid]?.created || 0, days: rec[a.uid]?.days || {} }));
   const joined = people.filter(a => a.created && cloud.azDay(a.created) >= since);
@@ -1836,7 +1841,7 @@ const WHO = () => {
     sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
     add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
     add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
-    episode_watched: { title: 'Checked off episodes', namesLate: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile.` },
+    episode_watched: { title: 'Checked off episodes', namesLate: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile. Episodes counts every episode those check-offs covered, each one once, leaving out any that were already checked; unchecking one and checking it again counts it again. Episodes are only counted from Nov 18 on.` },
     recommend: { title: 'Recommended something', namesLate: true, one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
     app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
   };
@@ -1856,20 +1861,20 @@ function drawWho(action, rec) {
   for (const a of Object.values(adminAccounts)) {
     if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
     const r = rec[a.uid] || {};
-    let count = 0, last = '', estimated = 0;
+    let count = 0, last = '', estimated = 0, eps = 0;
     if (action === 'sign_up' && r.created) { if (!a.listOf && cloud.azDay(r.created) >= since) { count = 1; last = cloud.azDay(r.created); } }
-    else for (const [day, c] of Object.entries(r.days || {})) if (day >= since && c[action]) { count += c[action]; if (day > last) last = day; }
+    else for (const [day, c] of Object.entries(r.days || {})) if (day >= since && c[action]) { count += c[action]; eps += c.episodes || 0; if (day > last) last = day; }
     for (const t of w.times ? a[w.times] : []) {
       const day = cloud.azDay(t);
       if (t < ACTIVITY_FROM && day >= since) { estimated++; if (day > last) last = day; }
     }
-    if (count + estimated) rows.push({ a, n: count + estimated, estimated, last });
+    if (count + estimated) rows.push({ a, n: count + estimated, estimated, last, eps });
   }
   rows.sort((x, y) => (w.one ? y.n - x.n : 0) || y.last.localeCompare(x.last));
-  const total = rows.reduce((s, r) => s + r.n, 0);
+  const total = rows.reduce((s, r) => s + r.n, 0), totalEps = rows.reduce((s, r) => s + r.eps, 0), showEps = action === 'episode_watched';
   const person = r => `<div class="memrow"><span><b>${esc(r.a.name || '(no name)')}</b><br><span class="sub">${esc(r.a.listOf ? `Username: ${cloud.loginName(r.a.email)} · login for ${adminAccounts[r.a.listOf]?.name || 'a deleted account'}` : r.a.email || 'no email saved')}</span></span>
-    <span class="sub admeta">${w.one ? `<b>${r.estimated ? '≈' : ''}${r.n.toLocaleString()}</b> <span>${r.n === 1 ? w.one : w.many}</span><br><span>last ${esc(azLabel(r.last))}</span>` : `<span>${esc(azLabel(r.last))}</span>`}</span></div>`;
-  box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}</span></h4>
+    <span class="sub admeta">${w.one ? `<b>${r.estimated ? '≈' : ''}${r.n.toLocaleString()}</b> <span>${r.n === 1 ? w.one : w.many}</span>${showEps ? `<br><span>${r.eps.toLocaleString()} episode${r.eps === 1 ? '' : 's'}</span>` : ''}<br><span>last ${esc(azLabel(r.last))}</span>` : `<span>${esc(azLabel(r.last))}</span>`}</span></div>`;
+  box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}${showEps ? ` · ${totalEps.toLocaleString()} episode${totalEps === 1 ? '' : 's'}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
     ${w.namesLate && since === cloud.azDay(COUNTS_FROM) ? '<p class="sub">The tile and this list both start on Nov 5, but names only start at 9:50 PM that day, so earlier ones that day are only on the tile.</p>' : ''}
