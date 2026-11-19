@@ -1747,6 +1747,8 @@ function drawMore(t) {
       <span class="mbar"><i style="width:${Math.max(2, Math.round(r.n / max * 100))}%"></i></span><b>${n(r.n)}</b></div>`).join('') : `<p class="sub">${empty}</p>`}</div>`;
   };
   const tile = (label, v) => `<div class="tstat"><span class="sub">${label}</span><b>${v}</b></div>`;
+  // Tiles whose number comes from the accounts (filled in by drawGrowth once they load), so they match the list they open.
+  const acctTile = (key, label, extra = '') => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b data-acct="${key}">…</b>${extra}</button>`;
   const whoTile = (key, label, extra = '') => `<button type="button" class="tstat twho" data-act="admin-who" data-action="${key}" aria-expanded="false" aria-controls="whoDid"><span class="sub">${label}</span><b>${n(a[key])}</b>${extra}</button>`;
   adminActivity = null;
   const a = m.actions || {};
@@ -1761,7 +1763,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}<button type="button" class="tstat twho" data-act="admin-who" data-action="episode_watched" aria-expanded="false" aria-controls="whoDid"><span class="sub">Episode check-offs</span><b id="epTaps">…</b><span class="sub" id="epCount" hidden></span></button>${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+    <div class="tstats seven">${acctTile('sign_up', 'Sign-ups')}${acctTile('add_show', 'Shows added')}${acctTile('add_movie', 'Movies added')}${acctTile('episode_watched', 'Episode check-offs', '<span class="sub" id="epCount" hidden></span>')}${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
       <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
@@ -1789,22 +1791,22 @@ async function drawGrowth(m) {
   try { adminActivity ||= await cloud.activity(); }
   catch (x) {
     box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading sign-up dates')))}</p>`;
-    const el = document.getElementById('epTaps'); if (el) el.textContent = '—';
+    document.querySelectorAll('[data-acct]').forEach(el => el.textContent = '—');
     return;
   }
   if (!document.contains(box)) return;
   const rec = adminActivity, pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—', n = v => Math.round(v || 0).toLocaleString();
   const since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM));
-  // The Episode check-offs tile: check-offs and the episodes they covered, from the accounts (exact, the same as the list
-  // the tile opens), not Google Analytics, which misses people who block it. Your own aren't counted.
-  let taps = 0, eps = 0;
-  for (const a of Object.values(adminAccounts)) {
-    if (a.uid === user.uid) continue;
-    for (const [day, c] of Object.entries(rec[a.uid]?.days || {})) if (day >= since && c.episode_watched) { taps += c.episode_watched; eps += c.episodes || 0; }
+  // Tiles counted from the accounts (exact, the same as the lists they open) rather than Google Analytics, which misses people
+  // who block it. Shows and movies added before activity was recorded are estimates, marked ≈ like in the list. Yours aren't counted.
+  for (const el of document.querySelectorAll('[data-acct]')) {
+    const { rows } = whoRows(el.dataset.acct, rec), total = rows.reduce((t, r) => t + r.n, 0);
+    el.textContent = (rows.some(r => r.estimated) ? '≈' : '') + n(total);
+    if (el.dataset.acct === 'episode_watched') {
+      const eps = rows.reduce((t, r) => t + r.eps, 0), epBox = document.getElementById('epCount');
+      if (epBox) { epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`; epBox.hidden = !eps; }   // left off while there are none
+    }
   }
-  const tapBox = document.getElementById('epTaps'), epBox = document.getElementById('epCount');
-  if (tapBox) tapBox.textContent = n(taps);
-  if (epBox) { epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`; epBox.hidden = !eps; }   // left off while there are none
   // People with their own list (not logins made for others), other than the site owner.
   const people = Object.values(adminAccounts).filter(a => !a.listOf && a.uid !== user.uid).map(a => ({ ...a, created: rec[a.uid]?.created || 0, days: rec[a.uid]?.days || {} }));
   const joined = people.filter(a => a.created && cloud.azDay(a.created) >= since);
@@ -1847,9 +1849,9 @@ const azLabel = day => new Date(day + 'T12:00Z').toLocaleDateString('en-US', { m
 const WHO = () => {
   const from = azLabel(cloud.azDay(ACTIVITY_FROM)), est = what => `From ${from} on, every one is counted. Before that, a number with ≈ is an estimate from the dates on their list: ${what}`;
   return {
-    sign_up: { title: 'Signed up', note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
-    add_show: { title: 'Added shows', one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
-    add_movie: { title: 'Added movies', one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
+    sign_up: { title: 'Signed up', fromAccounts: true, note: 'Exact, from Firebase sign-in. Logins people made for others aren\'t counted. A new account can take up to an hour to get its exact time.' },
+    add_show: { title: 'Added shows', fromAccounts: true, one: 'show', many: 'shows', times: 'showTimes', note: est('it counts shows still on the list that last changed then, so a show moved to Up next counts and one since removed doesn\'t.') },
+    add_movie: { title: 'Added movies', fromAccounts: true, one: 'movie', many: 'movies', times: 'movieTimes', note: est('it counts movies still on the list that last changed then, so a movie marked as watched counts and one since removed doesn\'t.') },
     episode_watched: { title: 'Checked off episodes', fromAccounts: true, one: 'check-off', many: 'check-offs', note: `Only from ${from} on, not before: earlier ones are in people's private checkmarks, which this page isn't allowed to read. Ticking a whole season at once is one check-off, the same as on the tile. Episodes counts every episode those check-offs covered, each one once, leaving out any that were already checked; unchecking one and checking it again counts it again. Episodes are only counted from Nov 18 on.` },
     recommend: { title: 'Recommended something', namesLate: true, one: 'recommendation', many: 'recommendations', note: `Only from ${from} on. Earlier ones can't be tied to anyone: shared links were never recorded, and shows sent in the app are deleted once the friend deals with them.` },
     app_install: { title: 'Use the installed app', namesLate: true, note: `Only from ${from} on. Someone appears the first time they open the installed app while signed in, so they may have installed it earlier. iPhones never report installs, so these aren't on the tile.` }
@@ -1864,9 +1866,9 @@ function drawRaters() {
       <span class="sub admeta"><b>${a.rated.toLocaleString()}</b> <span>title${a.rated === 1 ? '' : 's'} rated</span></span></div>`).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">Exact, from each account's star ratings, and counts ratings they still have (a rating that was cleared isn't counted). Only shows can be rated for now, not movies. Your own ratings aren't counted.</p>`;
 }
-function drawWho(action, rec) {
-  if (action === 'rated') return drawRaters();
-  const box = document.getElementById('whoDid'), w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
+// Each account that did an action since the start of the counts, with how many. Used by the list and by the tiles that match it.
+function whoRows(action, rec) {
+  const w = WHO()[action], since = cloud.azDay(Math.max(now() - 30 * DAY, COUNTS_FROM)), rows = [];
   for (const a of Object.values(adminAccounts)) {
     if (a.uid === user.uid) continue;   // the owner's own actions aren't counted anywhere
     const r = rec[a.uid] || {};
@@ -1879,6 +1881,11 @@ function drawWho(action, rec) {
     }
     if (count + estimated) rows.push({ a, n: count + estimated, estimated, last, eps });
   }
+  return { rows, since };
+}
+function drawWho(action, rec) {
+  if (action === 'rated') return drawRaters();
+  const box = document.getElementById('whoDid'), w = WHO()[action], { rows, since } = whoRows(action, rec);
   rows.sort((x, y) => (w.one ? y.n - x.n : 0) || y.last.localeCompare(x.last));
   const total = rows.reduce((s, r) => s + r.n, 0), totalEps = rows.reduce((s, r) => s + r.eps, 0), showEps = action === 'episode_watched' && totalEps > 0;
   const person = r => `<div class="memrow"><span><b>${esc(r.a.name || '(no name)')}</b><br><span class="sub">${esc(r.a.listOf ? `Username: ${cloud.loginName(r.a.email)} · login for ${adminAccounts[r.a.listOf]?.name || 'a deleted account'}` : r.a.email || 'no email saved')}</span></span>
