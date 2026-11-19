@@ -1761,7 +1761,7 @@ function drawMore(t) {
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
     <h4 class="msec">What people did</h4>
-    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}<button type="button" class="tstat twho" data-act="admin-who" data-action="episode_watched" aria-expanded="false" aria-controls="whoDid"><span class="sub">Episode check-offs</span><b id="epTaps">…</b><span class="sub" id="epCount">… episodes</span></button>${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
+    <div class="tstats seven">${whoTile('sign_up', 'Sign-ups')}${whoTile('add_show', 'Shows added')}${whoTile('add_movie', 'Movies added')}<button type="button" class="tstat twho" data-act="admin-who" data-action="episode_watched" aria-expanded="false" aria-controls="whoDid"><span class="sub">Episode check-offs</span><b id="epTaps">…</b><span class="sub" id="epCount" hidden></span></button>${whoTile('recommend', 'Recommendations')}${whoTile('app_install', 'App installs')}
       <button type="button" class="tstat twho" data-act="admin-who" data-action="rated" aria-expanded="false" aria-controls="whoDid"><span class="sub">People who rated</span><b>${n(raters)}</b></button></div>
     <p class="sub whohint">Tap a number to see who did it.</p>
     <div class="whodid" id="whoDid" hidden></div>
@@ -1789,7 +1789,7 @@ async function drawGrowth(m) {
   try { adminActivity ||= await cloud.activity(); }
   catch (x) {
     box.innerHTML = `<p class="formerr">${esc(cloud.friendlyError(cloud.step(x, 'loading sign-up dates')))}</p>`;
-    for (const id of ['epTaps', 'epCount']) { const el = document.getElementById(id); if (el) el.textContent = id === 'epTaps' ? '—' : 'couldn\'t load'; }
+    const el = document.getElementById('epTaps'); if (el) el.textContent = '—';
     return;
   }
   if (!document.contains(box)) return;
@@ -1804,7 +1804,7 @@ async function drawGrowth(m) {
   }
   const tapBox = document.getElementById('epTaps'), epBox = document.getElementById('epCount');
   if (tapBox) tapBox.textContent = n(taps);
-  if (epBox) epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`;
+  if (epBox) { epBox.textContent = `${n(eps)} episode${eps === 1 ? '' : 's'}`; epBox.hidden = !eps; }   // left off while there are none
   // People with their own list (not logins made for others), other than the site owner.
   const people = Object.values(adminAccounts).filter(a => !a.listOf && a.uid !== user.uid).map(a => ({ ...a, created: rec[a.uid]?.created || 0, days: rec[a.uid]?.days || {} }));
   const joined = people.filter(a => a.created && cloud.azDay(a.created) >= since);
@@ -1880,9 +1880,9 @@ function drawWho(action, rec) {
     if (count + estimated) rows.push({ a, n: count + estimated, estimated, last, eps });
   }
   rows.sort((x, y) => (w.one ? y.n - x.n : 0) || y.last.localeCompare(x.last));
-  const total = rows.reduce((s, r) => s + r.n, 0), totalEps = rows.reduce((s, r) => s + r.eps, 0), showEps = action === 'episode_watched';
+  const total = rows.reduce((s, r) => s + r.n, 0), totalEps = rows.reduce((s, r) => s + r.eps, 0), showEps = action === 'episode_watched' && totalEps > 0;
   const person = r => `<div class="memrow"><span><b>${esc(r.a.name || '(no name)')}</b><br><span class="sub">${esc(r.a.listOf ? `Username: ${cloud.loginName(r.a.email)} · login for ${adminAccounts[r.a.listOf]?.name || 'a deleted account'}` : r.a.email || 'no email saved')}</span></span>
-    <span class="sub admeta">${w.one ? `<b>${r.estimated ? '≈' : ''}${r.n.toLocaleString()}</b> <span>${r.n === 1 ? w.one : w.many}</span>${showEps ? `<br><span>${r.eps.toLocaleString()} episode${r.eps === 1 ? '' : 's'}</span>` : ''}<br><span>last ${esc(azLabel(r.last))}</span>` : `<span>${esc(azLabel(r.last))}</span>`}</span></div>`;
+    <span class="sub admeta">${w.one ? `<b>${r.estimated ? '≈' : ''}${r.n.toLocaleString()}</b> <span>${r.n === 1 ? w.one : w.many}</span>${showEps && r.eps ? `<br><span>${r.eps.toLocaleString()} episode${r.eps === 1 ? '' : 's'}</span>` : ''}<br><span>last ${esc(azLabel(r.last))}</span>` : `<span>${esc(azLabel(r.last))}</span>`}</span></div>`;
   box.innerHTML = `<h4>${w.title} <span class="sub">since ${esc(azLabel(since))} · ${rows.length} account${rows.length === 1 ? '' : 's'}${w.one ? ` · ${total.toLocaleString()} ${total === 1 ? w.one : w.many}` : ''}${showEps ? ` · ${totalEps.toLocaleString()} episode${totalEps === 1 ? '' : 's'}` : ''}</span></h4>
     ${rows.map(person).join('') || '<p class="sub">Nobody yet.</p>'}
     <p class="sub">${esc(w.note)}</p>
