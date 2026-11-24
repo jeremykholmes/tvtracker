@@ -14,7 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
-const PAGE_VERSION = 6;
+const PAGE_VERSION = 7;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -199,7 +199,8 @@ async function showPage(id, slug, rec) {
   const years = s.premiered ? year(s.premiered) + (s.status === 'Ended' ? (s.ended && year(s.ended) !== year(s.premiered) ? '–' + year(s.ended) : '') : '–') : '';
   const summary = plain(s.summary);
   const nSeasons = seasons.length, nEps = eps.length + seasons.filter(x => !full.has(x.number)).reduce((n, x) => n + x.episodeOrder, 0);
-  const description = clip(`${s.name}${where ? ` (${where}${years ? ', ' + years : ''})` : ''}: ${nSeasons ? `${nSeasons} season${nSeasons === 1 ? '' : 's'}, ${nEps} episodes. ` : ''}${next ? `Next episode ${shortDate(next.airdate)}. ` : ''}${summary || 'Episode guide, air dates and where to watch.'}`, 160);
+  // The description is what people read under the title in Google: it says what the page has before the plot summary.
+  const description = clip(`${nEps ? `Every ${s.name} episode${nSeasons > 1 ? ` across ${nSeasons} seasons` : ''} with air dates` : `${s.name} episode guide and air dates`}${next ? `, plus when the next one airs (${shortDate(next.airdate)})` : ''}${where ? `, on ${where}` : ''}. ${summary || 'Track what you\u2019ve watched, free.'}`, 160);
   const facts = [where, years, s.status === 'Running' ? 'Airing now' : s.status === 'Ended' ? 'Ended' : s.status === 'To Be Determined' ? 'Status TBD' : s.status,
     ...(s.genres || []).slice(0, 3), ratingFact(rating), s.rating?.average ? `TVmaze ★ ${s.rating.average}/10` : ''].filter(Boolean);
   const latest = seasons.length ? seasons[seasons.length - 1].number : 0;
@@ -215,10 +216,12 @@ async function showPage(id, slug, rec) {
   // People search for the season they're on ("severance season 2 release date"), so shows still airing name the
   // newest season. Ended shows with several seasons say how many; one-season and other shows keep the general title.
   const airing = ['Running', 'To Be Determined', 'In Development'].includes(s.status);
-  const title = airing && latest && next?.airdate ? `${s.name} Season ${next.season || latest} Release Schedule – Next Episode ${monthDay(next.airdate)} | TV Tracker`
-    : airing && latest ? `${s.name} Season ${latest} – Episodes & Release Dates | TV Tracker`
-    : s.status === 'Ended' && nSeasons > 1 ? `${s.name} – All ${nSeasons} Seasons, Episodes & Air Dates | TV Tracker`
-    : `${s.name} – Episodes, Seasons & Air Dates | TV Tracker`;
+  // Titles lead with the words people search: "<show> episodes", "<show> episode guide", "<show> season 2 episodes list"
+  // (from Search Console, Nov 2026). Shows still airing add the next episode's date ("release schedule" searches).
+  const title = airing && latest && next?.airdate ? `${s.name} Season ${next.season || latest} Episodes & Release Schedule – Next ${monthDay(next.airdate)} | TV Tracker`
+    : airing && latest ? `${s.name} Season ${latest} Episode Guide & Release Dates | TV Tracker`
+    : nSeasons > 1 ? `${s.name} Episode Guide – All ${nEps} Episodes, ${nSeasons} Seasons | TV Tracker`
+    : `${s.name} Episode Guide – Episodes List & Air Dates | TV Tracker`;
   const body = `<div class="seo-hero">${image ? `<img src="${esc(s.image.medium || image)}" alt="${esc(s.name)} poster" width="210" height="295">` : '<div></div>'}
     <div><h1>${esc(s.name)}</h1><p class="facts">${facts.map(esc).join(' · ')}</p>
       ${summary ? `<p class="summary">${esc(summary)}</p>` : ''}
