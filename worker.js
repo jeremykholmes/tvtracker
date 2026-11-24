@@ -216,9 +216,14 @@ async function searchConsole(token) {
     if (/has not been used|disabled/i.test(lastErr?.message || '')) throw lastErr;
     return { needsAccess: true, error: lastErr?.message || '' };
   }
-  const [queries, pages] = await Promise.all([q(site, { dimensions: ['query'], rowLimit: 10 }), q(site, { dimensions: ['page'], rowLimit: 5 })]);
+  const [queries, pages, manyQ, manyP] = await Promise.all([q(site, { dimensions: ['query'], rowLimit: 10 }), q(site, { dimensions: ['page'], rowLimit: 5 }),
+    q(site, { dimensions: ['query'], rowLimit: 1000 }), q(site, { dimensions: ['page'], rowLimit: 1000 })]);
   const t = totals[0] || {}, row = r => ({ name: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position });
-  return { site, clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0, queries: queries.map(row), pages: pages.map(row) };
+  // "Almost on page 1": searches and pages averaging position 8-20 (the bottom of page 1 and page 2), most often shown
+  // first. A better title, description or a few links usually moves these up, where a click is far more likely.
+  const almost = rows => rows.filter(r => r.position >= 8 && r.position <= 20).sort((a, b) => b.impressions - a.impressions).slice(0, 15).map(row);
+  return { site, clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0, queries: queries.map(row), pages: pages.map(row),
+    almostQueries: almost(manyQ), almostPages: almost(manyP) };
 }
 
 import { seo } from './seo.js';   // show and movie pages for Google, and the sitemaps

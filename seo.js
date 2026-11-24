@@ -14,7 +14,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 const TMDB_KEY = 'ee8ab7c29b7aa9166f87292204ab04ba';   // the same public key as tmdbKey in firebase-config.js
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; TVTracker/1.0; +https://tvtracker.us)' };
 const HOUR = 3600, DAY = 86400;
-const PAGE_VERSION = 5;
+const PAGE_VERSION = 6;
 
 export const slugify = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -32,6 +32,21 @@ async function getJson(url, ttl) {
   if (!r.ok) throw new Error(url.split('?')[0] + ' ' + r.status);
   return r.json();
 }
+// TV Tracker's own star rating for a show (key = TVmaze id) or movie (key = 'm' + TMDB id): { n, avg } from
+// showRatings/{key}, which email/rating-totals.mjs updates hourly and anyone may read. Never holds up or breaks the page.
+const FIRESTORE = 'https://firestore.googleapis.com/v1/projects/tv-tracker-6135d/databases/(default)/documents';
+async function tvtRating(key) {
+  const work = getJson(`${FIRESTORE}/showRatings/${encodeURIComponent(key)}`, HOUR).then(d => {
+    const n = +d?.fields?.n?.integerValue || 0, sum = +d?.fields?.sum?.integerValue || 0;
+    return n > 0 && sum > 0 ? { n, avg: Math.round(sum / n * 10) / 10 } : null;
+  }).catch(() => null);
+  return Promise.race([work, new Promise(r => setTimeout(() => r(null), 1500))]);
+}
+// Shown on the page once anyone has rated it; in Google's structured data (which can put stars next to the search
+// result) from 3 ratings, so a single person's stars aren't presented as the site's rating.
+const RATED_FOR_GOOGLE = 3;
+const ratingFact = r => r ? `TV Tracker ★ ${r.avg.toFixed(1)}/5 (${r.n} rating${r.n === 1 ? '' : 's'})` : '';
+const ratingLd = r => r && r.n >= RATED_FOR_GOOGLE ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: r.avg, ratingCount: r.n, bestRating: 5, worstRating: 1 } } : {};
 const html = (body, status = 200, maxAge = HOUR) =>
   new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': `public, max-age=${maxAge}` } });
 const xml = (body, maxAge = DAY) => new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': `public, max-age=${maxAge}` } });
@@ -129,7 +144,7 @@ function page({ title, description, path, image, imageAlt, jsonLd, body, appHash
   <main class="seo"><a class="backbtn" href="${appHash === 'discover' ? '/#/discover' : '/'}" onclick="try { if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) { history.back(); return false; } } catch (e) { }">‹ Back</a>
   ${body}</main>
   <footer class="foot"><div class="newlinks">New this week: ${SERVICES.map(s => `<a href="/new/${s.slug}">${esc(s.name)}</a>`).join(' · ')} · <a href="/new">All streaming</a></div>
-  <a href="/">TV Tracker</a> · <a href="/privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
+  <a href="/">TV Tracker</a> · <a href="/tv-time-alternative">Switching from TV Time?</a> · <a href="/privacy.html">Privacy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</footer>
 </body>
 </html>`;
 }
@@ -175,9 +190,9 @@ async function showPage(id, slug, rec) {
     return out;
   })();
   const full = new Set(recent.map(x => x.number));
-  const [similar, eps] = await Promise.all([similarShows(s),
+  const [similar, eps, rating] = await Promise.all([similarShows(s),
     small ? getJson(`${TVMAZE}/shows/${id}/episodes`, 6 * HOUR).then(l => (l || []).filter(e => e.season && e.number != null))
-      : Promise.all(recent.map(x => fetchSeason(x.id).catch(() => []))).then(l => l.flat())]);
+      : Promise.all(recent.map(x => fetchSeason(x.id).catch(() => []))).then(l => l.flat()), tvtRating(String(s.id))]);
   const seasons = allSeasons.filter(x => full.has(x.number) ? eps.some(e => e.season === x.number) : x.episodeOrder > 0 && x.premiereDate);
   const next = s._embedded?.nextepisode;
   const where = s.webChannel?.name || s.network?.name || '';
@@ -186,7 +201,7 @@ async function showPage(id, slug, rec) {
   const nSeasons = seasons.length, nEps = eps.length + seasons.filter(x => !full.has(x.number)).reduce((n, x) => n + x.episodeOrder, 0);
   const description = clip(`${s.name}${where ? ` (${where}${years ? ', ' + years : ''})` : ''}: ${nSeasons ? `${nSeasons} season${nSeasons === 1 ? '' : 's'}, ${nEps} episodes. ` : ''}${next ? `Next episode ${shortDate(next.airdate)}. ` : ''}${summary || 'Episode guide, air dates and where to watch.'}`, 160);
   const facts = [where, years, s.status === 'Running' ? 'Airing now' : s.status === 'Ended' ? 'Ended' : s.status === 'To Be Determined' ? 'Status TBD' : s.status,
-    ...(s.genres || []).slice(0, 3), s.rating?.average ? `★ ${s.rating.average}/10` : ''].filter(Boolean);
+    ...(s.genres || []).slice(0, 3), ratingFact(rating), s.rating?.average ? `TVmaze ★ ${s.rating.average}/10` : ''].filter(Boolean);
   const latest = seasons.length ? seasons[seasons.length - 1].number : 0;
   const seasonList = seasons.map(x => {
     if (!full.has(x.number)) return `<details><summary>Season ${x.number} <span>· ${x.episodeOrder} episodes${x.premiereDate ? ' · ' + shortDate(x.premiereDate) + (x.endDate ? ' – ' + shortDate(x.endDate) : '') : ''}</span></summary>
@@ -215,7 +230,7 @@ async function showPage(id, slug, rec) {
     ${similar.length ? `<h2>Shows like ${esc(s.name)}</h2><div class="nwgrid">${similar.map(similarCard).join('')}</div>` : ''}`;
   const jsonLd = { '@context': 'https://schema.org', '@type': 'TVSeries', name: s.name, url: `${SITE}/show/${id}-${want}`, ...(image ? { image } : {}),
     ...(summary ? { description: clip(summary, 500) } : {}), ...(s.premiered ? { startDate: s.premiered } : {}), ...(s.ended ? { endDate: s.ended } : {}),
-    ...(s.genres?.length ? { genre: s.genres } : {}), numberOfSeasons: nSeasons, numberOfEpisodes: nEps,
+    ...(s.genres?.length ? { genre: s.genres } : {}), numberOfSeasons: nSeasons, numberOfEpisodes: nEps, ...ratingLd(rating),
     // The network or streamer isn't the production company, and schema.org has no field for it, so it's left out here.
     ...(s.externals?.imdb ? { sameAs: [`https://www.imdb.com/title/${s.externals.imdb}/`] } : {}),
     ...(seasons.length ? { containsSeason: seasons.map(x => { const list = eps.filter(e => e.season === x.number), start = full.has(x.number) ? list[0]?.airdate : x.premiereDate;
@@ -304,7 +319,8 @@ async function episodePage(id, slug, season, number, rec) {
 
 /* ---------- movie pages ---------- */
 async function moviePage(id, slug, rec) {
-  const m = await getJson(`${TMDB}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=release_dates,credits,watch/providers,recommendations`, 6 * HOUR);
+  const [m, rating] = await Promise.all([getJson(`${TMDB}/movie/${id}?api_key=${TMDB_KEY}&append_to_response=release_dates,credits,watch/providers,recommendations`, 6 * HOUR),
+    tvtRating('m' + id)]);
   if (!m || m.adult) return notFound('Movie');
   const want = slugify(m.title);
   if (slug !== want) return Response.redirect(`${SITE}/movie/${id}-${want}${rec ? '?r=' + encodeURIComponent(rec) : ''}`, 301);
@@ -318,7 +334,7 @@ async function moviePage(id, slug, rec) {
   const yr = year(m.release_date);
   const similar = (m.recommendations?.results || []).filter(r => r.title && !r.adult && r.id !== m.id).slice(0, 8);
   const description = clip(`${m.title}${yr ? ` (${yr})` : ''}${streaming.length ? ` is streaming on ${streaming.slice(0, 3).join(', ')}` : ''}. ${m.overview || 'Where to watch, runtime, rating and cast.'}`, 160);
-  const facts = [yr, cert, runtime, ...(m.genres || []).slice(0, 3).map(g => g.name), m.vote_average ? `★ ${m.vote_average.toFixed(1)}/10` : ''].filter(Boolean);
+  const facts = [yr, cert, runtime, ...(m.genres || []).slice(0, 3).map(g => g.name), ratingFact(rating), m.vote_average ? `TMDB ★ ${m.vote_average.toFixed(1)}/10` : ''].filter(Boolean);
   const poster = m.poster_path ? 'https://image.tmdb.org/t/p/w342' + m.poster_path : '';
   const image = m.poster_path ? 'https://image.tmdb.org/t/p/w780' + m.poster_path : '';
   const title = `${m.title}${yr ? ` (${yr})` : ''} – Where to Watch & Streaming | TV Tracker`;
@@ -334,7 +350,7 @@ async function moviePage(id, slug, rec) {
     ${similar.length ? `<h2>Movies like ${esc(m.title)}</h2><div class="nwgrid">${similar.map(movieCardHtml).join('')}</div>` : ''}`;
   const jsonLd = { '@context': 'https://schema.org', '@type': 'Movie', name: m.title, url: `${SITE}/movie/${id}-${want}`, ...(image ? { image } : {}),
     ...(m.overview ? { description: m.overview } : {}), ...(m.release_date ? { datePublished: m.release_date } : {}), ...(cert ? { contentRating: cert } : {}),
-    ...(m.runtime ? { duration: `PT${m.runtime}M` } : {}), ...(m.genres?.length ? { genre: m.genres.map(g => g.name) } : {}),
+    ...(m.runtime ? { duration: `PT${m.runtime}M` } : {}), ...(m.genres?.length ? { genre: m.genres.map(g => g.name) } : {}), ...ratingLd(rating),
     ...(director.length ? { director: director.map(name => ({ '@type': 'Person', name })) } : {}), ...(cast.length ? { actor: cast.map(name => ({ '@type': 'Person', name })) } : {}) };
   return html(page({ title, description, path: `/movie/${id}-${want}`, image, imageAlt: `${m.title} poster`, jsonLd, body, appHash: `movie/${id}`, rec }), 200, rec ? 600 : 6 * HOUR);
 }
@@ -427,6 +443,50 @@ async function newPage(slug) {
     jsonLd, body, appHash: 'discover' }), 200, 3 * HOUR);
 }
 
+/* ---------- switching from TV Time ---------- */
+// /tv-time-alternative: for people looking for somewhere to go after TV Time closed (July 2026). Explains what TV
+// Tracker does and how to bring a TV Time export over (importer.js reads TV Time's files). Static, so cached for a day.
+const TVT_FAQ = [
+  ['Can I move my TV Time history to TV Tracker?', 'Yes, if you downloaded your data from TV Time before it closed. Sign in to TV Tracker, open your Account page, choose Import from another app and upload the export file (the .zip, or the .csv files inside it). TV Tracker adds your shows, checks off the episodes you watched, and adds your movies.'],
+  ["I never downloaded my TV Time data. What now?", "You can still get going in a couple of minutes: type a list of your shows into the importer (one per line) and then tap Watched Up To Here on the last episode you saw of each. If you also used Trakt or Simkl, export from there instead: TV Tracker imports both."],
+  ['Is TV Tracker free?', 'Yes. TV Tracker is free, with no ads and no paid tier.'],
+  ['Does it work on my phone?', 'Yes. It runs in any browser, and you can install it on an iPhone, an Android phone or a computer so it opens like an app, with its own icon.'],
+  ['Can my family use it too?', 'Yes. Everyone can have their own account, or you can make logins for family members that see your list, with view-only, edit or kid access (kids only see shows within the rating you choose).'],
+];
+function tvTimePage() {
+  const features = [
+    ['✓', 'Check off episodes as you watch', 'One tap marks an episode watched; Watched Up To Here catches you up on a whole season at once.'],
+    ['📅', "See what's up next", 'My Shows shows the next episode of everything you watch, plus an Upcoming list of air dates.'],
+    ['🔔', 'Hear when your shows come back', 'Get an email when a show you watch starts a new season.'],
+    ['🎬', 'Movies too', 'Keep a list of movies to watch and see where each one is streaming in the US.'],
+    ['👪', 'Share with your household', 'Logins for family members, with view-only, edit or kid access.'],
+    ['↗', 'Recommend shows to friends', 'Send a show straight to a friend’s TV Tracker, or share a link.'],
+  ];
+  const body = `<h1>The free TV Time alternative</h1>
+    <p class="lead">TV Time closed in July 2026. TV Tracker is a free, ad-free place to pick up where you left off: track the shows you watch, check off episodes, and see what's airing next. If you saved your TV Time export, you can bring your whole history over in a minute.</p>
+    <div class="cta"><a class="btn primary" href="/#/login">Create your free account</a><a class="btn" href="/#/account">Import from TV Time</a></div>
+    <h2>Bring your TV Time history over</h2>
+    <ol>
+      <li>Create a free TV Tracker account (email or Google), or sign in.</li>
+      <li>Open your <b>Account</b> page and find <b>Import from another app</b>.</li>
+      <li>Upload the TV Time export you downloaded: the .zip file, or the .csv files inside it.</li>
+      <li>TV Tracker adds your shows, checks off the episodes you watched, moves shows you hadn't started to your Future watch list, and adds your movies. Anything it can't match is listed at the end so you can add it by hand.</li>
+    </ol>
+    <p>Also coming from <b>Trakt</b>, <b>Simkl</b> or <b>Letterboxd</b>? The same importer reads their exports.</p>
+    <h2>What you get with TV Tracker</h2>
+    <div class="nwgrid">${features.map(([icon, t, d]) => `<div class="nwc"><b>${icon} ${esc(t)}</b><span>${esc(d)}</span></div>`).join('')}</div>
+    <h2>Questions</h2>
+    ${TVT_FAQ.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('\n    ')}
+    <div class="cta"><a class="btn primary" href="/#/login">Get started free</a><a class="btn" href="/new">See what's new this week</a></div>`;
+  const jsonLd = { '@context': 'https://schema.org', '@graph': [
+    { '@type': 'WebApplication', name: 'TV Tracker', url: SITE + '/', applicationCategory: 'EntertainmentApplication', operatingSystem: 'Any (web browser)',
+      offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD' }, description: 'Free TV show and movie tracker: check off episodes, see what is up next, import from TV Time, Trakt, Simkl and Letterboxd.' },
+    { '@type': 'FAQPage', mainEntity: TVT_FAQ.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }] };
+  return html(page({ title: 'TV Time Alternative – Free, No Ads, Import Your History | TV Tracker',
+    description: 'TV Time closed in July 2026. TV Tracker is a free, ad-free TV Time alternative: import your TV Time export, check off episodes and see what’s up next.',
+    path: '/tv-time-alternative', image: SITE + '/icons/icon-512.png', imageAlt: 'TV Tracker', jsonLd, body, appHash: 'search' }), 200, DAY);
+}
+
 /* ---------- sitemaps ---------- */
 // TVmaze lists every show 250 at a time (page n = show ids 250n…). Only popular ones (weight ≥ 80) go in, so Google
 // spends its time on shows people search for. 400 pages covers ids up to 100,000 (TVmaze is near 85,000 in 2026).
@@ -488,8 +548,9 @@ export async function seo(request, ctx) {
   else if ((m = url.pathname.match(/^\/show\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => showPage(m[1], m[2] || '', rec);
   else if ((m = url.pathname.match(/^\/movie\/(\d+)(?:-([a-z0-9-]*))?\/?$/))) make = () => moviePage(m[1], m[2] || '', rec);
   else if ((m = url.pathname.match(/^\/new(?:\/([a-z0-9-]+))?\/?$/))) make = () => newPage(m[1] || '');
+  else if (/^\/tv-time-alternative\/?$/.test(url.pathname)) make = async () => tvTimePage();
   else if (url.pathname === '/sitemap.xml') return sitemapIndex();
-  else if (url.pathname === '/sitemaps/site.xml') return urlset([{ loc: SITE + '/' }, { loc: SITE + '/privacy.html' }, { loc: SITE + '/new' }, ...SERVICES.map(s => ({ loc: `${SITE}/new/${s.slug}` }))]);
+  else if (url.pathname === '/sitemaps/site.xml') return urlset([{ loc: SITE + '/' }, { loc: SITE + '/privacy.html' }, { loc: SITE + '/new' }, { loc: SITE + '/tv-time-alternative' }, ...SERVICES.map(s => ({ loc: `${SITE}/new/${s.slug}` }))]);
   else if (url.pathname === '/sitemaps/episodes.xml') make = () => episodeSitemap();
   else if ((m = url.pathname.match(/^\/sitemaps\/shows-(\d+)\.xml$/))) make = () => showSitemap(+m[1]);
   else if ((m = url.pathname.match(/^\/sitemaps\/movies-(\d+)\.xml$/))) make = () => movieSitemap(+m[1]);

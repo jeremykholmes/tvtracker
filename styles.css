@@ -637,3 +637,9 @@ button.tstat[aria-expanded="true"] { border-color: var(--accent); }
 @media (prefers-color-scheme: light) { :root { --tile-line: #b9c0ca; } }
 .grid .card, .urows .row, #results .row { border: 1.5px solid var(--tile-line); border-radius: 12px; padding: 10px; background: var(--panel); }
 .grid .card .poster, .urows .row .poster, #results .row .poster { border-radius: 8px; }
+
+/* Admin: "Almost on page 1" search tables */
+table.almost { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+table.almost th { text-align: right; color: var(--muted); font-weight: 500; padding: 2px 6px; }
+table.almost td { padding: 3px 6px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.almost td:first-child { text-align: left; white-space: normal; word-break: break-word; }
