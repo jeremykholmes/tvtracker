@@ -433,7 +433,7 @@ function lpPosters() {
 }
 
 const K_NET = 'tvt.net', K_MNET = 'tvt.mnet', K_DAY = 'tvt.day', DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-// The day a show is filed under on the "Airs on" filter: the weekday of its next episode, only when that episode airs
+// The day a show is filed under on the "Shows this week" filter. the weekday of its next episode, only when that episode airs
 // in the coming week (today through 6 days from now), so "Tomorrow" means tomorrow's date and each other chip is that
 // date this week. Shows between seasons, finished, or next airing further off aren't on any day chip (still under Any day).
 // Only caught-up shows count (the card shows that upcoming episode); one with aired episodes left to watch shows an
@@ -540,7 +540,7 @@ views.shows = () => {
   // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
   const dayChip = (d, label, c, full) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}" aria-label="${full}, ${c} show${c === 1 ? '' : 's'}">${label}<span>${c} show${c === 1 ? '' : 's'}</span></button>`;
   const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[d]; };
-  const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
+  const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Shows this week</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
