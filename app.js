@@ -1754,11 +1754,15 @@ function drawMore(t) {
   const a = m.actions || {};
   // People who have rated: exact, from the accounts (their star ratings), all time rather than the last 30 days.
   const raters = Object.values(adminAccounts).filter(x => x.rated && x.uid !== user.uid).length;
+  const SITE_ORIGIN = /^https?:\/\/(www\.)?tvtracker\.us/;
   const searchPart = g.error && !g.needsAccess ? `<p class="formerr">${esc(g.error)}</p>`
     : g.needsAccess ? `<p>Not connected yet. In <b>Search Console → Settings → Users and permissions → Add user</b>, add the service account's email (the <code>…iam.gserviceaccount.com</code> one) with <b>Restricted</b> permission, and turn on the <b>Google Search Console API</b> in Google Cloud for the same project.</p>`
     : `<div class="tstats">${tile('Clicks from Google', n(g.clicks))}${tile('Times shown in results', n(g.impressions))}${tile('Click-through rate', ((g.ctr || 0) * 100).toFixed(1) + '%')}${tile('Average position', g.position ? g.position.toFixed(1) : '—')}</div>
       <div class="mgrid">${bars((g.queries || []).map(q => ({ name: q.name, n: q.clicks || q.impressions })), 'Top searches <span class="sub">(clicks, or times shown if none)</span>', 'No searches yet.', x => x)}
       ${bars((g.pages || []).map(q => ({ name: q.name.replace(/^https?:\/\/(www\.)?tvtracker\.us/, '') || '/', n: q.clicks })), 'Pages people clicked', 'No clicks yet.', x => x)}</div>
+      ${(g.almostQueries || []).length ? `<h4 class="msec">Almost on page 1 <span class="sub">(average position 8–20, most shown first: the easiest to move up)</span></h4>
+      <div class="mgrid">${[['Searches', g.almostQueries], ['Pages', g.almostPages || []]].map(([t, rows]) => `<div><b>${t}</b><table class="almost"><tr><th></th><th>Shown</th><th>Position</th><th>Clicks</th></tr>
+        ${rows.map(r => `<tr><td>${esc(r.name.replace(SITE_ORIGIN, '') || '/')}</td><td>${n(r.impressions)}</td><td>${r.position.toFixed(1)}</td><td>${n(r.clicks)}</td></tr>`).join('')}</table></div>`).join('')}</div>` : ''}
       <p class="sub">Google's search numbers run 2–3 days behind.</p>`;
   box.innerHTML = `<h3>${moreTitle()}</h3>
     ${m.error ? `<p class="formerr">${esc(m.error)}</p>` : `
@@ -2052,12 +2056,13 @@ views.account = () => {
       <div class="actions"><button class="btn primary">Create login</button></div></form>
     <div id="loginList"></div></div>
   <div class="panel" id="importPanel"><h3>Import from another app</h3>
-    <p>Bring your shows and movies over from <b>Simkl</b>, <b>Trakt</b> or <b>Letterboxd</b>: the shows you follow, the episodes you've watched, and the movies you've seen or want to see.</p>
+    <p>Bring your shows and movies over from <b>TV Time</b>, <b>Simkl</b>, <b>Trakt</b> or <b>Letterboxd</b>: the shows you follow, the episodes you've watched, and the movies you've seen or want to see.</p>
     <div class="actions"><label class="btn primary">Choose export file<input type="file" id="impFile" accept=".zip,.csv,.json,.txt" multiple hidden></label></div>
     <details class="imphelp"><summary>How to get your export file</summary><ul>
       <li><b>Simkl:</b> on simkl.com, open Apps → Export → Backup and download the .zip backup (free). Upload the .zip as it is.</li>
       <li><b>Trakt:</b> on trakt.tv, open Settings → Data and export your data. Upload the .zip (or its .json files).</li>
       <li><b>Letterboxd:</b> on letterboxd.com, open Settings → Data → Export your data. Upload the .zip.</li>
+      <li><b>TV Time:</b> if you downloaded your data before TV Time closed, upload that export (the .zip, or the .csv files inside it).</li>
       <li><b>Anything else:</b> a .csv file with a Title column, or type a list below.</li></ul></details>
     <details class="imphelp"><summary>Or type a list of titles</summary>
       <div class="field"><textarea id="impText" rows="5" placeholder="One per line, for example:&#10;Severance&#10;The Bear"></textarea></div>
@@ -2897,7 +2902,7 @@ $('#appDialog').addEventListener('click', e => { if (e.target.id === 'appDialog'
 // The footer is drawn here (app.js always loads fresh) so changes to it show up even if index.html is cached.
 $('footer.foot').innerHTML = `<a href="#/contact" class="contactlink">✉ Contact us</a>
   <span class="newlinks">New this week: ${NEW_ON.map(([slug, name]) => `<a href="/new/${slug}">${esc(name)}</a>`).join(' · ')} · <a href="/new">All streaming</a></span>
-  <span><a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
+  <span><a href="/tv-time-alternative">Switching from TV Time?</a> · <a href="privacy.html">Privacy policy</a> · Show &amp; episode data from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA) · Movies and recommendations from <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a> · Streaming info from <a href="https://www.justwatch.com" target="_blank" rel="noopener">JustWatch</a>.<br>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>`;
 accountChip(); syncStatus(); appButton();
 render(true);
 cloud.start({ onUser, onData, onError: onCloudError, onInbox, onRatings })
