@@ -1,0 +1,44 @@
+# "New season starting" email for shows people have been watching (email/seasons-send.mjs), daily at 8:33am Arizona and on
+# demand from the Actions tab. Sends nothing until the RESEND_API_KEY secret is set (see "New season email" in README.md).
+#   test    - emails the site owner a sample
+#   dry-run - sends nothing; the log says how many people would get one
+#   send    - the normal daily run
+name: New season email
+
+on:
+  schedule:
+    - cron: '33 15 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test = send the site owner a sample, dry-run = send nothing, send = the normal run'
+        type: choice
+        options: [test, dry-run, send]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency: season-email   # never two runs at once, so nobody gets it twice
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: email
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: email/package-lock.json
+      - run: npm ci
+      - run: node seasons-send.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MODE: ${{ inputs.mode || 'send' }}
+          TEST_TO: jeremykholmes@gmail.com

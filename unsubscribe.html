@@ -44,6 +44,9 @@
       if (q.get('e') === 'recs') {
         await F.updateDoc(F.doc(db, 'emailPrefs', uid), { recsOff: true, unsubToken: token });
         show('You\'re unsubscribed', 'You won\'t get an email when someone recommends a show any more. They still appear at the top of My Shows, and you can switch the emails back on from your <a href="./#/account">Account page</a>.');
+      } else if (q.get('e') === 'seasons') {
+        await F.updateDoc(F.doc(db, 'emailPrefs', uid), { seasonsOff: true, unsubToken: token });
+        show('You\'re unsubscribed', 'We won\'t email you when a show you\'re watching starts a new season any more. New episodes still show up in My Shows: <a href="./">open TV Tracker</a>.');
       } else if (q.get('e') === 'away') {
         await F.updateDoc(F.doc(db, 'emailPrefs', uid), { awayOff: true, unsubToken: token });
         show('You\'re unsubscribed', 'We won\'t email you when you haven\'t been on TV Tracker for a while any more. Your list is still there whenever you want it: <a href="./">open TV Tracker</a>.');
