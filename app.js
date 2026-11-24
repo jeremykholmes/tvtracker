@@ -436,7 +436,10 @@ const K_NET = 'tvt.net', K_MNET = 'tvt.mnet', K_DAY = 'tvt.day', DAYS = ['Sun', 
 // The day a show is filed under on the "Airs on" filter: the weekday of its next episode, only when that episode airs
 // in the coming week (today through 6 days from now), so "Tomorrow" means tomorrow's date and each other chip is that
 // date this week. Shows between seasons, finished, or next airing further off aren't on any day chip (still under Any day).
+// Only caught-up shows count (the card shows that upcoming episode); one with aired episodes left to watch shows an
+// older episode on its card, so it isn't filed under the day its next new one airs.
 function filterDay(r) {
+  if (r.p?.next) return null;
   const t = r.p?.upcoming ? airTime(r.p.upcoming) : NaN, start = new Date().setHours(0, 0, 0, 0);
   if (!isFinite(t) || t < start) return null;
   const end = new Date(start); end.setDate(end.getDate() + 7);
