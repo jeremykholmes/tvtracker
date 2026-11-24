@@ -542,10 +542,16 @@ views.shows = () => {
   const rows = shown.filter(r => !isLater(r.s.id));
   // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
   const dayChip = (d, label, c, full) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}" aria-label="${full}, ${c} show${c === 1 ? '' : 's'}">${label}<span>${c} show${c === 1 ? '' : 's'}</span></button>`;
-  const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[d]; };
+  // The chips are weekdays, so a Tuesday show between seasons, or one next airing a week from Tuesday, sits on Tuesday's
+  // chip. Today's and tomorrow's chips only say "Today" / "Tomorrow" when every show on them really airs that date;
+  // otherwise they show the weekday's name like the rest.
+  const midnight = new Date().setHours(0, 0, 0, 0);
+  const airsOnDay = (r, i) => { const t = r.p?.upcoming ? airTime(r.p.upcoming) : NaN; return isFinite(t) && new Date(t).setHours(0, 0, 0, 0) === new Date(midnight).setDate(new Date(midnight).getDate() + i); };
+  const allAirOn = i => { const d = (new Date().getDay() + i) % 7, on = byNet.filter(r => filterDay(r) === d); return on.length > 0 && on.every(r => airsOnDay(r, i)); };
+  const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 && allAirOn(0) ? 'Today' : i === 1 && allAirOn(1) ? 'Tomorrow' : DAYS[d]; };
   const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Airs on</div><div class="netfilter" role="group" aria-labelledby="fl-day">
     ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
-      .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
+      .map(([i, d]) => dayChip(d, dayName(i), dc[d], ['Today', 'Tomorrow'].includes(dayName(i)) ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length, 'net', net, 'show')}${nets.map(n => netChip(n, n, counts[n], 'net', net, 'show')).join('')}</div>` : '';
   // Up next order: every show with aired episodes not checked off yet comes first, by the date of the next episode to
