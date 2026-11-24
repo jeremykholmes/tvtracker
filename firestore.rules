@@ -78,9 +78,10 @@ service cloud.firestore {
         && request.resource.data.get('off', false) is bool && request.resource.data.get('recsOff', false) is bool;
       allow update: if (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'recsOff'])
             && request.resource.data.get('off', false) is bool && request.resource.data.get('recsOff', false) is bool)
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'recsOff', 'unsubToken'])
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['off', 'recsOff', 'awayOff', 'unsubToken'])
             && request.resource.data.get('off', false) in [true, resource.data.get('off', false)]
             && request.resource.data.get('recsOff', false) in [true, resource.data.get('recsOff', false)]
+            && request.resource.data.get('awayOff', false) in [true, resource.data.get('awayOff', false)]
             && 'token' in resource.data && request.resource.data.unsubToken == resource.data.token);
       allow delete: if isOwner(uid);
     }
