@@ -540,8 +540,9 @@ views.shows = () => {
   // Two lines: the day, then how many shows air on it. The days run from today, so the first two say Today and Tomorrow.
   const dayChip = (d, label, c, full) => `<button type="button" class="nchip daychip${String(d) === String(day) ? ' on' : ''}" data-act="day" data-day="${d}" aria-pressed="${String(d) === String(day)}" aria-label="${full}, ${c} show${c === 1 ? '' : 's'}">${label}<span>${c} show${c === 1 ? '' : 's'}</span></button>`;
   const dayName = i => { const d = (new Date().getDay() + i) % 7; return i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAYS[d]; };
-  const dayBar = Object.keys(dc).length > 1 ? `<div class="flabel" id="fl-day">Shows this week</div><div class="netfilter" role="group" aria-labelledby="fl-day">
-    ${dayChip('', 'Any day', byNet.length, 'Any day')}${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
+  // No "Any day" chip: tapping the selected day again shows every show (see actions.day).
+  const dayBar = Object.keys(dc).length ? `<div class="flabel" id="fl-day">Shows this week</div><div class="netfilter" role="group" aria-labelledby="fl-day">
+    ${[0, 1, 2, 3, 4, 5, 6].map(i => [i, (new Date().getDay() + i) % 7]).filter(([, d]) => dc[d])
       .map(([i, d]) => dayChip(d, dayName(i), dc[d], i < 2 ? dayName(i) : new Date(2026, 0, 4 + d).toLocaleDateString('en-US', { weekday: 'long' }))).join('')}</div>` : '';
   const filterBar = nets.length > 1 ? `<div class="flabel" id="fl-net">Where to watch</div><div class="netfilter" role="group" aria-labelledby="fl-net">
     ${netChip('', 'All', all.length, 'net', net, 'show')}${nets.map(n => netChip(n, n, counts[n], 'net', net, 'show')).join('')}</div>` : '';
@@ -2646,7 +2647,7 @@ const actions = {
   },
   net(b) { save(K_NET, b.dataset.net); render(); },
   mnet(b) { save(K_MNET, b.dataset.net); render(); },   // My Movies' own Where to watch filter
-  day(b) { save(K_DAY, b.dataset.day); render(); },
+  day(b) { save(K_DAY, String(load(K_DAY, '')) === b.dataset.day ? '' : b.dataset.day); render(); },   // tap the selected day again to see all shows
   // Signed in (not a kid): send it to someone's account or share a link; otherwise just share a link.
   recommend(b) {
     const id = +b.dataset.show, s = showInfo(id) || cache[id]?.show; if (!s) return;
