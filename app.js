@@ -1541,14 +1541,15 @@ function runTopic(q, mode) {
   if (isKid() || !config.tmdbKey || !q) { lastTopic = null; return; }
   topicSearch(q, mode).then(list => { if (seq !== topicSeq) return; lastTopic = { q, mode, list }; drawResults(); }, e => console.warn('topic', e));
 }
-// The topic results for what's on screen; left out when a title is exactly what was typed (searching "The Office").
-function topicFor(q, mode, titles) {
+// The topic results for what's on screen.
+function topicFor(q, mode) {
   const t = lastTopic;
-  if (!t || t.q !== q || t.mode !== mode || !t.list.length) return null;
-  return titles.some(x => plain(x.name) === plain(q)) ? null : t.list;
+  return t && t.q === q && t.mode === mode && t.list.length ? t.list : null;
 }
-function topicSection(q, mode, titles) {
-  const list = topicFor(q, mode, titles); if (!list) return '';
+// Goes under the title matches instead of above them when a title is exactly what was typed ("The Office", "Heist").
+const exactTitle = (q, titles) => titles.some(x => plain(x.name) === plain(q));
+function topicSection(q, mode) {
+  const list = topicFor(q, mode); if (!list) return '';
   if (mode === 'movie') { streamsFor(list.slice(0, 10)); return `<h2 class="svchead">Movies about “${esc(q)}”</h2><p class="sub">Most popular first</p>${list.slice(0, 10).map(movieRow).join('')}`; }
   return `<h2 class="svchead">Shows about “${esc(q)}”</h2><p class="sub">Most popular first · scroll for more</p><div class="rrow">${list.map(recCard).join('')}</div>`;
 }
@@ -1631,18 +1632,18 @@ function drawResults() {
     checking = list.some(s => kidPending.has(s.id));
     list = list.filter(s => kidCanSee(s.id) === true);
   }
-  const topic = isKid() ? '' : topicSection(lastQuery, 'tv', lastResults);
+  const topic = isKid() ? '' : topicSection(lastQuery, 'tv'), below = exactTitle(lastQuery, list);
   if (!list.length && topic) { box.innerHTML = topic; return; }
   if (!list.length) {
     box.innerHTML = `<p class="muted">${checking ? 'Checking ratings…' : !lastQuery ? 'Type a show name, or a topic like “time travel”, “zombies” or “cooking competition”.'
       : isKid() && lastResults.length ? `No matches for “${esc(lastQuery)}” that ${esc(sharedOpen().name)} allows.` : `No matches for “${esc(lastQuery)}”.`}</p>`;
     return;
   }
-  box.innerHTML = topic + (topic ? `<h2 class="svchead">Titles matching “${esc(lastQuery)}”</h2>` : `<p class="sub">Results for “${esc(lastQuery)}”${checking ? ' · checking ratings…' : ''}</p>`) + list.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
+  box.innerHTML = (below ? '' : topic) + (topic && !below ? `<h2 class="svchead">Titles matching “${esc(lastQuery)}”</h2>` : `<p class="sub">Results for “${esc(lastQuery)}”${checking ? ' · checking ratings…' : ''}</p>`) + list.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
-    ${followBtn(s)}</div>`).join('');
+    ${followBtn(s)}</div>`).join('') + (below ? topic : '');
 }
 
 const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
@@ -1652,7 +1653,7 @@ const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
     ${movieBtn(m)}</div>`;
 function drawMovieResults(box) {
   const svc = svcHit, titles = svc ? lastMovies.filter(m => !svc.list.some(x => x.id === m.id)) : lastMovies;
-  const topic = svc ? '' : topicSection(lastMovieQuery, 'movie', lastMovies);
+  const topic = svc ? '' : topicSection(lastMovieQuery, 'movie'), below = exactTitle(lastMovieQuery, lastMovies);
   if (!svc && !titles.length && !lastImdb.length && topic) { box.innerHTML = topic + ownMovieBtn(); return; }
   if (!svc && !titles.length && !lastImdb.length) {
     box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, a topic like “heist” or “space”, or a streaming service like Angel Studios, Netflix or Tubi.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
@@ -1662,10 +1663,10 @@ function drawMovieResults(box) {
   // One list: TMDB's results, with IMDb-only movies slotted in where IMDb ranked them (duplicates were left out above).
   const rows = titles.map(movieRow);
   for (const x of lastImdb) rows.splice(Math.min(x.rank, rows.length), 0, x.tm ? movieRow(x.tm) : imdbRow(x));
-  box.innerHTML = topic + (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
+  box.innerHTML = (below ? '' : topic) + (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
-    + (rows.length ? (svc || topic ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
-    + ownMovieBtn();
+    + (rows.length ? (svc || (topic && !below) ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
+    + (below ? topic : '') + ownMovieBtn();
 }
 const imdbRow = x => { const m = { id: x.id, name: x.title, image: imdbImg(x.image) }, on = hasMovie(x.id);
   return `<div class="row">${poster(m)}
