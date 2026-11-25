@@ -1501,12 +1501,64 @@ function streamsFor(list) {
 }
 const streamLine = m => { const d = movieDetails[m.id];
   return !d ? '' : d.stream?.length ? `<div class="sub stream">On ${esc([...new Set(d.stream.map(movieService))].join(', '))}</div>` : d.rent?.length ? `<div class="sub stream">Rent or buy: ${esc(d.rent.join(', '))}</div>` : ''; };
+/* ---------- search by topic ----------
+   Besides matching titles, a search looks its words up as TMDB genres ("comedy", "sci-fi") and keywords ("time travel",
+   "heist", "dragons"), and lists the most popular shows or movies tagged with them: "time travel comedy" finds comedies
+   about time travel. Only whole keywords count, so a partial title like "breaking" doesn't turn into a topic. */
+const TOPIC_TV = { 'action': [10759], 'adventure': [10759], 'animated': [16], 'animation': [16], 'cartoon': [16], 'cartoons': [16], 'anime': [16],
+  'comedy': [35], 'comedies': [35], 'sitcom': [35], 'sitcoms': [35], 'funny': [35], 'crime': [80], 'documentary': [99], 'documentaries': [99],
+  'docuseries': [99], 'drama': [18], 'dramas': [18], 'family': [10751], 'kids': [10762], 'children': [10762], 'mystery': [9648], 'mysteries': [9648],
+  'reality': [10764], 'sci fi': [10765], 'scifi': [10765], 'science fiction': [10765], 'fantasy': [10765], 'soap': [10766], 'soaps': [10766],
+  'talk show': [10767], 'talk shows': [10767], 'war': [10768], 'political': [10768], 'politics': [10768], 'western': [37], 'westerns': [37] };
+const TOPIC_MOVIE = { 'action': [28], 'adventure': [12], 'animated': [16], 'animation': [16], 'cartoon': [16], 'anime': [16], 'comedy': [35],
+  'comedies': [35], 'funny': [35], 'crime': [80], 'documentary': [99], 'documentaries': [99], 'drama': [18], 'dramas': [18], 'family': [10751],
+  'kids': [10751], 'fantasy': [14], 'history': [36], 'historical': [36], 'horror': [27], 'scary': [27], 'music': [10402], 'musical': [10402],
+  'musicals': [10402], 'mystery': [9648], 'romance': [10749], 'romantic': [10749], 'rom com': [10749, 35], 'romcom': [10749, 35],
+  'sci fi': [878], 'scifi': [878], 'science fiction': [878], 'thriller': [53], 'thrillers': [53], 'war': [10752], 'western': [37], 'westerns': [37] };
+let lastTopic = null, topicSeq = 0;   // { q, mode, list } — the topic results for the last search
+async function topicSearch(q, mode) {
+  const g = mode === 'movie' ? TOPIC_MOVIE : TOPIC_TV, genres = new Set();
+  let rest = ' ' + plain(q) + ' ';
+  for (const a of Object.keys(g).sort((x, y) => y.length - x.length)) if (rest.includes(' ' + a + ' ')) { g[a].forEach(id => genres.add(id)); rest = rest.replace(' ' + a + ' ', ' '); }
+  rest = (' ' + rest + ' ').replace(/ (shows?|series|movies?|films?|tv|about|with|set in|the|a|an|and|of|in) /g, ' ').replace(/ (shows?|series|movies?|films?|tv|about|with|the|a|an|and|of|in) /g, ' ').replace(/\s+/g, ' ').trim();
+  let kws = [];
+  if (rest) {
+    const forms = [rest, rest.replace(/ies$/, 'y'), rest.replace(/s$/, ''), rest + 's'];
+    const res = (await tmdb(`/search/keyword?query=${encodeURIComponent(rest.replace(/s$/, ''))}`))?.results || [];
+    kws = res.filter(k => forms.includes(plain(k.name))).slice(0, 4);
+    if (!kws.length) return [];   // words that aren't a genre or keyword: no topic, just title matches
+  }
+  if (!kws.length && !genres.size) return [];
+  const base = `/discover/${mode === 'movie' ? 'movie' : 'tv'}?include_adult=false&language=en-US&sort_by=popularity.desc&vote_count.gte=${mode === 'movie' ? 50 : 10}`;
+  const kw = kws.length ? '&with_keywords=' + kws.map(k => k.id).join('|') : '', gn = genres.size ? '&with_genres=' + [...genres].join(',') : '';
+  let r = (await tmdb(base + kw + gn))?.results || [];
+  if (!r.length && kw && gn) r = (await tmdb(base + kw))?.results || [];   // nothing in that genre: the keyword alone
+  return mode === 'movie' ? r.map(trimMovie).filter(m => m.name)
+    : r.map(x => ({ id: x.id, name: x.name || '', poster: x.poster_path || '', year: (x.first_air_date || '').slice(0, 4) })).filter(x => x.name);
+}
+function runTopic(q, mode) {
+  const seq = ++topicSeq;
+  if (isKid() || !config.tmdbKey || !q) { lastTopic = null; return; }
+  topicSearch(q, mode).then(list => { if (seq !== topicSeq) return; lastTopic = { q, mode, list }; drawResults(); }, e => console.warn('topic', e));
+}
+// The topic results for what's on screen.
+function topicFor(q, mode) {
+  const t = lastTopic;
+  return t && t.q === q && t.mode === mode && t.list.length ? t.list : null;
+}
+// Goes under the title matches instead of above them when a title is exactly what was typed ("The Office", "Heist").
+const exactTitle = (q, titles) => titles.some(x => plain(x.name) === plain(q));
+function topicSection(q, mode) {
+  const list = topicFor(q, mode); if (!list) return '';
+  if (mode === 'movie') { streamsFor(list.slice(0, 10)); return `<h2 class="svchead">Movies about “${esc(q)}”</h2><p class="sub">Most popular first</p>${list.slice(0, 10).map(movieRow).join('')}`; }
+  return `<h2 class="svchead">Shows about “${esc(q)}”</h2><p class="sub">Most popular first · scroll for more</p><div class="rrow">${list.map(recCard).join('')}</div>`;
+}
 views.search = () => {
   const kid = isKid();
   const mv = searchMode() === 'movie';
   app.innerHTML = `${kid ? `<h1>Search shows</h1><p class="sub">${kidLimit.maxRating ? `Shows rated up to ${esc(kidLimit.maxRating)}` : 'Any show'} — ask ${esc(sharedOpen().name)} to add one to your list.</p>` : `<h1>${mv ? 'Add a movie' : 'Add a show'}</h1>`}
     ${kid || !config.tmdbKey ? '' : `<div class="seg qmode" role="group" aria-label="Search for"><button type="button" data-act="qmode" data-mode="tv" class="${mv ? '' : 'on'}" aria-pressed="${!mv}">📺 TV shows</button><button type="button" data-act="qmode" data-mode="movie" class="${mv ? 'on' : ''}" aria-pressed="${mv}">🎬 Movies</button></div>`}
-    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Movie or streaming service…' : 'Search any show — Netflix, HBO, NBC, Hulu, Apple TV+…'}" autocomplete="off" autofocus>
+    <form class="search" id="searchForm"><input id="q" type="search" placeholder="${kid ? 'Search for a show…' : mv ? 'Movie, service, or a topic like “heist” or “romantic comedy”…' : 'Search a show, or a topic like “time travel” or “cooking competition”…'}" autocomplete="off" autofocus>
     <button class="btn primary">Search</button></form><div id="results" class="rows"></div>`;
   const q = $('#q');
   q.value = sessionStorage.getItem('tvt.q') || '';
@@ -1525,8 +1577,9 @@ views.search = () => {
 };
 async function doSearch(q) {
   q = q.trim(); sessionStorage.setItem('tvt.q', q);
-  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; svcHit = null; lastImdb = []; return drawResults(); }
+  if (!q) { lastResults = []; lastQuery = ''; lastMovies = []; lastMovieQuery = ''; svcHit = null; lastImdb = []; lastTopic = null; topicSeq++; return drawResults(); }
   const seq = ++searchSeq;
+  runTopic(q, searchMode());
   if (searchMode() === 'movie') {
     try {
       const [r, svc, angel, imdbHits] = await Promise.all([
@@ -1579,16 +1632,18 @@ function drawResults() {
     checking = list.some(s => kidPending.has(s.id));
     list = list.filter(s => kidCanSee(s.id) === true);
   }
+  const topic = isKid() ? '' : topicSection(lastQuery, 'tv'), below = exactTitle(lastQuery, list);
+  if (!list.length && topic) { box.innerHTML = topic; return; }
   if (!list.length) {
-    box.innerHTML = `<p class="muted">${checking ? 'Checking ratings…' : !lastQuery ? 'Type a show name to search across every network and streaming service.'
+    box.innerHTML = `<p class="muted">${checking ? 'Checking ratings…' : !lastQuery ? 'Type a show name, or a topic like “time travel”, “zombies” or “cooking competition”.'
       : isKid() && lastResults.length ? `No matches for “${esc(lastQuery)}” that ${esc(sharedOpen().name)} allows.` : `No matches for “${esc(lastQuery)}”.`}</p>`;
     return;
   }
-  box.innerHTML = `<p class="sub">Results for “${esc(lastQuery)}”${checking ? ' · checking ratings…' : ''}</p>` + list.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
+  box.innerHTML = (below ? '' : topic) + (topic && !below ? `<h2 class="svchead">Titles matching “${esc(lastQuery)}”</h2>` : `<p class="sub">Results for “${esc(lastQuery)}”${checking ? ' · checking ratings…' : ''}</p>`) + list.map(s => `<div class="row">${poster(s, '#/show/' + s.id)}
     <div class="info"><a href="#/show/${s.id}">${esc(s.name)}</a>
       <div class="sub">${[channel(s.network, s.name), s.premiered && s.premiered.slice(0, 4)].filter(Boolean).map(esc).join(' · ')}</div>
       <div class="sub">${esc(s.summary.slice(0, 140))}${s.summary.length > 140 ? '…' : ''}</div></div>
-    ${followBtn(s)}</div>`).join('');
+    ${followBtn(s)}</div>`).join('') + (below ? topic : '');
 }
 
 const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
@@ -1598,18 +1653,20 @@ const movieRow = m => `<div class="row">${poster(m, '#/movie/' + m.id)}
     ${movieBtn(m)}</div>`;
 function drawMovieResults(box) {
   const svc = svcHit, titles = svc ? lastMovies.filter(m => !svc.list.some(x => x.id === m.id)) : lastMovies;
+  const topic = svc ? '' : topicSection(lastMovieQuery, 'movie'), below = exactTitle(lastMovieQuery, lastMovies);
+  if (!svc && !titles.length && !lastImdb.length && topic) { box.innerHTML = topic + ownMovieBtn(); return; }
   if (!svc && !titles.length && !lastImdb.length) {
-    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, or a streaming service like Angel Studios, Netflix or Tubi to see its movies.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
+    box.innerHTML = `<p class="muted">${!lastMovieQuery ? 'Type a movie title, a topic like “heist” or “space”, or a streaming service like Angel Studios, Netflix or Tubi.' : `No movies match “${esc(lastMovieQuery)}”.`}</p>${ownMovieBtn()}`;
     return;
   }
   streamsFor([...(svc?.list || []), ...titles, ...lastImdb.map(x => x.tm).filter(Boolean)]);
   // One list: TMDB's results, with IMDb-only movies slotted in where IMDb ranked them (duplicates were left out above).
   const rows = titles.map(movieRow);
   for (const x of lastImdb) rows.splice(Math.min(x.rank, rows.length), 0, x.tm ? movieRow(x.tm) : imdbRow(x));
-  box.innerHTML = (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
+  box.innerHTML = (below ? '' : topic) + (svc ? `<h2 class="svchead">Movies streaming on ${esc(svc.name)}</h2><p class="sub">Most popular first</p>${svc.list.map(movieRow).join('')}
       ${svc.page < svc.pages ? `<p><button type="button" class="btn" data-act="svc-more">Show more ${esc(svc.name)} movies</button></p>` : ''}` : '')
-    + (rows.length ? (svc ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
-    + ownMovieBtn();
+    + (rows.length ? (svc || (topic && !below) ? `<h2 class="svchead">Titles matching “${esc(lastMovieQuery)}”</h2>` : `<p class="sub">Movies matching “${esc(lastMovieQuery)}”</p>`) + rows.join('') : '')
+    + (below ? topic : '') + ownMovieBtn();
 }
 const imdbRow = x => { const m = { id: x.id, name: x.title, image: imdbImg(x.image) }, on = hasMovie(x.id);
   return `<div class="row">${poster(m)}
