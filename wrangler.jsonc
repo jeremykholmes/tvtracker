@@ -10,5 +10,6 @@
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
-  }
+  },
+  "previews": {}         // pull-request branches build a preview with `npx wrangler preview`, which needs this block
 }
