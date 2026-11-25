@@ -216,7 +216,32 @@ function airTime(e) {
   if (e.airdate) return Date.parse(e.airdate + 'T20:00:00');
   return Infinity;
 }
-const aired = e => airTime(e) <= now();
+// An episode becomes available (moves into Up next) at midnight Eastern time on the day it airs there.
+const etDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+const etHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' });
+function etMidnight(ymd) {   // 'YYYY-MM-DD' → ms at 00:00 in New York (EST or EDT)
+  const t = Date.parse(ymd + 'T05:00:00Z');   // midnight EST
+  return isFinite(t) && +etHour.format(t) === 1 ? t - 3600e3 : t;   // during EDT that's 1 AM, so back up an hour
+}
+const releaseMemo = new Map();
+function releaseTime(e) {
+  const key = (e.airstamp || '') + '|' + (e.airdate || '');
+  let t = releaseMemo.get(key);
+  if (t === undefined) {
+    const at = e.airstamp ? Date.parse(e.airstamp) : NaN;
+    t = isFinite(at) ? etMidnight(etDay.format(at)) : e.airdate ? etMidnight(e.airdate) : Infinity;
+    if (!isFinite(t)) t = airTime(e);
+    releaseMemo.set(key, t);
+  }
+  return t;
+}
+const aired = e => releaseTime(e) <= now();
+// If the page is left open, redraw just after midnight Eastern so that day's new episodes show up.
+(function atEasternMidnight() {
+  const n = now(), next = etMidnight(etDay.format(etMidnight(etDay.format(n)) + 36 * 3600e3));   // tomorrow, safe across DST
+  const wait = Math.max(60e3, Math.min(next - n + 5e3, 2 ** 31 - 1));
+  setTimeout(() => { try { render(); } catch { } atEasternMidnight(); }, wait);
+})();
 function progress(id) {
   const c = cache[id]; if (!c) return null;
   const airedEps = c.episodes.filter(aired);
